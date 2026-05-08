@@ -1,0 +1,231 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Charte graphique NUTRIOCUS — remplacer par les vraies valeurs */
+  --color-primary: #059669;
+  --color-primary-dark: #047857;
+  --color-primary-light: #ecfdf5;
+  --color-accent: #f97316;
+  --color-background: #0b1120;
+  --color-surface: #111827;
+  --color-surface-2: #1e293b;
+  --color-text: #f1f5f9;
+  --color-text-muted: #94a3b8;
+  --color-border: #1e293b;
+  --font-display: 'Plus Jakarta Sans', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --radius: 0.75rem;
+
+  /* Chart colors */
+  --chart-carbs: #059669;
+  --chart-fat: #3b82f6;
+  --chart-intensity: #f97316;
+  --chart-hr: #ef4444;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    box-sizing: border-box;
+  }
+
+  html {
+    color-scheme: dark;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-background);
+    color: var(--color-text);
+    font-family: var(--font-body);
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--color-text);
+  }
+}
+
+@layer components {
+  /* Cards */
+  .card {
+    @apply rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-sm;
+  }
+
+  .card-2 {
+    @apply rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-5;
+  }
+
+  /* Sidebar */
+  .sidebar {
+    @apply fixed left-0 top-0 h-screen w-[212px] border-r border-[var(--color-border)] bg-[var(--color-surface)] z-40 flex flex-col;
+  }
+
+  .sidebar-link {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[var(--color-text-muted)] transition-all hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)];
+  }
+
+  .sidebar-link.active {
+    @apply bg-[var(--color-primary)]/10 text-[var(--color-primary)];
+  }
+
+  /* Buttons */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 rounded-lg bg-[var(--color-primary)] px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-[var(--color-primary-dark)] active:scale-95;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-4 py-2.5 text-sm font-medium text-[var(--color-text)] transition-all hover:bg-[var(--color-surface)] active:scale-95;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-[var(--color-text-muted)] transition-all hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)];
+  }
+
+  /* Input */
+  .input {
+    @apply w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3.5 py-2.5 text-sm text-[var(--color-text)] placeholder-[var(--color-text-muted)] outline-none transition focus:border-[var(--color-primary)] focus:ring-1 focus:ring-[var(--color-primary)];
+  }
+
+  .label {
+    @apply mb-1.5 block text-xs font-medium text-[var(--color-text-muted)];
+  }
+
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+
+  /* Stat card */
+  .stat-card {
+    @apply card flex flex-col gap-2;
+  }
+
+  .stat-value {
+    @apply text-2xl font-bold font-display;
+  }
+
+  .stat-label {
+    @apply text-xs text-[var(--color-text-muted)] font-medium uppercase tracking-wider;
+  }
+
+  /* Section header */
+  .section-header {
+    @apply mb-6 flex items-start justify-between;
+  }
+
+  .section-title {
+    @apply text-xl font-bold font-display;
+  }
+
+  .section-subtitle {
+    @apply text-sm text-[var(--color-text-muted)] mt-0.5;
+  }
+
+  /* Table */
+  .table-wrapper {
+    @apply overflow-x-auto rounded-xl border border-[var(--color-border)];
+  }
+
+  .table {
+    @apply w-full text-sm;
+  }
+
+  .table th {
+    @apply bg-[var(--color-surface-2)] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)];
+  }
+
+  .table td {
+    @apply border-t border-[var(--color-border)] px-4 py-3 text-[var(--color-text)];
+  }
+
+  .table tr:hover td {
+    @apply bg-[var(--color-surface-2)]/50;
+  }
+
+  /* Progress bar */
+  .progress-bar {
+    @apply h-2 overflow-hidden rounded-full bg-[var(--color-surface-2)];
+  }
+
+  .progress-fill {
+    @apply h-full rounded-full bg-[var(--color-primary)] transition-all duration-500;
+  }
+
+  /* Bottom nav (mobile) */
+  .bottom-nav {
+    @apply fixed bottom-0 left-0 right-0 z-50 flex items-center justify-around border-t border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-2 lg:hidden;
+  }
+
+  .bottom-nav-item {
+    @apply flex flex-col items-center gap-0.5 rounded-lg px-3 py-2 text-xs text-[var(--color-text-muted)] transition-all;
+  }
+
+  .bottom-nav-item.active {
+    @apply text-[var(--color-primary)];
+  }
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInLeft {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* Stagger animations */
+.stagger-1 { animation-delay: 50ms; }
+.stagger-2 { animation-delay: 100ms; }
+.stagger-3 { animation-delay: 150ms; }
+.stagger-4 { animation-delay: 200ms; }
+.stagger-5 { animation-delay: 250ms; }
+.stagger-6 { animation-delay: 300ms; }
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-surface);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* Recharts overrides */
+.recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: var(--color-surface-2) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: 8px !important;
+}
+.recharts-cartesian-axis-tick-value {
+  fill: var(--color-text-muted) !important;
+}

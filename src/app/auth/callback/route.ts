@@ -1,5 +1,4 @@
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs";
-import { createClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -13,13 +12,7 @@ export async function GET(request: NextRequest) {
     const { data: { session } } = await supabase.auth.exchangeCodeForSession(code);
 
     if (session) {
-      // Utiliser le client admin pour bypasser RLS
-      const admin = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-      );
-
-      const { data: coach } = await admin
+      const { data: coach } = await supabase
         .from("coaches")
         .select("id")
         .eq("user_id", session.user.id)
@@ -29,7 +22,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(`${appUrl}/coach`);
       }
 
-      const { data: athlete } = await admin
+      const { data: athlete } = await supabase
         .from("athletes")
         .select("id")
         .eq("user_id", session.user.id)
@@ -39,7 +32,6 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(`${appUrl}/athlete/dashboard`);
       }
 
-      // Email non reconnu
       return NextResponse.redirect(`${appUrl}/auth/error`);
     }
   }

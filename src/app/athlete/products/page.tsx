@@ -20,7 +20,7 @@ export default function ProductsPage() {
     validated: mockEffortProducts.filter((p) => p.status === "validated").length,
     testing: mockEffortProducts.filter((p) => p.status === "testing").length,
     eliminated: mockEffortProducts.filter((p) => p.status === "eliminated").length,
-    partial: mockEffortProducts.filter((p) => p.status === "partial").length,
+    partial: mockEffortProducts.filter((p) => (p.status as string) === "partial").length,
   };
 
   return (

@@ -273,7 +273,7 @@ export default function BodyPage() {
                 <tr key={m.id}>
                   <td>{formatDate(m.measured_at)}</td>
                   <td>{SPORT_LABELS[m.sport]}</td>
-                  <td>{m.performance} {m.sport === "cyclisme" ? "W" : "km/h"}</td>
+                  <td>{m.performance} {(m.sport as string) === "cyclisme" ? "W" : "km/h"}</td>
                   <td>{m.avg_hr} bpm</td>
                   <td>{m.max_hr} bpm</td>
                   <td>{m.weight_kg} kg</td>

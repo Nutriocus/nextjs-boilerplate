@@ -76,7 +76,8 @@
   }
 
   .sidebar-link.active {
-    @apply bg-[var(--color-primary)]/10 text-[var(--color-primary)];
+    background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
+    @apply text-[var(--color-primary)];
   }
 
   /* Buttons */
@@ -150,7 +151,7 @@
   }
 
   .table tr:hover td {
-    @apply bg-[var(--color-surface-2)]/50;
+    background-color: color-mix(in srgb, var(--color-surface-2) 50%, transparent);
   }
 
   /* Progress bar */

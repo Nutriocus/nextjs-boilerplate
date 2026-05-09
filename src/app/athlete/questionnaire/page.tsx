@@ -245,7 +245,7 @@ export default function QuestionnairePage() {
   const [completed, setCompleted] = useState<number[]>([]);
 
   function goNext() {
-    setCompleted((prev) => [...new Set([...prev, currentStep])]);
+    setCompleted((prev) => prev.includes(currentStep) ? prev : [...prev, currentStep]);
     if (currentStep < STEPS.length - 1) setCurrentStep((s) => s + 1);
   }
 

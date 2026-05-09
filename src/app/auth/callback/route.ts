@@ -7,34 +7,30 @@ export async function GET(request: NextRequest) {
   const code = requestUrl.searchParams.get("code");
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || requestUrl.origin;
 
-  if (code) {
-    const supabase = createRouteHandlerClient({ cookies });
-    const { data: { session } } = await supabase.auth.exchangeCodeForSession(code);
+  if (!code) return NextResponse.redirect(`${appUrl}/auth/error?reason=no-code`);
 
-    if (session) {
-      const { data: coach } = await supabase
-        .from("coaches")
-        .select("id")
-        .eq("user_id", session.user.id)
-        .single();
+  const supabase = createRouteHandlerClient({ cookies });
+  const { data: { session }, error: sessionError } = await supabase.auth.exchangeCodeForSession(code);
 
-      if (coach) {
-        return NextResponse.redirect(`${appUrl}/coach`);
-      }
-
-      const { data: athlete } = await supabase
-        .from("athletes")
-        .select("id")
-        .eq("user_id", session.user.id)
-        .single();
-
-      if (athlete) {
-        return NextResponse.redirect(`${appUrl}/athlete/dashboard`);
-      }
-
-      return NextResponse.redirect(`${appUrl}/auth/error`);
-    }
+  if (sessionError || !session) {
+    return NextResponse.redirect(`${appUrl}/auth/error?reason=no-session&err=${sessionError?.message ?? "unknown"}`);
   }
 
-  return NextResponse.redirect(`${appUrl}/auth/error`);
+  const { data: coach, error: coachError } = await supabase
+    .from("coaches")
+    .select("id")
+    .eq("user_id", session.user.id)
+    .single();
+
+  if (coach) return NextResponse.redirect(`${appUrl}/coach`);
+
+  const { data: athlete } = await supabase
+    .from("athletes")
+    .select("id")
+    .eq("user_id", session.user.id)
+    .single();
+
+  if (athlete) return NextResponse.redirect(`${appUrl}/athlete/dashboard`);
+
+  return NextResponse.redirect(`${appUrl}/auth/error?reason=no-role&uid=${session.user.id}&coach-err=${coachError?.message ?? "none"}`);
 }

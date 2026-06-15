@@ -2,40 +2,50 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import {
-  Activity,
-  Users,
-  Zap,
-  TrendingUp,
-  Target,
-  ChevronRight,
-} from "lucide-react";
+import { ChevronRight } from "lucide-react";
 
 export default function HomePage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--color-background)] p-6">
-      {/* Logo & Branding */}
+      {/* Brand block */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="text-center mb-16"
+        className="text-center mb-12"
       >
-        <div className="flex items-center justify-center gap-3 mb-4">
-          <div className="w-12 h-12 rounded-xl bg-[var(--color-primary)] flex items-center justify-center">
-            <Zap className="w-7 h-7 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold font-display tracking-tight">
+        <div className="inline-flex items-center gap-3 mb-2 px-5 py-1.5 rounded-full bg-[var(--color-dark)] text-white">
+          <span
+            className="font-extrabold tracking-tight text-sm"
+            style={{ fontFamily: "var(--font-display)" }}
+          >
             NUTRIOCUS
-          </h1>
+            <span className="text-[var(--color-primary)]">.</span>
+          </span>
         </div>
-        <p className="text-[var(--color-text-muted)] text-base max-w-md mx-auto">
-          Plateforme de coaching nutritionnel pour athlètes d'endurance
+        <h1
+          className="font-extrabold uppercase mt-3"
+          style={{
+            fontFamily: "var(--font-display)",
+            fontSize: "44px",
+            letterSpacing: "-0.025em",
+            lineHeight: 1.04,
+          }}
+        >
+          Ultra Performance
+        </h1>
+        <div className="flex gap-1 justify-center mt-3">
+          <div className="h-1 w-16 bg-[var(--color-primary)] rounded-full" />
+          <div className="h-1 w-6 bg-[var(--color-accent)] rounded-full" />
+        </div>
+        <p className="text-[var(--color-text-muted)] text-sm mt-5 max-w-md mx-auto">
+          La plateforme de coaching nutritionnel pour athlètes
+          d&apos;endurance.
         </p>
       </motion.div>
 
       {/* Cards de sélection */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 w-full max-w-xl">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-xl">
         {/* Coach */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
@@ -43,16 +53,24 @@ export default function HomePage() {
           transition={{ duration: 0.4, delay: 0.1 }}
         >
           <Link href="/auth?role=coach">
-            <div className="card group cursor-pointer hover:border-[var(--color-primary)]/50 transition-all duration-200 hover:shadow-lg hover:shadow-[var(--color-primary)]/5">
-              <div className="w-11 h-11 rounded-xl bg-[var(--color-primary)]/10 flex items-center justify-center mb-4 group-hover:bg-[var(--color-primary)]/20 transition-colors">
-                <Users className="w-6 h-6 text-[var(--color-primary)]" />
-              </div>
-              <h2 className="text-lg font-bold font-display mb-1">Coach</h2>
+            <div className="card cursor-pointer p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md group border-t-[3px] border-t-[var(--color-primary)]">
+              <div className="kicker mb-1">Espace</div>
+              <h2
+                className="font-extrabold uppercase mb-2"
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontSize: "26px",
+                  letterSpacing: "-0.02em",
+                  lineHeight: 1.05,
+                }}
+              >
+                Coach
+              </h2>
               <p className="text-sm text-[var(--color-text-muted)] mb-4">
                 Gérez vos athlètes, partagez les plans et suivez les
                 progressions.
               </p>
-              <div className="flex items-center text-sm font-semibold text-[var(--color-primary)]">
+              <div className="inline-flex items-center text-sm font-bold text-[var(--color-primary)]">
                 Accéder
                 <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
               </div>
@@ -67,15 +85,25 @@ export default function HomePage() {
           transition={{ duration: 0.4, delay: 0.2 }}
         >
           <Link href="/auth?role=athlete">
-            <div className="card group cursor-pointer hover:border-[var(--color-accent)]/50 transition-all duration-200 hover:shadow-lg hover:shadow-[var(--color-accent)]/5">
-              <div className="w-11 h-11 rounded-xl bg-[var(--color-accent)]/10 flex items-center justify-center mb-4 group-hover:bg-[var(--color-accent)]/20 transition-colors">
-                <Activity className="w-6 h-6 text-[var(--color-accent)]" />
+            <div className="card cursor-pointer p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md group border-t-[3px] border-t-[var(--color-dark)]">
+              <div className="kicker mb-1" style={{ color: "var(--color-dark)" }}>
+                Espace
               </div>
-              <h2 className="text-lg font-bold font-display mb-1">Athlète</h2>
+              <h2
+                className="font-extrabold uppercase mb-2"
+                style={{
+                  fontFamily: "var(--font-display)",
+                  fontSize: "26px",
+                  letterSpacing: "-0.02em",
+                  lineHeight: 1.05,
+                }}
+              >
+                Athlète
+              </h2>
               <p className="text-sm text-[var(--color-text-muted)] mb-4">
                 Accédez à votre espace personnel, vos plans et tous vos outils.
               </p>
-              <div className="flex items-center text-sm font-semibold text-[var(--color-accent)]">
+              <div className="inline-flex items-center text-sm font-bold text-[var(--color-dark)]">
                 Accéder
                 <ChevronRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
               </div>
@@ -84,25 +112,16 @@ export default function HomePage() {
         </motion.div>
       </div>
 
-      {/* Features */}
+      {/* Footer */}
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
         transition={{ duration: 0.4, delay: 0.4 }}
-        className="mt-16 grid grid-cols-3 gap-6 text-center max-w-lg"
+        className="mt-16 text-center"
       >
-        {[
-          { icon: TrendingUp, label: "Suivi corporel & IRE" },
-          { icon: Target, label: "Stratégies de course" },
-          { icon: Zap, label: "9 GPTs nutrition" },
-        ].map(({ icon: Icon, label }) => (
-          <div key={label} className="flex flex-col items-center gap-2">
-            <Icon className="w-5 h-5 text-[var(--color-text-muted)]" />
-            <span className="text-xs text-[var(--color-text-muted)]">
-              {label}
-            </span>
-          </div>
-        ))}
+        <p className="text-[10px] text-[var(--color-text-muted)] tracking-[0.1em] uppercase">
+          Plateforme nutrition · trail · triathlon · cyclisme · course
+        </p>
       </motion.div>
     </div>
   );

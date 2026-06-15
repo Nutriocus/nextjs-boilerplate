@@ -3,7 +3,7 @@
 import { useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Zap, Mail, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react";
+import { Mail, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
@@ -57,24 +57,31 @@ function AuthForm() {
           className="card"
         >
           {/* Header */}
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-[var(--color-primary)] flex items-center justify-center">
-              <Zap className="w-5 h-5 text-white" />
+          <div className="mb-6">
+            <div className="inline-flex items-center gap-2 mb-3 px-3 py-1 rounded-full bg-[var(--color-dark)] text-white">
+              <span
+                className="font-extrabold tracking-tight text-xs"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                NUTRIOCUS
+                <span className="text-[var(--color-primary)]">.</span>
+              </span>
             </div>
-            <div>
-              <h1 className="font-bold font-display">NUTRIOCUS</h1>
-              <p className="text-xs text-[var(--color-text-muted)]">
-                Espace{" "}
-                <span
-                  className={
-                    isCoach
-                      ? "text-[var(--color-primary)]"
-                      : "text-[var(--color-accent)]"
-                  }
-                >
-                  {isCoach ? "Coach" : "Athlète"}
-                </span>
-              </p>
+            <div className="kicker">Espace</div>
+            <h1
+              className="font-extrabold uppercase mt-1"
+              style={{
+                fontFamily: "var(--font-display)",
+                fontSize: "28px",
+                letterSpacing: "-0.02em",
+                lineHeight: 1.05,
+              }}
+            >
+              {isCoach ? "Coach" : "Athlète"}
+            </h1>
+            <div className="flex gap-1 mt-2">
+              <div className="h-1 w-10 bg-[var(--color-primary)] rounded-full" />
+              <div className="h-1 w-4 bg-[var(--color-accent)] rounded-full" />
             </div>
           </div>
 

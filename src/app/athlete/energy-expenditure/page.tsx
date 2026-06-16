@@ -4,6 +4,13 @@ import { useState } from "react";
 import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader, Kpi, Field } from "@/components/ui/PageHeader";
 import {
+  PrintReport,
+  PrintH,
+  PrintButton,
+  PrintKpi,
+  PrintBox,
+} from "@/components/ui/PrintReport";
+import {
   ResponsiveContainer,
   LineChart,
   Line,
@@ -66,9 +73,11 @@ export default function EnergyExpenditurePage() {
 
   return (
     <div>
+      <div className="screen-only">
       <PageHeader
         kicker="Anticiper tes courses"
         title="Dépenses énergétiques en course"
+        action={<PrintButton />}
         desc="Anticipe la dépense totale, la répartition des substrats et la déplétion du glycogène heure par heure selon ta cible d'apport en glucides."
       />
 
@@ -157,6 +166,63 @@ export default function EnergyExpenditurePage() {
           </div>
         </div>
       </div>
+      </div>
+
+      <PrintReport
+        kicker="Anticiper tes courses"
+        title="Dépenses en course"
+        subtitle={`${params.duree} min · cible ${cible} g/h · réserves ${reserves} g`}
+      >
+        <PrintH>Synthèse énergétique</PrintH>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 9 }}>
+          <PrintKpi label="Dépense totale" value={Math.round(totalKcal)} unit="kcal" />
+          <PrintKpi
+            label="Énergie CHO"
+            value={Math.round(choKcal)}
+            unit="kcal"
+            sub={`${Math.round(choPct * 100)}% · ${Math.round(choG)} g`}
+            accent="#FF4501"
+          />
+          <PrintKpi
+            label="Énergie lipides"
+            value={Math.round(lipKcal)}
+            unit="kcal"
+            sub={`${Math.round(lipPct * 100)}%`}
+            accent="#5f8c0a"
+          />
+          <PrintKpi
+            label="Glycogène net /h"
+            value={netLossH > 0 ? "-" + Math.round(netLossH) : "≈0"}
+            unit="g"
+            accent="#cf2e2e"
+          />
+        </div>
+
+        <PrintH>Déplétion du glycogène</PrintH>
+        <PrintBox
+          title={`Réserves ${reserves} g · seuil du mur 300 g${hMur != null && hMur > 0 ? ` · atteint ≈ ${hMur.toFixed(1)} h` : ""}`}
+        >
+          <LineChart width={690} height={220} data={series} margin={{ top: 6, right: 10, left: -10, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e6e6e3" />
+            <XAxis
+              dataKey="h"
+              tick={{ fontSize: 10, fill: "#787876" }}
+              label={{ value: "heures", position: "insideBottom", offset: -2, fontSize: 9, fill: "#787876" }}
+            />
+            <YAxis tick={{ fontSize: 10, fill: "#787876" }} />
+            <ReferenceLine
+              y={300}
+              stroke="#cf2e2e"
+              strokeDasharray="5 4"
+              label={{ value: "Mur 300 g", position: "insideTopRight", fontSize: 10, fill: "#cf2e2e" }}
+            />
+            <Line dataKey="stock" name="Glycogène (g)" stroke="#FF4501" strokeWidth={3} dot={{ r: 2 }} isAnimationActive={false} />
+          </LineChart>
+        </PrintBox>
+        <div style={{ fontSize: 11.5, color: "#787876", marginTop: 8 }}>
+          En dessous de 300 g de glycogène, la performance chute (mur) même si les réserves ne sont pas vides.
+        </div>
+      </PrintReport>
     </div>
   );
 }

@@ -3,6 +3,12 @@
 import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader } from "@/components/ui/PageHeader";
 import {
+  PrintReport,
+  PrintH,
+  PrintButton,
+  PrintBox,
+} from "@/components/ui/PrintReport";
+import {
   ResponsiveContainer,
   BarChart,
   Bar,
@@ -76,9 +82,11 @@ export default function PhysiologyPage() {
 
   return (
     <div>
+      <div className="screen-only">
       <PageHeader
         kicker="Anticiper tes courses"
         title="Profil physiologique & énergétique"
+        action={<PrintButton />}
         desc={`Zones calculées depuis ton profil (VO₂max ${profile.vo2max ?? "—"}, poids ${profile.poids ?? "—"} kg). %CHO = (RER−0,7)/0,3 · VO₂ = VO₂max×poids/1000×%VO₂max · kcal/min = 5×VO₂.`}
       />
 
@@ -179,6 +187,59 @@ export default function PhysiologyPage() {
           </ResponsiveContainer>
         </div>
       </div>
+      </div>
+
+      <PrintReport
+        kicker="Anticiper tes courses"
+        title="Profil physiologique"
+        subtitle={`VO₂max ${profile.vo2max ?? "—"} ml/kg/min · Poids ${profile.poids ?? "—"} kg · FCmax ${profile.fcmax ?? "—"} bpm`}
+      >
+        <PrintH>Zones d'intensité</PrintH>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+          <thead>
+            <tr style={{ background: "#0a0a0a", color: "#fff" }}>
+              {["Zone", "%VO₂", "%FC", "RER", "%CHO", "%Lip", "kcal/h", "g CHO/min", "g Lip/min"].map((h) => (
+                <th key={h} style={{ padding: "7px 6px", textAlign: "left" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {zones.map((z, i) => (
+              <tr key={i} style={{ borderBottom: "1px solid #e6e6e3", background: i % 2 ? "#fafaf8" : "#fff" }}>
+                <td style={{ padding: "6px", fontWeight: 700 }}>{z.z}</td>
+                <td>{Math.round(z.vo2 * 100)}%</td>
+                <td>{Math.round(z.fc * 100)}%</td>
+                <td>{z.rer}</td>
+                <td style={{ color: "#FF4501", fontWeight: 700 }}>{Math.round(z.cho * 100)}%</td>
+                <td style={{ color: "#5f8c0a", fontWeight: 700 }}>{Math.round(z.lip * 100)}%</td>
+                <td style={{ fontWeight: 700 }}>{Math.round(z.kcalh)}</td>
+                <td>{z.gchomin.toFixed(2)}</td>
+                <td>{z.glipmin.toFixed(2)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        <PrintH>Oxydation des substrats par zone (g/min)</PrintH>
+        <PrintBox title="Glucides vs lipides">
+          <BarChart width={690} height={210} data={subData} margin={{ top: 4, right: 8, left: -14, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e6e6e3" />
+            <XAxis dataKey="z" tick={{ fontSize: 10, fill: "#787876" }} />
+            <YAxis tick={{ fontSize: 10, fill: "#787876" }} />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Bar dataKey="CHO" fill="#FF4501" isAnimationActive={false} />
+            <Bar dataKey="Lipides" fill="#0a0a0a" isAnimationActive={false} />
+          </BarChart>
+        </PrintBox>
+        <PrintBox title="Dépense énergétique par zone (kcal/h)">
+          <BarChart width={690} height={200} data={kcalData} margin={{ top: 4, right: 8, left: -6, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e6e6e3" />
+            <XAxis dataKey="z" tick={{ fontSize: 10, fill: "#787876" }} />
+            <YAxis tick={{ fontSize: 10, fill: "#787876" }} />
+            <Bar dataKey="kcal/h" fill="#FF4501" isAnimationActive={false} />
+          </BarChart>
+        </PrintBox>
+      </PrintReport>
     </div>
   );
 }

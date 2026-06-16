@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader, Empty, Field } from "@/components/ui/PageHeader";
 import { VideoEmbed } from "@/components/ui/VideoEmbed";
+import { PrintReport, PrintH, PrintButton } from "@/components/ui/PrintReport";
 
 type Consultation = {
   id: string;
@@ -62,28 +63,58 @@ export default function ConsultationsPage() {
   if (cur) {
     return (
       <div>
-        <button onClick={() => setView(null)} className="btn-ghost btn-sm mb-2">
-          ← Toutes les consultations
-        </button>
-        <h1
-          className="font-extrabold uppercase mt-3 mb-1"
-          style={{ fontFamily: "var(--font-display)", fontSize: 28, letterSpacing: "-0.02em" }}
-        >
-          {cur.type}
-        </h1>
-        <div className="text-[var(--color-text-muted)] text-sm mb-4">
-          {dateLong(cur.date)} · {cur.coach}
-        </div>
-        {cur.replay && (
-          <div className="card p-4 mb-4">
-            <div className="font-extrabold mb-3">Replay</div>
-            <VideoEmbed url={cur.replay} title={cur.type} />
+        <div className="screen-only">
+          <div className="flex justify-between items-center mb-2 gap-2 flex-wrap">
+            <button onClick={() => setView(null)} className="btn-ghost btn-sm">
+              ← Toutes les consultations
+            </button>
+            <PrintButton label="Exporter le compte rendu en PDF" />
           </div>
-        )}
-        <div className="card p-5">
-          <div className="font-extrabold mb-2">Compte rendu</div>
-          <div className="whitespace-pre-wrap text-sm leading-relaxed">{cur.compteRendu || "—"}</div>
+          <h1
+            className="font-extrabold uppercase mt-3 mb-1 text-2xl sm:text-3xl"
+            style={{ fontFamily: "var(--font-display)", letterSpacing: "-0.02em" }}
+          >
+            {cur.type}
+          </h1>
+          <div className="text-[var(--color-text-muted)] text-sm mb-4">
+            {dateLong(cur.date)} · {cur.coach}
+          </div>
+          {cur.replay && (
+            <div className="card p-4 mb-4">
+              <div className="font-extrabold mb-3">Replay</div>
+              <VideoEmbed url={cur.replay} title={cur.type} />
+            </div>
+          )}
+          <div className="card p-5">
+            <div className="font-extrabold mb-2">Compte rendu</div>
+            <div className="whitespace-pre-wrap text-sm leading-relaxed">{cur.compteRendu || "—"}</div>
+          </div>
         </div>
+
+        <PrintReport
+          kicker="Mon accompagnement"
+          title="Compte rendu de consultation"
+          subtitle={`${cur.type} · ${dateLong(cur.date)} · ${cur.coach}`}
+        >
+          <PrintH>Compte rendu</PrintH>
+          <div
+            style={{
+              whiteSpace: "pre-wrap",
+              fontSize: 13,
+              lineHeight: 1.7,
+              border: "1px solid #e6e6e3",
+              borderRadius: 10,
+              padding: "14px 16px",
+            }}
+          >
+            {cur.compteRendu || "—"}
+          </div>
+          {cur.replay && (
+            <div style={{ marginTop: 12, fontSize: 11.5, color: "#787876" }}>
+              Replay : {cur.replay}
+            </div>
+          )}
+        </PrintReport>
       </div>
     );
   }

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader, Empty, Field, Badge } from "@/components/ui/PageHeader";
+import { PrintReport, PrintH, PrintButton, PrintKpi } from "@/components/ui/PrintReport";
 
 type DomNote = { note: "vert" | "orange" | "rouge" | ""; com: string };
 type Race = {
@@ -151,9 +152,11 @@ export default function RaceAnalysisPage() {
   if (editing) {
     return (
       <div>
-        <div className="flex justify-between items-center mb-2.5">
+        <div className="screen-only">
+        <div className="flex justify-between items-center mb-2.5 gap-2 flex-wrap">
           <button onClick={() => setEditing(null)} className="btn-ghost btn-sm">← Tous les bilans</button>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <PrintButton label="Exporter en PDF" />
             <button onClick={() => del(editing.id)} className="btn-ghost btn-sm" style={{ color: "var(--color-danger)" }}>Supprimer</button>
             <button onClick={save} className="btn-primary btn-sm">Enregistrer</button>
           </div>
@@ -249,6 +252,90 @@ export default function RaceAnalysisPage() {
             <textarea className="input mt-2" style={{ minHeight: 80, resize: "vertical" }} value={editing.conclusion} onChange={(e) => updateField("conclusion", e.target.value)} />
           </Field>
         </div>
+        </div>
+
+        <PrintReport
+          kicker="Anticiper tes courses"
+          title="Bilan de course"
+          subtitle={`${editing.name} · ${editing.type} · ${dateLong(editing.date)}`}
+        >
+          <PrintH>Fiche course</PrintH>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 9, marginBottom: 8 }}>
+            <PrintKpi label="Distance" value={editing.distance} unit="km" />
+            <PrintKpi label="Dénivelé +" value={editing.dplus} unit="m" accent="#0a0a0a" />
+            <PrintKpi label="Résultat" value={editing.resultat || "—"} unit="" accent="#5f8c0a" />
+            <PrintKpi label="FC moy / max" value={`${editing.fcMoy || "—"} / ${editing.fcMax || "—"}`} unit="" accent="#cf2e2e" />
+          </div>
+          <div style={{ fontSize: 12, color: "#787876" }}>
+            {editing.objectif ? `Objectif : ${editing.objectif} · ` : ""}
+            {editing.meteo ? `Météo : ${editing.meteo} · ` : ""}
+            {editing.temperature ? `${editing.temperature} °C` : ""}
+          </div>
+
+          <PrintH>Nutrition & hydratation réalisées</PrintH>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 9 }}>
+            <PrintKpi label="Glucides" value={editing.cho} unit="g" sub={editing.choH ? `${editing.choH} g/h` : ""} />
+            <PrintKpi label="Hydratation" value={editing.liquides} unit="ml" sub={editing.liquidesH ? `${editing.liquidesH} ml/h` : ""} accent="#0a0a0a" />
+            <PrintKpi label="Sodium" value={editing.sodium} unit="mg" sub={editing.sodiumL ? `${editing.sodiumL} mg/L` : ""} accent="#5f8c0a" />
+            <PrintKpi label="Caféine" value={editing.cafeine} unit="mg" sub={editing.cafeineH ? `${editing.cafeineH} mg/h` : ""} accent="#cf2e2e" />
+          </div>
+          <div style={{ fontSize: 12, marginTop: 6 }}>
+            <span style={{ color: "#787876" }}>Stratégie respectée : </span>
+            <b>{editing.strategie}</b>
+          </div>
+
+          <PrintH>Évaluation par domaine</PrintH>
+          {DOMAINS.map((d, i) => {
+            const dom = editing.domaines[d.k];
+            const colors: Record<string, string> = { vert: "#5f8c0a", orange: "#FF4501", rouge: "#cf2e2e" };
+            const noteLevel: Record<string, number> = { vert: 3, orange: 2, rouge: 1 };
+            return (
+              <div key={i} className="no-break" style={{ display: "grid", gridTemplateColumns: "160px 90px 1fr", gap: 10, alignItems: "center", padding: "4px 0" }}>
+                <span style={{ fontWeight: 700, fontSize: 12 }}>{d.l}</span>
+                <div style={{ height: 9, background: "#eee", borderRadius: 20, overflow: "hidden" }}>
+                  <div style={{ width: ((noteLevel[dom.note || ""] || 0) / 3) * 100 + "%", height: "100%", background: dom.note ? colors[dom.note] : "#ccc" }} />
+                </div>
+                <span style={{ fontSize: 11.5, color: "#444" }}>{dom.com}</span>
+              </div>
+            );
+          })}
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginTop: 6 }} className="no-break">
+            <div>
+              <PrintH>Points forts</PrintH>
+              {editing.forts.filter(Boolean).map((p, i) => (
+                <div key={i} style={{ fontSize: 12.5, padding: "2px 0" }}>
+                  <b style={{ color: "#5f8c0a" }}>✓</b> {p}
+                </div>
+              ))}
+            </div>
+            <div>
+              <PrintH>Axes de progrès</PrintH>
+              {editing.progres.filter(Boolean).map((p, i) => (
+                <div key={i} style={{ fontSize: 12.5, padding: "2px 0" }}>
+                  <b style={{ color: "#cf2e2e" }}>→</b> {p}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <PrintH>Ordonnance d&apos;action</PrintH>
+          {editing.priorites.filter(Boolean).map((p, i) => (
+            <div key={i} style={{ fontSize: 12.5, padding: "2px 0" }}>
+              <b style={{ color: "#FF4501" }}>Priorité {i + 1} :</b> {p}
+            </div>
+          ))}
+          {editing.tests && (
+            <div style={{ fontSize: 12.5, marginTop: 6 }}>
+              <b>Tests / séances :</b> <span style={{ whiteSpace: "pre-wrap" }}>{editing.tests}</span>
+            </div>
+          )}
+          {editing.conclusion && (
+            <div style={{ fontSize: 12.5, marginTop: 6 }}>
+              <b>Conclusion :</b> <span style={{ whiteSpace: "pre-wrap" }}>{editing.conclusion}</span>
+            </div>
+          )}
+        </PrintReport>
       </div>
     );
   }

@@ -437,6 +437,47 @@
   background: var(--color-text-muted);
 }
 
+/* ============ PRINT MODE ============ */
+.print-only {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 12mm;
+  }
+  html,
+  body {
+    background: #fff !important;
+    color: #0a0a0a !important;
+  }
+  .screen-only,
+  .sidebar,
+  .mobile-topbar,
+  .sidebar-backdrop {
+    display: none !important;
+  }
+  main {
+    padding-left: 0 !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .print-only .print-page {
+    page-break-after: always;
+  }
+  .print-only .print-page:last-child {
+    page-break-after: auto;
+  }
+  .print-only .no-break {
+    page-break-inside: avoid;
+  }
+  .print-only .recharts-wrapper {
+    page-break-inside: avoid;
+  }
+}
+
 /* ============ RECHARTS OVERRIDES ============ */
 .recharts-tooltip-wrapper .recharts-default-tooltip {
   background: var(--color-surface) !important;

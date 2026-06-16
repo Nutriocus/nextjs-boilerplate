@@ -3,6 +3,12 @@
 import { useState } from "react";
 import { PageHeader, Kpi, Field } from "@/components/ui/PageHeader";
 import {
+  PrintReport,
+  PrintH,
+  PrintButton,
+  PrintKpi,
+} from "@/components/ui/PrintReport";
+import {
   ResponsiveContainer,
   RadarChart,
   PolarGrid,
@@ -64,10 +70,12 @@ function Diagnostic() {
 
   return (
     <div>
+      <div className="screen-only">
       <div className="mb-3.5 flex gap-2.5 flex-wrap items-center">
         <GptLink url="https://chatgpt.com/g/g-68fd31200980819184b22509cce50fe7-nutriocus-diagnostic-pre-course-360deg">
           GPT — Diagnostic pré-course 360°
         </GptLink>
+        <PrintButton label="Exporter en PDF" />
       </div>
       <p className="text-[var(--color-text-muted)] text-sm max-w-2xl mb-3.5">
         Profil global sur les 4 systèmes. Renseigne les scores (0–100) issus de chaque protocole / GPT. Le score Nutriocus est pondéré selon le sport, et le radar fait ressortir le facteur limitant prioritaire et le mur probable.
@@ -153,6 +161,61 @@ function Diagnostic() {
           </div>
         </div>
       </div>
+      </div>
+
+      <PrintReport
+        kicker="Anticiper tes courses"
+        title="Diagnostic pré-course 360°"
+        subtitle={`Sport : ${sport}`}
+      >
+        <div style={{ display: "grid", gridTemplateColumns: "340px 1fr", gap: 16, alignItems: "center" }}>
+          <div style={{ border: "1px solid #e6e6e3", borderRadius: 12, padding: "8px 6px" }}>
+            <RadarChart width={330} height={280} data={data} outerRadius="72%">
+              <PolarGrid stroke="#e6e6e3" />
+              <PolarAngleAxis dataKey="axe" tick={{ fontSize: 11, fill: "#0a0a0a", fontWeight: 700 }} />
+              <PolarRadiusAxis domain={[0, 100]} tick={{ fontSize: 9, fill: "#787876" }} />
+              <Radar dataKey="v" stroke="#FF4501" fill="#FF4501" fillOpacity={0.32} isAnimationActive={false} />
+            </RadarChart>
+          </div>
+          <div>
+            <div style={{ textAlign: "center", border: "1px solid #e6e6e3", borderRadius: 12, padding: 14, marginBottom: 10 }}>
+              <div style={{ fontSize: 10, color: "#787876", textTransform: "uppercase", letterSpacing: ".1em" }}>
+                Score Nutriocus global
+              </div>
+              <div style={{ fontWeight: 800, fontSize: 42, color: colorFor(global), lineHeight: 1.1 }}>
+                {Math.round(global)}
+                <span style={{ fontSize: 15, color: "#787876" }}>/100</span>
+              </div>
+            </div>
+            <PrintKpi label="Point fort" value={fort.l} sub={`${fort.v}/100`} accent="#5f8c0a" />
+            <div style={{ height: 8 }} />
+            <PrintKpi label="Facteur limitant prioritaire" value={faible.l} sub={`${faible.v}/100 · ${faible.mur}`} accent={colorFor(faible.v)} />
+          </div>
+        </div>
+
+        <PrintH>Seuils critiques & risques</PrintH>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}>
+          <thead>
+            <tr style={{ background: "#0a0a0a", color: "#fff" }}>
+              {["Système", "Pond.", "Score", "Indicateur", "Seuil critique", "Risque"].map((h) => (
+                <th key={h} style={{ padding: "7px 8px", textAlign: "left" }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {sys.map((s) => (
+              <tr key={s.k} style={{ borderBottom: "1px solid #e6e6e3" }}>
+                <td style={{ padding: "6px 8px", fontWeight: 700 }}>{s.l}</td>
+                <td>{s.w}%</td>
+                <td style={{ fontWeight: 800, color: colorFor(s.v) }}>{s.v}</td>
+                <td>{s.ind}</td>
+                <td style={{ color: "#787876" }}>{s.seuil}</td>
+                <td>{s.mur}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </PrintReport>
     </div>
   );
 }

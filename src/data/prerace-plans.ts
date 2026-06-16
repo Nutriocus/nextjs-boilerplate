@@ -1,19 +1,32 @@
-// Pre-race meal plans extracted from coach PDFs (J-4 → J-J)
-// Generated from 9 weight buckets: 55, 56, 57, 60, 64, 68, 70, 72, 78 kg
-// Each athlete is matched to the closest weight bucket based on their profile.
+// Pre-race meal plans extracted from coach PDFs (J-4 → J-1).
+// Generated from 9 weight buckets: 55, 56, 57, 60, 64, 68, 70, 72, 78 kg.
+// J-J morning (jour de course) is delivered as 3 editable breakfast templates
+// since the source PDF pages for the race-day morning are image-only.
 
 export type PreraceFood = { food: string; qty: string; tip: string };
 export type PreraceDay = "J-4" | "J-3" | "J-2" | "J-1" | "J-J";
+export type Meal = "petit_dej" | "collation" | "dejeuner" | "malto" | "diner";
+
+export const MEAL_LABELS: Record<Meal, string> = {
+  petit_dej: "Petit déjeuner",
+  collation: "Collation matin / après-midi",
+  dejeuner: "Déjeuner",
+  malto: "Maltodextrine",
+  diner: "Dîner",
+};
+
+export const MEAL_ORDER: Meal[] = ["petit_dej", "collation", "dejeuner", "malto", "diner"];
+
 export type PreracePlanByDay = Record<PreraceDay, PreraceFood[]>;
 export type PreracePlansByWeight = Record<number, PreracePlanByDay>;
 
-export const PRERACE_WEIGHT_BUCKETS: number[] = [55, 56, 57, 60, 64, 68, 70, 72, 78];
+const WEIGHT_BUCKETS: number[] = [55, 56, 57, 60, 64, 68, 70, 72, 78];
 
 export function closestWeightBucket(weightKg: number): number {
   if (!weightKg || isNaN(weightKg)) return 70;
-  let best = PRERACE_WEIGHT_BUCKETS[0];
+  let best = WEIGHT_BUCKETS[0];
   let bestDist = Math.abs(weightKg - best);
-  for (const w of PRERACE_WEIGHT_BUCKETS) {
+  for (const w of WEIGHT_BUCKETS) {
     const d = Math.abs(weightKg - w);
     if (d < bestDist) {
       bestDist = d;
@@ -23,6 +36,68 @@ export function closestWeightBucket(weightKg: number): number {
   return best;
 }
 
+// Each food name maps to an ordered list of meals.
+// First occurrence of the food in the day's plan → first meal in this list,
+// second occurrence → second meal, etc.
+const FOOD_MEAL_ORDER: Record<string, Meal[]> = {
+  "FRUIT": ["collation", "dejeuner", "diner", "petit_dej"],
+  "HUILE D'OLIVE": ["dejeuner", "diner"],
+  "LAIT VEGETAL": ["petit_dej", "petit_dej"],
+  "LAIT D'AVOINE": ["petit_dej", "petit_dej"],
+  "CHOCOLAT NOIR": ["petit_dej", "collation", "diner"],
+  "MALTODEXTRINE": ["malto", "malto", "malto", "malto"],
+  "SHAKER MALTODEXTRINE": ["malto", "malto"],
+  "VIANDES OU POISSON OU OEUFS": ["dejeuner", "diner"],
+  "VIANDES OU POISSON": ["dejeuner", "diner"],
+  "VIANDES BLANCHES OU POISSON BLANC": ["dejeuner", "diner"],
+  "ESCALOPE DE DINDE": ["dejeuner", "diner"],
+  "TOFU": ["dejeuner", "diner"],
+  "TOFU OU OEUFS": ["dejeuner", "diner"],
+  "MIEL": ["dejeuner", "diner", "petit_dej"],
+  "LEGUMES": ["dejeuner", "diner"],
+  "FECULENTS": ["dejeuner", "diner"],
+  "SAUCE TOMATE": ["dejeuner", "diner"],
+  "RIZ BASMATI": ["dejeuner", "diner"],
+  "FLOCONS D'AVOINE": ["petit_dej", "petit_dej", "collation"],
+  "FLOCON D'AVOINE": ["petit_dej", "petit_dej", "collation"],
+  "PAIN COMPLET": ["petit_dej", "collation"],
+  "PAIN BLANC": ["petit_dej", "collation"],
+  "PAIN DE MIE": ["petit_dej", "collation"],
+  "PAIN": ["petit_dej", "collation"],
+  "FROMAGE BLANC": ["petit_dej", "collation"],
+  "FROMAGE": ["petit_dej", "collation"],
+  "COMPOTE DE POMME": ["petit_dej", "collation"],
+  "COMPOTE DE POMME SSA": ["petit_dej", "collation"],
+  "CONFITURE": ["petit_dej"],
+  "CONFITURE OU MIEL": ["petit_dej"],
+  "OLEAGINEUX": ["collation", "petit_dej"],
+  "PUREE D'OLEAGINEUX": ["collation"],
+  "BEURRE DE CACAHUETE": ["collation", "petit_dej"],
+  "OEUF": ["petit_dej", "dejeuner", "diner"],
+  "OEUFS": ["petit_dej"],
+  "WHEY": ["collation"],
+  "WHEY PROTEINE": ["collation"],
+  "YAOURT": ["collation"],
+  "PATATE DOUCE ECRASEE": ["dejeuner", "diner"],
+  "HYDRATATION A BASE D'EAU": ["malto"],
+};
+
+export function assignMeals(items: PreraceFood[]): Record<Meal, PreraceFood[]> {
+  const out: Record<Meal, PreraceFood[]> = {
+    petit_dej: [], collation: [], dejeuner: [], malto: [], diner: [],
+  };
+  const counters: Record<string, number> = {};
+  for (const item of items) {
+    const order = FOOD_MEAL_ORDER[item.food] || ["dejeuner"];
+    const idx = counters[item.food] || 0;
+    const meal = order[Math.min(idx, order.length - 1)];
+    out[meal].push(item);
+    counters[item.food] = idx + 1;
+  }
+  return out;
+}
+
+// Raw plans extracted from PDFs (one item per source entry; duplicates kept on purpose).
 export const PRERACE_PLANS: PreracePlansByWeight = {
   "55": {
     "J-4": [
@@ -30,6 +105,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "FRUIT",
         "qty": "1 unité = 150 grammes",
         "tip": "Privilégier les fruits de saison et biologiques."
+      },
+      {
+        "food": "HUILE D'OLIVE",
+        "qty": "10 grammes pour la viande",
+        "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
         "food": "HUILE D'OLIVE",
@@ -67,6 +147,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
       },
       {
+        "food": "VIANDES OU POISSON OU OEUFS",
+        "qty": "125 grammes ou 3 oeufs",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
+      },
+      {
+        "food": "FRUIT",
+        "qty": "1 unité",
+        "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
         "food": "FRUIT",
         "qty": "1 unité",
         "tip": "Privilégier les produits de saison et biologique."
@@ -75,6 +165,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "CONFITURE",
         "qty": "20 grammes",
         "tip": "Privilégier la confiture la plus riche en fruit."
+      },
+      {
+        "food": "FECULENTS",
+        "qty": "Céréales = 120g crus (250g riz; 360g pâtes cuits) // Patate douce ou Pommes de terre = 480g cuit",
+        "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
       },
       {
         "food": "FECULENTS",
@@ -109,6 +204,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
+        "food": "HUILE D'OLIVE",
+        "qty": "10 grammes pour la viande",
+        "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
+      },
+      {
         "food": "PAIN COMPLET",
         "qty": "60 grammes = 2 tranches",
         "tip": "Privilégier le pan complet ou aux céréales"
@@ -139,6 +239,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
       },
       {
+        "food": "VIANDES OU POISSON OU OEUFS",
+        "qty": "125 grammes ou 3 oeufs",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
+      },
+      {
+        "food": "FRUIT",
+        "qty": "1 unité",
+        "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
         "food": "FRUIT",
         "qty": "1 unité",
         "tip": "Privilégier les produits de saison et biologique."
@@ -147,6 +257,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "CONFITURE",
         "qty": "20 grammes",
         "tip": "Privilégier la confiture la plus riche en fruit."
+      },
+      {
+        "food": "FECULENTS",
+        "qty": "Céréales = 120g crus (250g riz; 360g pâtes cuits) // Patate douce ou Pommes de terre = 480g cuit",
+        "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
       },
       {
         "food": "FECULENTS",
@@ -174,6 +289,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "FRUIT",
         "qty": "1 unité = 150 grammes",
         "tip": "Privilégier les fruits de saison et biologiques."
+      },
+      {
+        "food": "HUILE D'OLIVE",
+        "qty": "10 grammes pour la viande",
+        "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
         "food": "HUILE D'OLIVE",
@@ -211,6 +331,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
       },
       {
+        "food": "VIANDES OU POISSON OU OEUFS",
+        "qty": "125 grammes ou 3 oeufs",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
+      },
+      {
+        "food": "FRUIT",
+        "qty": "1 unité",
+        "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
         "food": "FRUIT",
         "qty": "1 unité",
         "tip": "Privilégier les produits de saison et biologique."
@@ -226,6 +356,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
       },
       {
+        "food": "FECULENTS",
+        "qty": "Céréales = 130g crus (270g riz; 390g pâtes cuits) // Patate douce ou Pommes de terre = 520g cuit",
+        "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
+      },
+      {
         "food": "CHOCOLAT NOIR",
         "qty": "10 grammes",
         "tip": "Privilégier le chocolat 70% de cacao"
@@ -234,6 +369,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "MALTODEXTRINE",
         "qty": "50 grammes dans 400ml d'eau",
         "tip": "Le prendre 30 minutes après le déjeuner."
+      },
+      {
+        "food": "MALTODEXTRINE",
+        "qty": "50 grammes dans 400ml d'eau",
+        "tip": "Le prendre 1H avant le coucher"
       },
       {
         "food": "FLOCONS D'AVOINE",
@@ -258,6 +398,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
+        "food": "HUILE D'OLIVE",
+        "qty": "10 grammes pour la viande",
+        "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
+      },
+      {
         "food": "LAIT VEGETAL",
         "qty": "130 grammes",
         "tip": "Privilégier le lait d'avoine ou le lait d'amande"
@@ -266,6 +411,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "COMPOTE DE POMME",
         "qty": "200 grammes",
         "tip": "Privilégier de la compote sans sucres ajoutés"
+      },
+      {
+        "food": "VIANDES OU POISSON",
+        "qty": "175 grammes",
+        "tip": "Privilégier les viandes maigres (dinde, poulet) ou les poissons blancs (colin, cabillaud, lieu)"
       },
       {
         "food": "VIANDES OU POISSON",
@@ -333,6 +483,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
+        "food": "HUILE D'OLIVE",
+        "qty": "8 grammes pour la viande et 7 grammes pour les légumes",
+        "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
+      },
+      {
+        "food": "TOFU OU OEUFS",
+        "qty": "200 grammes ou 3 oeufs",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
+      },
+      {
         "food": "TOFU OU OEUFS",
         "qty": "200 grammes ou 3 oeufs",
         "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
@@ -356,6 +516,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "LEGUMES",
         "qty": "150 grammes",
         "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
+        "food": "LEGUMES",
+        "qty": "150 grammes",
+        "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
+        "food": "FECULENTS",
+        "qty": "Céréales = 90g crus (200g riz ou 270g pâtes) // Patate douce ou Pommes de terre = 360g cuit",
+        "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
       },
       {
         "food": "FECULENTS",
@@ -405,9 +575,19 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
+        "food": "HUILE D'OLIVE",
+        "qty": "8 grammes pour la viande et 7 grammes pour les légumes",
+        "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
+      },
+      {
         "food": "LAIT VEGETAL",
         "qty": "200 grammes",
         "tip": "Privilégier le lait d'avoine ou le lait d'amande"
+      },
+      {
+        "food": "TOFU OU OEUFS",
+        "qty": "200 grammes ou 3 oeufs",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
       },
       {
         "food": "TOFU OU OEUFS",
@@ -445,6 +625,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les produits de saison et biologique."
       },
       {
+        "food": "LEGUMES",
+        "qty": "150 grammes",
+        "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
+        "food": "FECULENTS",
+        "qty": "Céréales = 90g crus (200g riz ou 270g pâtes) // Patate douce ou Pommes de terre = 360g cuit",
+        "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
+      },
+      {
         "food": "FECULENTS",
         "qty": "Céréales = 90g crus (200g riz ou 270g pâtes) // Patate douce ou Pommes de terre = 360g cuit",
         "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
@@ -458,6 +648,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "FROMAGE BLANC",
         "qty": "100 grammes",
         "tip": "Privilégier le fromage blanc 3% de MG"
+      },
+      {
+        "food": "FLOCONS D'AVOINE",
+        "qty": "50 grammes",
+        "tip": "Priviligier les flocons d'avoine biologique sans gluten"
       },
       {
         "food": "FLOCONS D'AVOINE",
@@ -492,6 +687,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
+        "food": "HUILE D'OLIVE",
+        "qty": "8 grammes pour la viande et 7 grammes pour les légumes",
+        "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
+      },
+      {
         "food": "LAIT VEGETAL",
         "qty": "200 grammes",
         "tip": "Privilégier le lait d'avoine ou le lait d'amande"
@@ -502,9 +702,19 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
       },
       {
+        "food": "TOFU OU OEUFS",
+        "qty": "200 grammes ou 3 oeufs",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
+      },
+      {
         "food": "MALTODEXTRINE",
         "qty": "50 grammes dans 600ml d'eau",
         "tip": "Le prendre 30 minutes après le petit déjeuner."
+      },
+      {
+        "food": "MALTODEXTRINE",
+        "qty": "50 grammes dans 600ml d'eau",
+        "tip": "Le prendre 30 minutes après la collation ou sur un entrainement"
       },
       {
         "food": "FROMAGE BLANC",
@@ -527,6 +737,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les produits de saison et biologique."
       },
       {
+        "food": "LEGUMES",
+        "qty": "150 grammes",
+        "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
+        "food": "FECULENTS",
+        "qty": "Céréales = 110g crus (230g riz ou 330g pâtes) // Patate douce ou Pommes de terre = 440g cuit",
+        "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
+      },
+      {
         "food": "FECULENTS",
         "qty": "Céréales = 110g crus (230g riz ou 330g pâtes) // Patate douce ou Pommes de terre = 440g cuit",
         "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
@@ -537,9 +757,19 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Le prendre 30 minutes après le déjeuner"
       },
       {
+        "food": "MALTODEXTRINE",
+        "qty": "50 grammes dans 600ml d'eau",
+        "tip": "Le prendre 1H avant le coucher"
+      },
+      {
         "food": "FROMAGE BLANC",
         "qty": "100 grammes",
         "tip": "Privilégier le fromage blanc 3% de MG"
+      },
+      {
+        "food": "FLOCONS D'AVOINE",
+        "qty": "50 grammes",
+        "tip": "Priviligier les flocons d'avoine biologique sans gluten"
       },
       {
         "food": "FLOCONS D'AVOINE",
@@ -567,6 +797,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "OEUFS",
         "qty": "3 unités",
         "tip": "Privilégier les oeufs d'origine bio"
+      },
+      {
+        "food": "HUILE D'OLIVE",
+        "qty": "10 grammes pour la viande",
+        "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
         "food": "HUILE D'OLIVE",
@@ -644,6 +879,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
+        "food": "HUILE D'OLIVE",
+        "qty": "8 grammes pour la viande et 7 grammes pour les légumes",
+        "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
+      },
+      {
+        "food": "LAIT VEGETAL",
+        "qty": "100 grammes",
+        "tip": "Privilégier le lait d'avoine ou le lait d'amande"
+      },
+      {
         "food": "LAIT VEGETAL",
         "qty": "100 grammes",
         "tip": "Privilégier le lait d'avoine ou le lait d'amande"
@@ -664,9 +909,24 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
       },
       {
+        "food": "VIANDES OU POISSON OU OEUFS",
+        "qty": "150 grammes ou 4 oeufs",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
+      },
+      {
         "food": "MIEL",
         "qty": "15 grammes",
         "tip": "Privilégier le miel d'acacia"
+      },
+      {
+        "food": "MIEL",
+        "qty": "15 grammes",
+        "tip": "Privilégier le miel d'acacia"
+      },
+      {
+        "food": "LEGUMES",
+        "qty": "150 grammes",
+        "tip": "Privilégier les produits de saison et biologique."
       },
       {
         "food": "LEGUMES",
@@ -679,9 +939,19 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
       },
       {
+        "food": "FECULENTS",
+        "qty": "Céréales = 100g crus (210g riz cuits) // Patate douce ou Pommes de terre = 400g cuit",
+        "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
+      },
+      {
         "food": "CHOCOLAT NOIR",
         "qty": "10 grammes",
         "tip": "Privilégier le chocolat 70% de cacao"
+      },
+      {
+        "food": "FLOCONS D'AVOINE",
+        "qty": "40 grammes",
+        "tip": "Priviligier les flocons d'avoine biologique sans gluten"
       },
       {
         "food": "FLOCONS D'AVOINE",
@@ -711,6 +981,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
+        "food": "HUILE D'OLIVE",
+        "qty": "8 grammes pour la viande et 7 grammes pour les légumes",
+        "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
+      },
+      {
+        "food": "LAIT VEGETAL",
+        "qty": "100 grammes",
+        "tip": "Privilégier le lait d'avoine ou le lait d'amande"
+      },
+      {
         "food": "LAIT VEGETAL",
         "qty": "100 grammes",
         "tip": "Privilégier le lait d'avoine ou le lait d'amande"
@@ -736,6 +1016,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
       },
       {
+        "food": "VIANDES OU POISSON OU OEUFS",
+        "qty": "150 grammes ou 4 oeufs",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
+      },
+      {
+        "food": "MIEL",
+        "qty": "15 grammes",
+        "tip": "Privilégier le miel d'acacia"
+      },
+      {
         "food": "MIEL",
         "qty": "15 grammes",
         "tip": "Privilégier le miel d'acacia"
@@ -751,6 +1041,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les produits de saison et biologique."
       },
       {
+        "food": "LEGUMES",
+        "qty": "150 grammes",
+        "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
+        "food": "FECULENTS",
+        "qty": "Céréales = 100g crus (210g riz cuits) // Patate douce ou Pommes de terre = 400g cuit",
+        "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
+      },
+      {
         "food": "FECULENTS",
         "qty": "Céréales = 100g crus (210g riz cuits) // Patate douce ou Pommes de terre = 400g cuit",
         "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
@@ -764,6 +1064,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "MALTODEXTRINE",
         "qty": "50 grammes dans 600ml d'eau",
         "tip": "Le prendre 1H avant le coucher"
+      },
+      {
+        "food": "FLOCONS D'AVOINE",
+        "qty": "40 grammes",
+        "tip": "Priviligier les flocons d'avoine biologique sans gluten"
       },
       {
         "food": "FLOCONS D'AVOINE",
@@ -793,6 +1098,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
+        "food": "HUILE D'OLIVE",
+        "qty": "8 grammes pour la viande et 7 grammes pour les légumes",
+        "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
+      },
+      {
+        "food": "LAIT VEGETAL",
+        "qty": "100 grammes",
+        "tip": "Privilégier le lait d'avoine ou le lait d'amande"
+      },
+      {
         "food": "LAIT VEGETAL",
         "qty": "100 grammes",
         "tip": "Privilégier le lait d'avoine ou le lait d'amande"
@@ -808,6 +1123,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Le prendre 30 minutes après le petit déjeuner."
       },
       {
+        "food": "MALTODEXTRINE",
+        "qty": "60 grammes dans 600ml d'eau",
+        "tip": "Le prendre 30 minutes après la collation ou sur un entrainement"
+      },
+      {
+        "food": "VIANDES OU POISSON OU OEUFS",
+        "qty": "150 grammes ou 4 oeufs",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
+      },
+      {
         "food": "VIANDES OU POISSON OU OEUFS",
         "qty": "150 grammes ou 4 oeufs",
         "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
@@ -818,9 +1143,19 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier le miel d'acacia"
       },
       {
+        "food": "MIEL",
+        "qty": "15 grammes",
+        "tip": "Privilégier le miel d'acacia"
+      },
+      {
         "food": "FRUIT",
         "qty": "1 unité = 150 grammes",
         "tip": "Privilégier les fruits de saison et biologiques."
+      },
+      {
+        "food": "LEGUMES",
+        "qty": "150 grammes",
+        "tip": "Privilégier les produits de saison et biologique."
       },
       {
         "food": "LEGUMES",
@@ -846,6 +1181,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "MALTODEXTRINE",
         "qty": "60 grammes dans 600ml d'eau",
         "tip": "Le prendre 30 minutes après le déjeuner"
+      },
+      {
+        "food": "MALTODEXTRINE",
+        "qty": "60 grammes dans 600ml d'eau",
+        "tip": "Le prendre 1H avant le coucher"
       },
       {
         "food": "FLOCONS D'AVOINE",
@@ -875,6 +1215,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
+        "food": "HUILE D'OLIVE",
+        "qty": "10 grammes pour la viande",
+        "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
+      },
+      {
         "food": "LAIT VEGETAL",
         "qty": "150 grammes",
         "tip": "Privilégier le lait d'avoine ou le lait d'amande"
@@ -883,6 +1228,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "COMPOTE DE POMME",
         "qty": "200 grammes",
         "tip": "Privilégier de la compote sans sucres ajoutés"
+      },
+      {
+        "food": "VIANDES OU POISSON",
+        "qty": "150 grammes",
+        "tip": "Privilégier les viandes maigres (dinde, poulet) ou les poissons blancs (colin, cabillaud, lieu)"
       },
       {
         "food": "VIANDES OU POISSON",
@@ -970,6 +1320,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
       },
       {
+        "food": "VIANDES OU POISSON OU OEUFS",
+        "qty": "125 grammes ou 3 oeufs",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
+      },
+      {
+        "food": "FRUIT",
+        "qty": "1 unité",
+        "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
         "food": "FRUIT",
         "qty": "1 unité",
         "tip": "Privilégier les produits de saison et biologique."
@@ -978,6 +1338,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "LEGUMES",
         "qty": "200 grammes",
         "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
+        "food": "FECULENTS",
+        "qty": "Céréales = 120 g crus ou 260g cuits // Patate douce ou Pommes de terre = 480g cuit",
+        "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
       },
       {
         "food": "FECULENTS",
@@ -1047,6 +1412,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
       },
       {
+        "food": "VIANDES OU POISSON OU OEUFS",
+        "qty": "125 grammes ou 3 oeufs",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
+      },
+      {
+        "food": "FRUIT",
+        "qty": "1 unité",
+        "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
         "food": "FRUIT",
         "qty": "1 unité",
         "tip": "Privilégier les produits de saison et biologique."
@@ -1055,6 +1430,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "LEGUMES",
         "qty": "200 grammes",
         "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
+        "food": "FECULENTS",
+        "qty": "Céréales = 140 g crus ou 320g cuits // Patate douce ou Pommes de terre = 560g cuit",
+        "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
       },
       {
         "food": "FECULENTS",
@@ -1124,6 +1504,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "30 minutes après le repas"
       },
       {
+        "food": "SHAKER MALTODEXTRINE",
+        "qty": "60 grammes dans 600ml",
+        "tip": "Soit sur l'entrainement ou alors 30 minutes après le repas du midi"
+      },
+      {
+        "food": "VIANDES OU POISSON OU OEUFS",
+        "qty": "125 grammes ou 3 oeufs",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
+      },
+      {
         "food": "VIANDES OU POISSON OU OEUFS",
         "qty": "125 grammes ou 3 oeufs",
         "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
@@ -1134,9 +1524,19 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les produits de saison et biologique."
       },
       {
+        "food": "FRUIT",
+        "qty": "1 unité",
+        "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
         "food": "LEGUMES",
         "qty": "200 grammes",
         "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
+        "food": "FECULENTS",
+        "qty": "Céréales = 150 g crus ou 360g cuits // Patate douce ou Pommes de terre = 600g cuit",
+        "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
       },
       {
         "food": "FECULENTS",
@@ -1176,6 +1576,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
+        "food": "HUILE D'OLIVE",
+        "qty": "10 grammes pour la viande",
+        "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
+      },
+      {
         "food": "LAIT VEGETAL",
         "qty": "150 grammes",
         "tip": "Privilégier le lait d'amande ou d'avoine"
@@ -1201,6 +1606,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les viandes maigres (dinde, poulet) ou les poissons maigres (colin, cabillaud)"
       },
       {
+        "food": "VIANDES OU POISSON",
+        "qty": "125 grammes",
+        "tip": "Privilégier les viandes maigres (dinde, poulet) ou les poissons maigres (colin, cabillaud)"
+      },
+      {
+        "food": "FRUIT",
+        "qty": "1 unité",
+        "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
         "food": "FRUIT",
         "qty": "1 unité",
         "tip": "Privilégier les produits de saison et biologique."
@@ -1214,6 +1629,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "RIZ BASMATI",
         "qty": "Céréales = 70 g crus ou 160g cuits",
         "tip": "Privilégier le riz basmati"
+      },
+      {
+        "food": "CHOCOLAT NOIR",
+        "qty": "10 grammes",
+        "tip": "Privilégier le chocolat 70% de cacao"
       },
       {
         "food": "CHOCOLAT NOIR",
@@ -1281,6 +1701,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
       },
       {
+        "food": "VIANDES OU POISSON OU OEUFS",
+        "qty": "125 grammes ou 3 oeufs",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
+      },
+      {
+        "food": "FRUIT",
+        "qty": "1 unité",
+        "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
         "food": "FRUIT",
         "qty": "1 unité",
         "tip": "Privilégier les produits de saison et biologique."
@@ -1289,6 +1719,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "LEGUMES",
         "qty": "200 grammes",
         "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
+        "food": "FECULENTS",
+        "qty": "Céréales = 120 g crus ou 260g cuits // Patate douce ou Pommes de terre = 480g cuit",
+        "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
       },
       {
         "food": "FECULENTS",
@@ -1358,6 +1793,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
       },
       {
+        "food": "VIANDES OU POISSON OU OEUFS",
+        "qty": "125 grammes ou 3 oeufs",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
+      },
+      {
+        "food": "FRUIT",
+        "qty": "1 unité",
+        "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
         "food": "FRUIT",
         "qty": "1 unité",
         "tip": "Privilégier les produits de saison et biologique."
@@ -1366,6 +1811,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "LEGUMES",
         "qty": "200 grammes",
         "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
+        "food": "FECULENTS",
+        "qty": "Céréales = 140 g crus ou 320g cuits // Patate douce ou Pommes de terre = 560g cuit",
+        "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
       },
       {
         "food": "FECULENTS",
@@ -1435,6 +1885,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "30 minutes après le repas"
       },
       {
+        "food": "SHAKER MALTODEXTRINE",
+        "qty": "60 grammes dans 600ml",
+        "tip": "Soit sur l'entrainement ou alors 30 minutes après le repas du midi"
+      },
+      {
+        "food": "VIANDES OU POISSON OU OEUFS",
+        "qty": "125 grammes ou 3 oeufs",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
+      },
+      {
         "food": "VIANDES OU POISSON OU OEUFS",
         "qty": "125 grammes ou 3 oeufs",
         "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
@@ -1445,9 +1905,19 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les produits de saison et biologique."
       },
       {
+        "food": "FRUIT",
+        "qty": "1 unité",
+        "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
         "food": "LEGUMES",
         "qty": "200 grammes",
         "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
+        "food": "FECULENTS",
+        "qty": "Céréales = 150 g crus ou 360g cuits // Patate douce ou Pommes de terre = 600g cuit",
+        "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
       },
       {
         "food": "FECULENTS",
@@ -1487,6 +1957,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
+        "food": "HUILE D'OLIVE",
+        "qty": "10 grammes pour la viande",
+        "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
+      },
+      {
         "food": "LAIT VEGETAL",
         "qty": "150 grammes",
         "tip": "Privilégier le lait d'amande ou d'avoine"
@@ -1512,6 +1987,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les viandes maigres (dinde, poulet) ou les poissons maigres (colin, cabillaud)"
       },
       {
+        "food": "VIANDES OU POISSON",
+        "qty": "125 grammes",
+        "tip": "Privilégier les viandes maigres (dinde, poulet) ou les poissons maigres (colin, cabillaud)"
+      },
+      {
+        "food": "FRUIT",
+        "qty": "1 unité",
+        "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
         "food": "FRUIT",
         "qty": "1 unité",
         "tip": "Privilégier les produits de saison et biologique."
@@ -1525,6 +2010,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "RIZ BASMATI",
         "qty": "Céréales = 70 g crus ou 160g cuits",
         "tip": "Privilégier le riz basmati"
+      },
+      {
+        "food": "CHOCOLAT NOIR",
+        "qty": "10 grammes",
+        "tip": "Privilégier le chocolat 70% de cacao"
       },
       {
         "food": "CHOCOLAT NOIR",
@@ -1567,6 +2057,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les produits de saison et biologique."
       },
       {
+        "food": "FRUIT",
+        "qty": "1 unité",
+        "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
         "food": "LAIT D'AVOINE",
         "qty": "100 grammes",
         "tip": "Possibilité de prendre du lait d'amande"
@@ -1590,6 +2085,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "FLOCON D'AVOINE",
         "qty": "50 grammes",
         "tip": "Privilégier les flocons d'avoine biologique ou prendre de la farine"
+      },
+      {
+        "food": "VIANDES OU POISSON",
+        "qty": "150 grammes",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
       },
       {
         "food": "VIANDES OU POISSON",
@@ -1622,6 +2122,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
       },
       {
+        "food": "FECULENTS",
+        "qty": "Céréales = 150g crus (320g riz ou 450g pâtes cuits) // Patate douce ou Pommes de terre = 600g cuit",
+        "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
+      },
+      {
         "food": "CHOCOLAT NOIR",
         "qty": "10 grammes",
         "tip": "Privilégier le chocolat 70% de cacao"
@@ -1642,6 +2147,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "FRUIT",
         "qty": "1 unité = 150 grammes",
         "tip": "Privilégier les fruits de saison et biologiques."
+      },
+      {
+        "food": "FRUIT",
+        "qty": "1 unité",
+        "tip": "Privilégier les produits de saison et biologique."
       },
       {
         "food": "FRUIT",
@@ -1684,6 +2194,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
       },
       {
+        "food": "VIANDES OU POISSON",
+        "qty": "150 grammes",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
+      },
+      {
         "food": "MIEL",
         "qty": "20 grammes",
         "tip": "Privilégier le miel d'acacia"
@@ -1702,6 +2217,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "PAIN BLANC",
         "qty": "30 grammes",
         "tip": "Privilégier le pain blanc type baguette"
+      },
+      {
+        "food": "FECULENTS",
+        "qty": "Céréales = 150g crus (320g riz ou 450g pâtes cuits) // Patate douce ou Pommes de terre = 600g cuit",
+        "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
       },
       {
         "food": "FECULENTS",
@@ -1761,6 +2281,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Le prendre 30 minutes après le petit déjeuner."
       },
       {
+        "food": "MALTODEXTRINE",
+        "qty": "60 grammes dans 600ml d'eau",
+        "tip": "Le prendre 30 minutes après la collation ou sur un entrainement"
+      },
+      {
         "food": "FROMAGE BLANC",
         "qty": "150 grammes",
         "tip": "Privilégier le fromage blanc 3% de MG"
@@ -1774,6 +2299,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "COMPOTE DE POMME",
         "qty": "150 grammes",
         "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
+        "food": "VIANDES OU POISSON",
+        "qty": "150 grammes",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
       },
       {
         "food": "VIANDES OU POISSON",
@@ -1801,6 +2331,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier le pain blanc type baguette"
       },
       {
+        "food": "PAIN BLANC",
+        "qty": "60 grammes = 2 tranches",
+        "tip": "Privilégier le pain blanc type baguette"
+      },
+      {
+        "food": "FECULENTS",
+        "qty": "Céréales = 150g crus (320g riz ou 450g pâtes cuits) // Patate douce ou Pommes de terre = 600g cuit",
+        "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
+      },
+      {
         "food": "FECULENTS",
         "qty": "Céréales = 150g crus (320g riz ou 450g pâtes cuits) // Patate douce ou Pommes de terre = 600g cuit",
         "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
@@ -1816,6 +2356,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Le prendre 30 minutes après le déjeuner"
       },
       {
+        "food": "MALTODEXTRINE",
+        "qty": "60 grammes dans 600ml d'eau",
+        "tip": "Le prendre 1H avant le coucher"
+      },
+      {
         "food": "FLOCONS D'AVOINE",
         "qty": "50 grammes",
         "tip": "Priviligier les flocons d'avoine biologique sans gluten"
@@ -1826,6 +2371,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "FRUIT",
         "qty": "1 unité = 150 grammes",
         "tip": "Privilégier les fruits de saison et biologiques."
+      },
+      {
+        "food": "HUILE D'OLIVE",
+        "qty": "10 grammes pour la viande",
+        "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
         "food": "HUILE D'OLIVE",
@@ -1858,6 +2408,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les viandes maigres (dinde, poulet) ou les poissons blancs (colin, cabillaud, lieu)"
       },
       {
+        "food": "VIANDES OU POISSON",
+        "qty": "150 grammes",
+        "tip": "Privilégier les viandes maigres (dinde, poulet) ou les poissons blancs (colin, cabillaud, lieu)"
+      },
+      {
         "food": "RIZ BASMATI",
         "qty": "110 grammes crus = 230 grammes cuits",
         "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
@@ -1876,6 +2431,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "FLOCONS D'AVOINE",
         "qty": "60 grammes",
         "tip": "Priviligier les flocons d'avoine biologique sans gluten"
+      },
+      {
+        "food": "COMPOTE DE POMME",
+        "qty": "150 grammes",
+        "tip": "Privilégier de la compote sans sucres ajoutés"
       },
       {
         "food": "COMPOTE DE POMME",
@@ -1903,9 +2463,19 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les produits de saison et biologique."
       },
       {
+        "food": "FRUIT",
+        "qty": "1 unité",
+        "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
         "food": "OLEAGINEUX",
         "qty": "30 grammes",
         "tip": "Choisir entre amandes, noix, noix de cajou, noisettes, noix du brésil..."
+      },
+      {
+        "food": "HUILE D'OLIVE",
+        "qty": "10 grammes pour la viande",
+        "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
         "food": "HUILE D'OLIVE",
@@ -1928,6 +2498,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Le prendre 30 minutes après le petit déjeuner."
       },
       {
+        "food": "MALTODEXTRINE",
+        "qty": "50 grammes dans 600ml d'eau",
+        "tip": "Le prendre 30 minutes après la collation ou sur un entrainement"
+      },
+      {
+        "food": "VIANDES OU POISSON OU OEUFS",
+        "qty": "150 grammes ou 4 oeufs",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
+      },
+      {
         "food": "VIANDES OU POISSON OU OEUFS",
         "qty": "150 grammes ou 4 oeufs",
         "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
@@ -1948,9 +2528,24 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
       },
       {
+        "food": "FECULENTS",
+        "qty": "Céréales = 150g crus (310g riz; 450g pâtes cuites) // Patate douce ou Pommes de terre = 600g cuit",
+        "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
+      },
+      {
         "food": "PAIN COMPLET",
         "qty": "1 tranche = 30 grammes",
         "tip": ""
+      },
+      {
+        "food": "PAIN COMPLET",
+        "qty": "1 tranche = 30 grammes",
+        "tip": ""
+      },
+      {
+        "food": "CHOCOLAT NOIR",
+        "qty": "10 grammes",
+        "tip": "Privilégier le chocolat 70% de cacao"
       },
       {
         "food": "CHOCOLAT NOIR",
@@ -1985,9 +2580,19 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les produits de saison et biologique."
       },
       {
+        "food": "FRUIT",
+        "qty": "1 unité",
+        "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
         "food": "OLEAGINEUX",
         "qty": "30 grammes",
         "tip": "Choisir entre amandes, noix, noix de cajou, noisettes, noix du brésil..."
+      },
+      {
+        "food": "HUILE D'OLIVE",
+        "qty": "10 grammes pour la viande",
+        "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
         "food": "HUILE D'OLIVE",
@@ -2015,6 +2620,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
       },
       {
+        "food": "VIANDES OU POISSON OU OEUFS",
+        "qty": "150 grammes ou 4 oeufs",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
+      },
+      {
         "food": "FRUIT",
         "qty": "1 unité",
         "tip": "Privilégier les produits de saison et biologique."
@@ -2030,9 +2640,24 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
       },
       {
+        "food": "FECULENTS",
+        "qty": "Céréales = 150g crus (310g riz; 450g pâtes cuites) // Patate douce ou Pommes de terre = 600g cuit",
+        "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
+      },
+      {
         "food": "PAIN COMPLET",
         "qty": "1 tranche = 30 grammes",
         "tip": ""
+      },
+      {
+        "food": "PAIN COMPLET",
+        "qty": "1 tranche = 30 grammes",
+        "tip": ""
+      },
+      {
+        "food": "CHOCOLAT NOIR",
+        "qty": "10 grammes",
+        "tip": "Privilégier le chocolat 70% de cacao"
       },
       {
         "food": "CHOCOLAT NOIR",
@@ -2077,9 +2702,19 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les produits de saison et biologique."
       },
       {
+        "food": "FRUIT",
+        "qty": "1 unité",
+        "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
         "food": "OLEAGINEUX",
         "qty": "30 grammes",
         "tip": "Choisir entre amandes, noix, noix de cajou, noisettes, noix du brésil..."
+      },
+      {
+        "food": "HUILE D'OLIVE",
+        "qty": "10 grammes pour la viande",
+        "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
         "food": "HUILE D'OLIVE",
@@ -2107,6 +2742,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
       },
       {
+        "food": "VIANDES OU POISSON OU OEUFS",
+        "qty": "150 grammes ou 4 oeufs",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
+      },
+      {
         "food": "FRUIT",
         "qty": "1 unité",
         "tip": "Privilégier les produits de saison et biologique."
@@ -2122,9 +2762,24 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
       },
       {
+        "food": "FECULENTS",
+        "qty": "Céréales = 150g crus (310g riz; 450g pâtes cuites) // Patate douce ou Pommes de terre = 600g cuit",
+        "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
+      },
+      {
         "food": "PAIN COMPLET",
         "qty": "1 tranche = 30 grammes",
         "tip": ""
+      },
+      {
+        "food": "PAIN COMPLET",
+        "qty": "1 tranche = 30 grammes",
+        "tip": ""
+      },
+      {
+        "food": "CHOCOLAT NOIR",
+        "qty": "10 grammes",
+        "tip": "Privilégier le chocolat 70% de cacao"
       },
       {
         "food": "CHOCOLAT NOIR",
@@ -2164,6 +2819,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les fruits de saison et biologiques."
       },
       {
+        "food": "FRUIT",
+        "qty": "1 unité = 150 grammes",
+        "tip": "Privilégier les fruits de saison et biologiques."
+      },
+      {
         "food": "HUILE D'OLIVE",
         "qty": "10 grammes pour la viande et 10 grammes pour la patate douce",
         "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
@@ -2194,6 +2854,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les viandes maigres (dinde, poulet) ou les poissons blancs (colin, cabillaud, lieu)"
       },
       {
+        "food": "VIANDES OU POISSON",
+        "qty": "150 grammes",
+        "tip": "Privilégier les viandes maigres (dinde, poulet) ou les poissons blancs (colin, cabillaud, lieu)"
+      },
+      {
         "food": "RIZ BASMATI",
         "qty": "70 grammes crus = 150 grammes cuits",
         "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
@@ -2202,6 +2867,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "RIZ BASMATI",
         "qty": "130 grammes crus = 280 grammes cuits",
         "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
+      },
+      {
+        "food": "CHOCOLAT NOIR",
+        "qty": "10 grammes",
+        "tip": "Privilégier le chocolat 70% de cacao"
       },
       {
         "food": "CHOCOLAT NOIR",
@@ -2279,6 +2949,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": ""
       },
       {
+        "food": "VIANDES OU POISSON OU OEUFS",
+        "qty": "",
+        "tip": ""
+      },
+      {
         "food": "FRUIT",
         "qty": "1 unité",
         "tip": "Privilégier les produits de saison et biologique."
@@ -2336,6 +3011,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
+        "food": "HUILE D'OLIVE",
+        "qty": "10grammespourla viande",
+        "tip": ""
+      },
+      {
         "food": "LAIT VEGETAL",
         "qty": "",
         "tip": ""
@@ -2366,6 +3046,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": ""
       },
       {
+        "food": "VIANDES OU POISSON OU OEUFS",
+        "qty": "",
+        "tip": ""
+      },
+      {
         "food": "FECULENTS",
         "qty": "",
         "tip": ""
@@ -2383,6 +3068,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
       {
         "food": "CHOCOLAT NOIR",
         "qty": "",
+        "tip": ""
+      },
+      {
+        "food": "MALTODEXTRINE",
+        "qty": "60grammesdans400mld'eau",
         "tip": ""
       },
       {
@@ -2438,6 +3128,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": ""
       },
       {
+        "food": "CHOCOLAT NOIR",
+        "qty": "",
+        "tip": ""
+      },
+      {
         "food": "MALTODEXTRINE",
         "qty": "60 grammes dans 400 ml d'eau",
         "tip": ""
@@ -2449,6 +3144,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
       },
       {
         "food": "HYDRATATION A BASE D'EAU",
+        "qty": "",
+        "tip": ""
+      },
+      {
+        "food": "VIANDES OU POISSON OU OEUFS",
         "qty": "",
         "tip": ""
       },
@@ -2475,6 +3175,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
       {
         "food": "CHOCOLAT NOIR",
         "qty": "",
+        "tip": ""
+      },
+      {
+        "food": "MALTODEXTRINE",
+        "qty": "60 grammes dans 400mld'eau",
         "tip": ""
       },
       {
@@ -2570,6 +3275,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": ""
       },
       {
+        "food": "RIZ BASMATI",
+        "qty": "",
+        "tip": ""
+      },
+      {
         "food": "LAIT VEGETAL",
         "qty": "200ml",
         "tip": "Privilégier le lait d'amande ou d'avoine"
@@ -2605,6 +3315,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les fruits de saison et biologiques."
       },
       {
+        "food": "FRUIT",
+        "qty": "1 unité = 150 grammes",
+        "tip": "Privilégier les fruits de saison et biologiques."
+      },
+      {
         "food": "FROMAGE",
         "qty": "30 grammes",
         "tip": ""
@@ -2613,6 +3328,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "PAIN BLANC",
         "qty": "90 grammes = 3 tranches",
         "tip": "Privilégier le pain blanc type baguette"
+      },
+      {
+        "food": "HUILE D'OLIVE",
+        "qty": "10 grammes pour la viande et 10 grammes pour les légumes",
+        "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
         "food": "HUILE D'OLIVE",
@@ -2633,6 +3353,16 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "COMPOTE DE POMME",
         "qty": "150 grammes",
         "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
+        "food": "COMPOTE DE POMME",
+        "qty": "150 grammes",
+        "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
+        "food": "VIANDES OU POISSON",
+        "qty": "200 grammes",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
       },
       {
         "food": "VIANDES OU POISSON",
@@ -2687,6 +3417,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les fruits de saison et biologiques."
       },
       {
+        "food": "FRUIT",
+        "qty": "1 unité = 150 grammes",
+        "tip": "Privilégier les fruits de saison et biologiques."
+      },
+      {
         "food": "FROMAGE",
         "qty": "30 grammes",
         "tip": ""
@@ -2695,6 +3430,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "PAIN BLANC",
         "qty": "90 grammes = 3 tranches",
         "tip": "Privilégier le pain blanc type baguette"
+      },
+      {
+        "food": "HUILE D'OLIVE",
+        "qty": "10 grammes pour la viande et 10 grammes pour les légumes",
+        "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
         "food": "HUILE D'OLIVE",
@@ -2712,9 +3452,24 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Le prendre 30 minutes après le déjeuner."
       },
       {
+        "food": "MALTODEXTRINE",
+        "qty": "60 grammes dans 600ml d'eau",
+        "tip": "Le prendre 30 minutes après la collation ou sur un entrainement"
+      },
+      {
         "food": "COMPOTE DE POMME",
         "qty": "150 grammes",
         "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
+        "food": "COMPOTE DE POMME",
+        "qty": "150 grammes",
+        "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
+        "food": "VIANDES OU POISSON",
+        "qty": "200 grammes",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
       },
       {
         "food": "VIANDES OU POISSON",
@@ -2735,6 +3490,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "PAIN BLANC",
         "qty": "60 grammes = 2 tranches",
         "tip": "Privilégier le pain blanc type baguette"
+      },
+      {
+        "food": "FECULENTS",
+        "qty": "Céréales = 120g crus (360g riz;300g pâtes cuits) // Patate douce ou Pommes de terre = 480g cuit",
+        "tip": "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."
       },
       {
         "food": "FECULENTS",
@@ -2774,6 +3534,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Privilégier les fruits de saison et biologiques."
       },
       {
+        "food": "FRUIT",
+        "qty": "1 unité = 150 grammes",
+        "tip": "Privilégier les fruits de saison et biologiques."
+      },
+      {
         "food": "FROMAGE",
         "qty": "30 grammes",
         "tip": ""
@@ -2782,6 +3547,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "PAIN BLANC",
         "qty": "120 grammes = 4 tranches",
         "tip": "Privilégier le pain blanc type baguette"
+      },
+      {
+        "food": "HUILE D'OLIVE",
+        "qty": "10 grammes pour la viande",
+        "tip": "Privilégier l'huile d'olive biologique et pressée à froid"
       },
       {
         "food": "HUILE D'OLIVE",
@@ -2799,9 +3569,19 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Le prendre 30 minutes après le petit déjeuner."
       },
       {
+        "food": "MALTODEXTRINE",
+        "qty": "60 grammes dans 600ml d'eau",
+        "tip": "Le prendre 30 minutes après la collation ou sur un entrainement"
+      },
+      {
         "food": "COMPOTE DE POMME",
         "qty": "150 grammes",
         "tip": "Privilégier les produits de saison et biologique."
+      },
+      {
+        "food": "VIANDES OU POISSON",
+        "qty": "200 grammes",
+        "tip": "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"
       },
       {
         "food": "VIANDES OU POISSON",
@@ -2844,6 +3624,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "tip": "Le prendre 30 minutes après le déjeuner"
       },
       {
+        "food": "MALTODEXTRINE",
+        "qty": "60 grammes dans 600ml d'eau",
+        "tip": "Le prendre 1H avant le coucher"
+      },
+      {
         "food": "FLOCONS D'AVOINE",
         "qty": "90 grammes",
         "tip": "Priviligier les flocons d'avoine biologique sans gluten"
@@ -2855,6 +3640,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
       }
     ],
     "J-1": [
+      {
+        "food": "FRUIT",
+        "qty": "1 unité = 150 grammes",
+        "tip": "Privilégier les fruits de saison et biologiques."
+      },
       {
         "food": "FRUIT",
         "qty": "1 unité = 150 grammes",
@@ -2879,6 +3669,11 @@ export const PRERACE_PLANS: PreracePlansByWeight = {
         "food": "COMPOTE DE POMME",
         "qty": "100 grammes",
         "tip": "Privilégier de la compote sans sucres ajoutés"
+      },
+      {
+        "food": "VIANDES OU POISSON",
+        "qty": "200 grammes",
+        "tip": "Privilégier les viandes maigres (dinde, poulet) ou les poissons blancs (colin, cabillaud, lieu)"
       },
       {
         "food": "VIANDES OU POISSON",
@@ -2931,7 +3726,8 @@ export type PreraceBreakfast = {
   items: PreraceFood[];
 };
 
-// 3 race-morning breakfast options (J-J). Quantities scale with weight bucket.
+// 3 race-morning breakfast templates (J-J). Quantities scale with weight bucket.
+// These are coach templates — the source PDF J-J pages are image-only and could not be parsed.
 export function preraceBreakfastOptionsFor(weight: number): PreraceBreakfast[] {
   const bucket = closestWeightBucket(weight);
   const flocons = Math.round(bucket * 1.4);
@@ -2941,14 +3737,14 @@ export function preraceBreakfastOptionsFor(weight: number): PreraceBreakfast[] {
 
   return [
     {
-      nom: "Option 1 - Porridge salé/sucré",
-      description: "Préparation digeste, riche en glucides à index modéré",
+      nom: "Option 1 - Porridge classique",
+      description: "Préparation digeste, glucides à index modéré",
       items: [
-        { food: "Flocons d'avoine", qty: flocons + " g", tip: "Cuits dans lait végétal (avoine ou amande)" },
+        { food: "Flocons d'avoine", qty: flocons + " g", tip: "Cuits dans lait végétal" },
         { food: "Lait végétal", qty: "200 ml", tip: "Avoine ou amande, sans sucre ajouté" },
         { food: "Miel d'acacia", qty: "20 g", tip: "Pour sucrer" },
         { food: "Compote de pomme", qty: compote + " g", tip: "Sans sucre ajouté" },
-        { food: "Pain blanc grillé", qty: pain + " tranche(s)", tip: "+ miel / confiture" },
+        { food: "Pain blanc grillé", qty: pain + " tranche(s)", tip: "+ miel ou confiture" },
       ],
     },
     {

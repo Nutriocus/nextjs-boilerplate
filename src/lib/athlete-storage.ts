@@ -93,14 +93,21 @@ export async function saveData<T>(
 /**
  * React hook: synced state backed by Supabase JSONB blob.
  * Loads initial value, persists on every change (debounced).
+ *
+ * Automatically detects ?athleteId=... in URL (for coach-view-athlete flow).
  */
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 export function useAthleteData<T>(
   key: string,
   defaultValue: T,
-  athleteId?: string,
+  explicitAthleteId?: string,
 ): [T, (v: T | ((prev: T) => T)) => void, boolean] {
+  const searchParams = useSearchParams();
+  const urlAthleteId = searchParams?.get("athleteId") || undefined;
+  const athleteId = explicitAthleteId || urlAthleteId;
+
   const [value, setValue] = useState<T>(defaultValue);
   const [loaded, setLoaded] = useState(false);
   const skipNextSave = useRef(true);
@@ -109,10 +116,10 @@ export function useAthleteData<T>(
   useEffect(() => {
     let mounted = true;
     (async () => {
-      const loaded = await loadData<T>(key, defaultValue, athleteId);
+      const next = await loadData<T>(key, defaultValue, athleteId);
       if (mounted) {
         skipNextSave.current = true;
-        setValue(loaded);
+        setValue(next);
         setLoaded(true);
       }
     })();

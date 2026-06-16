@@ -1,5 +1,7 @@
 import { AthleteSidebar } from "@/components/athlete/AthleteSidebar";
 
+export const dynamic = "force-dynamic";
+
 export default function AthleteLayout({
   children,
 }: {

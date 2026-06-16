@@ -1,98 +1,111 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { Topbar } from "@/components/layout/Topbar";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, AlertTriangle, UserPlus } from "lucide-react";
-import { SPORT_LABELS, LEVEL_LABELS } from "@/lib/utils";
+import { supabase } from "@/lib/supabase";
+import { PageHeader, Empty } from "@/components/ui/PageHeader";
 
-const mockAthletes = [
-  { id: "athlete-1", first_name: "Thomas", last_name: "Dupont", email: "thomas@example.com", sport: ["trail", "running"], level: "amateur_confirme", weight_kg: 68.4, vo2max: 62, avg_energy_7d: 6.8, status: "active" },
-  { id: "athlete-2", first_name: "Marie", last_name: "Lambert", email: "marie@example.com", sport: ["triathlon"], level: "semi_elite", weight_kg: 59.2, vo2max: 56, avg_energy_7d: 4.2, status: "active" },
-  { id: "athlete-3", first_name: "Lucas", last_name: "Bernard", email: "lucas@example.com", sport: ["cyclisme"], level: "amateur_confirme", weight_kg: 72.1, vo2max: 68, avg_energy_7d: 7.6, status: "active" },
-];
+type Athlete = {
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  sport: string[] | null;
+  level: string | null;
+  height_cm: number | null;
+  status: string | null;
+};
 
 export default function CoachAthletesPage() {
+  const [athletes, setAthletes] = useState<Athlete[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+      const { data: coach } = await supabase
+        .from("coaches")
+        .select("id")
+        .eq("user_id", user.id)
+        .single();
+      if (!coach) {
+        setLoading(false);
+        return;
+      }
+      const { data } = await supabase
+        .from("athletes")
+        .select("id, first_name, last_name, email, sport, level, height_cm, status")
+        .eq("coach_id", coach.id)
+        .order("first_name");
+      setAthletes((data as Athlete[]) || []);
+      setLoading(false);
+    })();
+  }, []);
+
   return (
     <div>
-      <Topbar
+      <PageHeader
+        kicker="Espace coach"
         title="Mes athlètes"
-        subtitle={`${mockAthletes.length} athlètes`}
-        actions={
-          <button className="btn-primary">
-            <UserPlus className="w-4 h-4" />
-            Ajouter un athlète
-          </button>
-        }
+        desc={`${athletes.length} athlète${athletes.length > 1 ? "s" : ""} actif${athletes.length > 1 ? "s" : ""}`}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {mockAthletes.map((athlete, i) => (
-          <motion.div
-            key={athlete.id}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.07 }}
-          >
-            <Link href={`/coach/athletes/${athlete.id}`}>
-              <div className="card hover:border-[var(--color-primary)]/30 cursor-pointer transition-all group">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="w-12 h-12 rounded-full bg-[var(--color-primary)]/20 flex items-center justify-center font-bold text-lg text-[var(--color-primary)]">
-                    {athlete.first_name[0]}{athlete.last_name[0]}
+      {loading ? (
+        <div className="card p-10 text-center text-[var(--color-text-muted)]">Chargement…</div>
+      ) : athletes.length === 0 ? (
+        <Empty>
+          Aucun athlète. Crée-en un dans Supabase ou via le formulaire d&apos;ajout (à venir).
+        </Empty>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {athletes.map((a) => (
+            <Link key={a.id} href={`/coach/athletes/${a.id}`}>
+              <div
+                className="card p-5 cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md group"
+                style={{ borderTop: `3px solid var(--color-primary)` }}
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <div
+                    className="w-12 h-12 rounded-full flex items-center justify-center font-extrabold text-white"
+                    style={{ background: "var(--color-primary)", fontFamily: "var(--font-display)" }}
+                  >
+                    {a.first_name[0]}
+                    {a.last_name[0]}
                   </div>
-                  {athlete.avg_energy_7d < 6 && (
-                    <AlertTriangle className="w-4 h-4 text-amber-400" />
-                  )}
-                </div>
-
-                <h3 className="font-bold font-display mb-1">
-                  {athlete.first_name} {athlete.last_name}
-                </h3>
-                <p className="text-xs text-[var(--color-text-muted)] mb-3">
-                  {athlete.email}
-                </p>
-
-                <div className="flex flex-wrap gap-1.5 mb-3">
-                  {athlete.sport.map((s) => (
-                    <span key={s} className="badge bg-[var(--color-primary)]/10 text-[var(--color-primary)] text-[10px]">
-                      {SPORT_LABELS[s]}
-                    </span>
-                  ))}
-                  <span className="badge bg-[var(--color-surface-2)] text-[var(--color-text-muted)] text-[10px]">
-                    {LEVEL_LABELS[athlete.level]}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 mb-4 text-center">
-                  <div>
-                    <div className="text-sm font-bold text-[var(--color-primary)]">{athlete.weight_kg}</div>
-                    <div className="text-[10px] text-[var(--color-text-muted)]">kg</div>
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold text-purple-400">{athlete.vo2max}</div>
-                    <div className="text-[10px] text-[var(--color-text-muted)]">VO₂max</div>
-                  </div>
-                  <div>
-                    <div className={`text-sm font-bold ${athlete.avg_energy_7d >= 7 ? "text-green-400" : athlete.avg_energy_7d >= 5 ? "text-amber-400" : "text-red-400"}`}>
-                      {athlete.avg_energy_7d.toFixed(1)}
-                    </div>
-                    <div className="text-[10px] text-[var(--color-text-muted)]">énergie</div>
+                  <div className="flex-1 min-w-0">
+                    <h3
+                      className="font-extrabold uppercase truncate"
+                      style={{ fontFamily: "var(--font-display)", fontSize: 15, letterSpacing: "-0.01em" }}
+                    >
+                      {a.first_name} {a.last_name}
+                    </h3>
+                    <div className="text-xs text-[var(--color-text-muted)] truncate">{a.email}</div>
                   </div>
                 </div>
+
+                {a.sport && a.sport.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {a.sport.map((s) => (
+                      <span key={s} className="badge badge-orange">{s}</span>
+                    ))}
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between text-xs">
-                  <span className={`badge ${athlete.status === "active" ? "bg-green-500/20 text-green-400" : "bg-slate-500/20 text-slate-400"}`}>
-                    {athlete.status === "active" ? "Actif" : "Inactif"}
-                  </span>
-                  <span className="text-[var(--color-primary)] flex items-center gap-1 group-hover:gap-2 transition-all">
-                    Voir profil <ChevronRight className="w-3 h-3" />
-                  </span>
+                  <span className="badge badge-green">{a.status || "active"}</span>
+                  <span className="text-[var(--color-primary)] font-bold">Voir →</span>
                 </div>
               </div>
             </Link>
-          </motion.div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

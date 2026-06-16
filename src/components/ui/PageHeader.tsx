@@ -19,10 +19,9 @@ export function PageHeader({
         <div>
           <div className="kicker">{kicker}</div>
           <h1
-            className="font-extrabold uppercase mt-1"
+            className="font-extrabold uppercase mt-1 text-2xl sm:text-3xl lg:text-[34px]"
             style={{
               fontFamily: "var(--font-display)",
-              fontSize: "34px",
               letterSpacing: "-0.02em",
               lineHeight: 1.05,
             }}

@@ -204,7 +204,7 @@ export default function RaceAnalysisPage() {
           <div className="kicker mb-2.5">Évaluation par domaine</div>
           <div className="flex flex-col gap-2">
             {DOMAINS.map((d) => (
-              <div key={d.k} className="grid grid-cols-[170px_auto_1fr] gap-2.5 items-center">
+              <div key={d.k} className="grid grid-cols-1 md:grid-cols-[170px_auto_1fr] gap-2.5 items-center">
                 <span className="font-bold text-sm">{d.l}</span>
                 <NoteSwitcher value={editing.domaines[d.k]?.note || ""} onChange={(v) => updateDom(d.k, "note", v)} />
                 <input

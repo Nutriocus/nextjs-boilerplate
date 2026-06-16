@@ -289,7 +289,7 @@ export default function SeasonPage() {
 
         <div className="card p-4">
           <div className="font-extrabold mb-3">Phases (semaines)</div>
-          <div className="grid grid-cols-[1fr_70px_70px_auto] gap-2 items-end">
+          <div className="grid grid-cols-2 sm:grid-cols-[1fr_70px_70px_auto] gap-2 items-end">
             <Field label="Phase">
               <select className="input" value={phaseDraft.label} onChange={(e) => setPhaseDraft({ ...phaseDraft, label: e.target.value as Phase["label"] })}>
                 <option>Intersaison</option><option>Préparation</option><option>Compétition</option><option>Récupération</option>

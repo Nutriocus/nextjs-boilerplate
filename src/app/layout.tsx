@@ -1,10 +1,17 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "@/styles/globals.css";
 
 export const metadata: Metadata = {
-  title: "NUTRIOCUS — Coaching Nutritionnel",
+  title: "NUTRIOCUS — Ultra Performance",
   description: "Plateforme de coaching nutritionnel pour athlètes d'endurance",
   keywords: ["nutrition", "trail", "triathlon", "endurance", "coaching"],
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: "#0a0a0a",
 };
 
 export default function RootLayout({
@@ -13,15 +20,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="fr" className="dark">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-      </head>
+    <html lang="fr">
       <body className="antialiased">{children}</body>
     </html>
   );

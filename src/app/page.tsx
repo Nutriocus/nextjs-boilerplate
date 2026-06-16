@@ -24,10 +24,9 @@ export default function HomePage() {
           </span>
         </div>
         <h1
-          className="font-extrabold uppercase mt-3"
+          className="font-extrabold uppercase mt-3 text-3xl sm:text-4xl md:text-[44px]"
           style={{
             fontFamily: "var(--font-display)",
-            fontSize: "44px",
             letterSpacing: "-0.025em",
             lineHeight: 1.04,
           }}

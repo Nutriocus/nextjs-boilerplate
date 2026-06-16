@@ -261,7 +261,7 @@ function PlanEditor({ plan, onSave, onCancel }: { plan: MealPlan; onSave: (p: Me
             <button onClick={() => removeSection(sIdx)} className="btn-ghost btn-sm" style={{ color: "var(--color-danger)" }}>Suppr.</button>
           </div>
           {sec.items.map((it, iIdx) => (
-            <div key={iIdx} className="grid grid-cols-[1fr_1.2fr_1.4fr_auto] gap-1.5 mb-1.5">
+            <div key={iIdx} className="grid grid-cols-1 md:grid-cols-[1fr_1.2fr_1.4fr_auto] gap-1.5 mb-1.5">
               <input className="input" placeholder="Aliment" value={it.name} onChange={(e) => updateItem(sIdx, iIdx, "name", e.target.value)} />
               <input className="input" placeholder="Quantité" value={it.qty} onChange={(e) => updateItem(sIdx, iIdx, "qty", e.target.value)} />
               <input className="input" placeholder="Conseil" value={it.tip} onChange={(e) => updateItem(sIdx, iIdx, "tip", e.target.value)} />

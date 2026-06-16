@@ -1,21 +1,19 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { MobileTopbar } from "@/components/layout/MobileTopbar";
 
 const NAV = [
   {
     grp: "",
-    items: [
-      { href: "/coach", label: "Tableau de bord", ic: "◧" },
-    ],
+    items: [{ href: "/coach", label: "Tableau de bord", ic: "◧" }],
   },
   {
     grp: "Mes athlètes",
-    items: [
-      { href: "/coach/athletes", label: "Liste des athlètes", ic: "●" },
-    ],
+    items: [{ href: "/coach/athletes", label: "Liste des athlètes", ic: "●" }],
   },
 ];
 
@@ -26,6 +24,7 @@ export default function CoachLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const [open, setOpen] = useState(false);
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -34,9 +33,13 @@ export default function CoachLayout({
 
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
-      {/* Sidebar */}
-      <aside className="sidebar">
-        {/* Brand */}
+      <MobileTopbar
+        isOpen={open}
+        onToggle={() => setOpen((o) => !o)}
+        subtitle="Coach"
+      />
+
+      <aside className={`sidebar ${open ? "is-open" : ""}`}>
         <div className="px-2">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white text-[var(--color-dark)]">
             <span
@@ -60,7 +63,6 @@ export default function CoachLayout({
           </div>
         </div>
 
-        {/* Nav */}
         <div className="flex-1">
           {NAV.map((section, i) => (
             <div key={i} style={{ marginBottom: 14 }}>
@@ -72,10 +74,12 @@ export default function CoachLayout({
                   pathname === item.href ||
                   (item.href !== "/coach" && pathname.startsWith(item.href));
                 return (
-                  <Link key={item.href} href={item.href}>
-                    <div
-                      className={`sidebar-link ${active ? "active" : ""}`}
-                    >
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                  >
+                    <div className={`sidebar-link ${active ? "active" : ""}`}>
                       <span style={{ width: 16, textAlign: "center", opacity: 0.9 }}>
                         {item.ic}
                       </span>
@@ -88,7 +92,6 @@ export default function CoachLayout({
           ))}
         </div>
 
-        {/* Footer */}
         <div className="mt-auto pt-4">
           <button
             onClick={handleLogout}
@@ -112,8 +115,13 @@ export default function CoachLayout({
         </div>
       </aside>
 
+      <div
+        className={`sidebar-backdrop ${open ? "is-open" : ""}`}
+        onClick={() => setOpen(false)}
+      />
+
       <main className="lg:pl-[262px]">
-        <div className="max-w-7xl mx-auto p-5 lg:p-8">{children}</div>
+        <div className="main-content max-w-7xl mx-auto p-4 lg:p-8">{children}</div>
       </main>
     </div>
   );

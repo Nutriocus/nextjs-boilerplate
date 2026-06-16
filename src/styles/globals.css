@@ -101,10 +101,52 @@
 
   /* ============ SIDEBAR ============ */
   .sidebar {
-    @apply fixed left-0 top-0 h-screen w-[262px] z-40 flex flex-col overflow-y-auto;
+    @apply fixed left-0 top-0 h-screen w-[262px] z-50 flex flex-col overflow-y-auto;
     background-color: var(--color-dark);
     color: #fff;
     padding: 22px 14px;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease-out;
+  }
+  .sidebar.is-open {
+    transform: translateX(0);
+  }
+  @media (min-width: 1024px) {
+    .sidebar {
+      transform: translateX(0);
+    }
+  }
+
+  /* Mobile topbar with hamburger */
+  .mobile-topbar {
+    @apply fixed top-0 left-0 right-0 z-40 flex items-center justify-between px-4 py-3 lg:hidden;
+    background-color: var(--color-dark);
+    color: #fff;
+    height: 54px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Sidebar backdrop on mobile */
+  .sidebar-backdrop {
+    @apply fixed inset-0 z-40 lg:hidden;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease-out;
+  }
+  .sidebar-backdrop.is-open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* Mobile main spacing */
+  .main-content {
+    padding-top: 54px;
+  }
+  @media (min-width: 1024px) {
+    .main-content {
+      padding-top: 0;
+    }
   }
 
   .sidebar-group-label {

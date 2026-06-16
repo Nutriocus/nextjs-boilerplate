@@ -64,7 +64,7 @@ export default function RecoveryPage() {
           </Field>
           <div className="mt-4 flex flex-col gap-2">
             {editing.steps.map((s, i) => (
-              <div key={i} className="grid grid-cols-[140px_1fr_auto] gap-2">
+              <div key={i} className="grid grid-cols-1 md:grid-cols-[140px_1fr_auto] gap-2">
                 <input
                   className="input"
                   placeholder="Timing"

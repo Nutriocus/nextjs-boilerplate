@@ -160,7 +160,37 @@ export const PRERACE_PLANS: Record<number, PreraceWeightPlan> = {
       },
     },
     raceDay: [
-      // Jour de course en attente — le coach transmet les 3 possibilités au prochain message.
+      {
+        label: "Possibilité 1 — Version salée",
+        description: "Repas classique poulet/dinde + riz blanc, à privilégier si la digestion est solide.",
+        items: [
+          f("FILET DE POULET OU ESCALOPE DE DINDE", "150 grammes", "Viande maigre, à privilégier"),
+          f("RIZ BASMATI", "110 grammes crus (= 2 g/kg de poids de corps)", "Soit ~230 g cuits pour 55 kg"),
+        ],
+      },
+      {
+        label: "Possibilité 2 — Version sucrée (cake d'avoine)",
+        description: "Cake d'avoine maison — mélange les ingrédients et cuis 30 min au four à 180 °C.",
+        items: [
+          f("FARINE D'AVOINE", "150 grammes", "Flocons d'avoine mixés"),
+          f("OEUFS", "2 unités", "Privilégier oeufs biologiques"),
+          f("PROTÉINE EN POUDRE", "20 grammes", "Whey isolate ou native"),
+          f("LAIT VÉGÉTAL", "150 ml", "Avoine ou amande"),
+          f("BANANE", "1 unité", "Bien mûre pour digestibilité"),
+          f("CHOCOLAT NOIR 70%", "10 grammes", ""),
+          f("LEVURE", "1 sachet", "Levure chimique"),
+        ],
+      },
+      {
+        label: "Possibilité 3 — Version shaker",
+        description: "Format liquide à siroter — idéal si départ très matinal ou stress digestif.",
+        items: [
+          f("PROTÉINE WHEY ISOLAT", "40 grammes", ""),
+          f("POUDRE D'AVOINE", "140 grammes", "Flocons d'avoine mixés"),
+          f("BANANE", "1 unité", "Bien mûre"),
+          f("LAIT D'AMANDE", "180 grammes", ""),
+        ],
+      },
     ],
   },
 

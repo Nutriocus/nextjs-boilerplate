@@ -2,6 +2,7 @@
 
 import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader, Field, Kpi } from "@/components/ui/PageHeader";
+import { IntroQuestionnaire } from "@/components/athlete/IntroQuestionnaire";
 import { useState, useEffect } from "react";
 
 type Profile = {
@@ -102,6 +103,7 @@ export default function ProfilePage() {
   const [profile, setProfile, loaded] = useAthleteData<Profile>("profile", DEFAULT);
   const [local, setLocal] = useState<Profile>(DEFAULT);
   const [saved, setSaved] = useState(false);
+  const [tab, setTab] = useState<"tech" | "intro">("tech");
 
   useEffect(() => {
     if (loaded) setLocal(profile);
@@ -156,9 +158,28 @@ export default function ProfilePage() {
       <PageHeader
         kicker="Profil athlète"
         title="Mon profil"
-        desc="Ces variables alimentent tous les calculs : métabolisme de base, profil physiologique, dépenses en course, score de disponibilité énergétique."
+        desc="Tes données techniques pour tous les calculs, et le questionnaire d'introduction à remplir avant la première consultation."
       />
 
+      <div className="flex gap-1.5 mb-4 flex-wrap">
+        <button
+          onClick={() => setTab("tech")}
+          className={tab === "tech" ? "btn-primary btn-sm" : "btn-ghost btn-sm"}
+        >
+          ⚙ Profil technique
+        </button>
+        <button
+          onClick={() => setTab("intro")}
+          className={tab === "intro" ? "btn-primary btn-sm" : "btn-ghost btn-sm"}
+        >
+          ✴ Questionnaire d&apos;introduction
+        </button>
+      </div>
+
+      {tab === "intro" && <IntroQuestionnaire />}
+
+      {tab === "tech" && (
+      <>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
         <div className="card p-5">
           <div className="font-extrabold mb-3">Données générales</div>
@@ -276,6 +297,8 @@ export default function ProfilePage() {
         {saved && <span className="text-[var(--color-success)] text-sm font-semibold">✓ Enregistré</span>}
         <button onClick={onSave} className="btn-primary">Enregistrer le profil</button>
       </div>
+      </>
+      )}
     </div>
   );
 }

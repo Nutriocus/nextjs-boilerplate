@@ -1,50 +1,118 @@
+"use client";
+
 import Link from "next/link";
-import { Zap, Users, LayoutDashboard, LogOut } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
+
+const NAV = [
+  {
+    grp: "",
+    items: [
+      { href: "/coach", label: "Tableau de bord", ic: "◧" },
+    ],
+  },
+  {
+    grp: "Mes athlètes",
+    items: [
+      { href: "/coach/athletes", label: "Liste des athlètes", ic: "●" },
+    ],
+  },
+];
 
 export default function CoachLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+  const router = useRouter();
+
+  async function handleLogout() {
+    await supabase.auth.signOut();
+    router.push("/");
+  }
+
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
-      {/* Sidebar coach */}
+      {/* Sidebar */}
       <aside className="sidebar">
-        <div className="flex items-center gap-2.5 px-4 py-4 border-b border-[var(--color-border)]">
-          <div className="w-8 h-8 rounded-lg bg-[var(--color-primary)] flex items-center justify-center shrink-0">
-            <Zap className="w-4 h-4 text-white" />
+        {/* Brand */}
+        <div className="px-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white text-[var(--color-dark)]">
+            <span
+              className="font-extrabold tracking-tight text-xs"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              NUTRIOCUS
+              <span className="text-[var(--color-primary)]">.</span>
+            </span>
           </div>
-          <div>
-            <span className="font-bold font-display text-sm tracking-tight">NUTRIOCUS</span>
-            <div className="text-[10px] text-[var(--color-primary)]">Espace Coach</div>
+          <div
+            style={{
+              fontSize: 10,
+              color: "#6a6a68",
+              letterSpacing: ".16em",
+              textTransform: "uppercase",
+              margin: "10px 0 20px 2px",
+            }}
+          >
+            Ultra Performance · Coach
           </div>
         </div>
 
-        <nav className="flex-1 py-3 px-2 space-y-0.5">
-          {[
-            { href: "/coach", icon: LayoutDashboard, label: "Dashboard" },
-            { href: "/coach/athletes", icon: Users, label: "Mes athlètes" },
-          ].map(({ href, icon: Icon, label }) => (
-            <Link key={href} href={href}>
-              <div className="sidebar-link">
-                <Icon className="w-4 h-4 shrink-0" />
-                <span className="text-[13px]">{label}</span>
-              </div>
-            </Link>
-          ))}
-        </nav>
-
-        <div className="p-3 border-t border-[var(--color-border)]">
-          <Link href="/">
-            <div className="sidebar-link w-full text-red-400/70 hover:text-red-400 hover:bg-red-500/10">
-              <LogOut className="w-4 h-4 shrink-0" />
-              <span className="text-[13px]">Déconnexion</span>
+        {/* Nav */}
+        <div className="flex-1">
+          {NAV.map((section, i) => (
+            <div key={i} style={{ marginBottom: 14 }}>
+              {section.grp && (
+                <div className="sidebar-group-label">{section.grp}</div>
+              )}
+              {section.items.map((item) => {
+                const active =
+                  pathname === item.href ||
+                  (item.href !== "/coach" && pathname.startsWith(item.href));
+                return (
+                  <Link key={item.href} href={item.href}>
+                    <div
+                      className={`sidebar-link ${active ? "active" : ""}`}
+                    >
+                      <span style={{ width: 16, textAlign: "center", opacity: 0.9 }}>
+                        {item.ic}
+                      </span>
+                      {item.label}
+                    </div>
+                  </Link>
+                );
+              })}
             </div>
-          </Link>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="mt-auto pt-4">
+          <button
+            onClick={handleLogout}
+            className="sidebar-link w-full"
+            style={{ color: "#cf2e2e" }}
+          >
+            <span style={{ width: 16, textAlign: "center" }}>⎋</span>
+            Déconnexion
+          </button>
+          <div
+            style={{
+              fontSize: 10,
+              color: "#4a4a48",
+              marginTop: 14,
+              padding: "0 8px",
+              lineHeight: 1.5,
+            }}
+          >
+            v2 · Ultra Performance
+          </div>
         </div>
       </aside>
 
-      <main className="lg:pl-[212px]">
+      <main className="lg:pl-[262px]">
         <div className="max-w-7xl mx-auto p-5 lg:p-8">{children}</div>
       </main>
     </div>

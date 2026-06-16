@@ -2,13 +2,13 @@
 
 import { PageHeader, Empty } from "@/components/ui/PageHeader";
 
-export default function products_page() {
+export default function energy_expenditure_page() {
   return (
     <div>
       <PageHeader
-        kicker="Nutrition à l'effort"
-        title="Produits de l'effort"
-        desc="Catalogue de 94 produits + favoris."
+        kicker="Anticiper tes courses"
+        title="Dépenses énergétiques en course"
+        desc="Dépense totale, substrats et déplétion du glycogène."
       />
       <div className="card p-10 text-center">
         <div className="text-[var(--color-text-muted)] text-sm">

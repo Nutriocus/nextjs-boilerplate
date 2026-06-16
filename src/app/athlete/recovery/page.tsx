@@ -2,13 +2,13 @@
 
 import { PageHeader, Empty } from "@/components/ui/PageHeader";
 
-export default function products_page() {
+export default function recovery_page() {
   return (
     <div>
       <PageHeader
         kicker="Nutrition à l'effort"
-        title="Produits de l'effort"
-        desc="Catalogue de 94 produits + favoris."
+        title="Protocole de récupération"
+        desc="Tes protocoles post-séance."
       />
       <div className="card p-10 text-center">
         <div className="text-[var(--color-text-muted)] text-sm">

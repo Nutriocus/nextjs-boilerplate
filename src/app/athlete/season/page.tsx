@@ -2,13 +2,13 @@
 
 import { PageHeader, Empty } from "@/components/ui/PageHeader";
 
-export default function products_page() {
+export default function season_page() {
   return (
     <div>
       <PageHeader
-        kicker="Nutrition à l'effort"
-        title="Produits de l'effort"
-        desc="Catalogue de 94 produits + favoris."
+        kicker="Structurer ton quotidien"
+        title="Planification de la saison"
+        desc="Frise chronologique, phases et objectifs."
       />
       <div className="card p-10 text-center">
         <div className="text-[var(--color-text-muted)] text-sm">

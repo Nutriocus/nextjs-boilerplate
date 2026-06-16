@@ -1,321 +1,308 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { Topbar } from "@/components/layout/Topbar";
-import {
-  Scale,
-  Zap,
-  Target,
-  TrendingUp,
-  BookHeart,
-  GraduationCap,
-  ChevronRight,
-  Flame,
-  Calendar,
-  Activity,
-} from "lucide-react";
 import Link from "next/link";
-import {
-  mockAthlete,
-  mockBodyMeasurements,
-  mockEnergyLog,
-  mockIREMeasurements,
-  mockRaces,
-  mockFormationModules,
-  mockFormationProgress,
-} from "@/lib/mock-data";
-import { daysUntil, formatDate, getEnergyBg, getEnergyColor, PHASE_LABELS, SPORT_LABELS } from "@/lib/utils";
-import {
-  LineChart,
-  Line,
-  ResponsiveContainer,
-  Tooltip,
-} from "recharts";
-import { format } from "date-fns";
-import { fr } from "date-fns/locale";
+import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import { PageHeader, Kpi } from "@/components/ui/PageHeader";
+import { ATHLETE_NAV } from "@/components/athlete/AthleteSidebar";
+import { useAthleteData } from "@/lib/athlete-storage";
 
-const fadeUp = {
-  initial: { opacity: 0, y: 16 },
-  animate: { opacity: 1, y: 0 },
+const DEFAULT_PROFILE = {
+  sexe: "Homme",
+  discipline: "Trail",
+  poids: 71,
+  fcmax: 190,
+  vo2max: 62,
+  poidsObjectif: 69,
+  tolGlucCAP: 120,
+  masseMaigre: 62,
+  reservesGlucides: 850,
+  photo: "",
 };
 
-export default function DashboardPage() {
-  // Données calculées
-  const lastWeight = mockBodyMeasurements[mockBodyMeasurements.length - 1];
-  const lastIRE = mockIREMeasurements[mockIREMeasurements.length - 1];
-  const last7Energy = mockEnergyLog.slice(-7);
-  const avgEnergy = Math.round(last7Energy.reduce((s, e) => s + e.energy_score, 0) / last7Energy.length * 10) / 10;
-  const todayLog = mockEnergyLog[mockEnergyLog.length - 1];
+const DEFAULT_SUIVI = {
+  label: "Coaching Nutriocus",
+  dateDebut: "",
+  dateFin: "",
+};
 
-  const nextRaceA = mockRaces
-    .filter((r) => r.priority === "A" && r.status === "upcoming")
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0];
-  const daysToNextA = nextRaceA ? daysUntil(nextRaceA.date) : null;
+function SuiviHero({
+  suivi,
+  profile,
+  nbConsultations,
+  nbLessonsDone,
+  nbLessonsTotal,
+  nextObjectif,
+}: {
+  suivi: typeof DEFAULT_SUIVI;
+  profile: typeof DEFAULT_PROFILE;
+  nbConsultations: number;
+  nbLessonsDone: number;
+  nbLessonsTotal: number;
+  nextObjectif: { name: string; daysLeft: number } | null;
+}) {
+  let progress = 0;
+  let daysLeft: number | null = null;
+  if (suivi.dateDebut && suivi.dateFin) {
+    const total = +new Date(suivi.dateFin) - +new Date(suivi.dateDebut);
+    const elapsed = +new Date() - +new Date(suivi.dateDebut);
+    progress = total > 0 ? Math.max(0, Math.min(100, Math.round((elapsed / total) * 100))) : 0;
+    daysLeft = Math.max(0, Math.ceil((+new Date(suivi.dateFin) - +new Date()) / 86400000));
+  }
 
-  const totalModules = mockFormationModules.length;
-  const completedModules = mockFormationProgress.filter((p) => p.completed).length;
-  const formationPct = Math.round((completedModules / totalModules) * 100);
+  return (
+    <div
+      className="card mb-6 overflow-hidden"
+      style={{
+        background: "var(--color-dark)",
+        border: "none",
+        padding: 0,
+      }}
+    >
+      <div
+        style={{
+          padding: "18px 22px",
+          display: "flex",
+          alignItems: "center",
+          gap: 22,
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 170 }}>
+          <div
+            style={{
+              width: 46,
+              height: 46,
+              borderRadius: "50%",
+              overflow: "hidden",
+              background: "#fff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            {profile?.photo ? (
+              <img src={profile.photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            ) : (
+              <span style={{ fontWeight: 800, color: "var(--color-primary)" }}>★</span>
+            )}
+          </div>
+          <div>
+            <div style={{ color: "#fff", fontWeight: 800, letterSpacing: ".02em" }}>MON SUIVI</div>
+            <div
+              style={{
+                color: "#8a8a88",
+                fontSize: 11,
+                letterSpacing: ".1em",
+                textTransform: "uppercase",
+              }}
+            >
+              {suivi.label || "Programme"}
+            </div>
+          </div>
+        </div>
 
-  const energyChartData = last7Energy.map((e) => ({
-    day: format(new Date(e.logged_date), "EEE", { locale: fr }),
-    score: e.energy_score,
-  }));
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+            <span
+              style={{
+                color: "#8a8a88",
+                fontSize: 11,
+                letterSpacing: ".1em",
+                textTransform: "uppercase",
+              }}
+            >
+              Progression
+            </span>
+            <span style={{ color: "#fff", fontWeight: 800 }}>{progress}%</span>
+          </div>
+          <div style={{ height: 10, background: "#222", borderRadius: 20, overflow: "hidden" }}>
+            <div
+              style={{
+                width: progress + "%",
+                height: "100%",
+                background: "linear-gradient(90deg, var(--color-primary), var(--color-accent))",
+              }}
+            />
+          </div>
+          {suivi.dateDebut && suivi.dateFin && (
+            <div style={{ color: "#8a8a88", fontSize: 11, marginTop: 5 }}>
+              {new Date(suivi.dateDebut).toLocaleDateString("fr-FR")} → {new Date(suivi.dateFin).toLocaleDateString("fr-FR")}
+              {daysLeft != null ? ` · ${daysLeft} j restants` : ""}
+            </div>
+          )}
+        </div>
 
-  const quickLinks = [
-    { href: "/athlete/body", icon: Scale, label: "Corps & IRE", color: "text-blue-400" },
-    { href: "/athlete/physiological", icon: Activity, label: "Profil physio", color: "text-purple-400" },
-    { href: "/athlete/race-energy", icon: Flame, label: "Dépenses énergie", color: "text-orange-400" },
-    { href: "/athlete/roadmap", icon: Target, label: "Roadmap saison", color: "text-red-400" },
-    { href: "/athlete/formation", icon: GraduationCap, label: "Formation", color: "text-indigo-400" },
-    { href: "/athlete/gpts", icon: Zap, label: "Mes GPTs", color: "text-green-400" },
-  ];
+        <div style={{ display: "flex", gap: 26, alignItems: "center" }}>
+          <div>
+            <div style={{ color: "var(--color-accent)", fontWeight: 800, fontSize: 22, fontFamily: "var(--font-display)" }}>
+              {nbConsultations}
+            </div>
+            <div style={{ color: "#8a8a88", fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase" }}>
+              Consult.
+            </div>
+          </div>
+          <div>
+            <div style={{ color: "var(--color-accent)", fontWeight: 800, fontSize: 22, fontFamily: "var(--font-display)" }}>
+              {nbLessonsDone}/{nbLessonsTotal}
+            </div>
+            <div style={{ color: "#8a8a88", fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase" }}>
+              Leçons
+            </div>
+          </div>
+          <div>
+            <div style={{ color: "var(--color-accent)", fontWeight: 800, fontSize: 22, fontFamily: "var(--font-display)" }}>
+              {nextObjectif ? `J-${nextObjectif.daysLeft}` : "—"}
+            </div>
+            <div style={{ color: "#8a8a88", fontSize: 10, letterSpacing: ".08em", textTransform: "uppercase" }}>
+              Objectif
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NavGrid({
+  title,
+  items,
+}: {
+  title: string;
+  items: { href: string; label: string; ic: string; color?: string }[];
+}) {
+  return (
+    <div className="mb-6">
+      <div className="kicker mb-3">{title}</div>
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        {items.map((it) => (
+          <Link key={it.href} href={it.href}>
+            <div
+              className="card p-4 cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md"
+              style={{ borderLeft: `5px solid ${it.color || "var(--color-primary)"}` }}
+            >
+              <div className="font-extrabold text-sm flex items-center gap-2">
+                <span style={{ opacity: 0.6 }}>{it.ic}</span>
+                {it.label}
+              </div>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export default function AthleteDashboardPage() {
+  const [profile] = useAthleteData("profile", DEFAULT_PROFILE);
+  const [suivi] = useAthleteData("suivi", DEFAULT_SUIVI);
+  const [consultations] = useAthleteData<unknown[]>("consultations", []);
+  const [academy] = useAthleteData<{ modules?: { lessons?: { done?: boolean }[] }[] }[]>("academy", []);
+  const [events] = useAthleteData<{ name: string; date: string }[]>("events", []);
+  const [energy] = useAthleteData<{ kcal?: number; depenseSortie?: number }[]>("energy", []);
+  const [compo] = useAthleteData<{ date: string; masseMaigre?: number }[]>("compo", []);
+
+  // KPIs
+  const lastCompo = [...compo].sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+  const masseMaigre = lastCompo?.masseMaigre ?? profile.masseMaigre;
+  const recentEnergy = energy.slice(-21);
+  const avgScore = masseMaigre && recentEnergy.length
+    ? recentEnergy.reduce(
+        (s, e) => s + ((Number(e.kcal) || 0) - (Number(e.depenseSortie) || 0)) / masseMaigre,
+        0,
+      ) / recentEnergy.length
+    : 0;
+
+  const today = new Date().toISOString().slice(0, 10);
+  const nextObjectif = [...events]
+    .filter((e) => e.date >= today)
+    .sort((a, b) => (a.date < b.date ? -1 : 1))[0];
+  const objWithDays = nextObjectif
+    ? {
+        name: nextObjectif.name,
+        daysLeft: Math.max(
+          0,
+          Math.ceil((+new Date(nextObjectif.date) - +new Date(today)) / 86400000),
+        ),
+      }
+    : null;
+
+  let lessonsTotal = 0;
+  let lessonsDone = 0;
+  academy.forEach((f) =>
+    f.modules?.forEach((m) =>
+      m.lessons?.forEach((l) => {
+        lessonsTotal++;
+        if (l.done) lessonsDone++;
+      }),
+    ),
+  );
+
+  // Group the nav for the dashboard tiles
+  const groupedSections = ATHLETE_NAV.filter((s) => s.grp && !s.grp.includes("accompagnement"));
 
   return (
     <div>
-      <Topbar
-        title={`Bonjour, ${mockAthlete.first_name} 👋`}
-        subtitle={`${SPORT_LABELS[mockAthlete.sport[0]]} · ${format(new Date(), "EEEE d MMMM yyyy", { locale: fr })}`}
+      <PageHeader
+        kicker="Tableau de bord"
+        title="Ultra Performance"
       />
 
-      {/* Alerte énergie basse */}
-      {todayLog && todayLog.energy_score <= 5 && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: "auto" }}
-          className="mb-5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4"
-        >
-          <div className="flex items-start gap-3">
-            <span className="text-xl">⚠️</span>
-            <div className="flex-1">
-              <p className="font-semibold text-amber-400 text-sm">
-                Ton énergie est basse aujourd'hui ({todayLog.energy_score}/10)
-              </p>
-              <p className="text-xs text-amber-400/70 mt-0.5">
-                Consulte le GPT dédié pour analyser ton déficit énergétique.
-              </p>
-            </div>
-            <Link
-              href="/athlete/gpts"
-              className="btn-secondary text-xs whitespace-nowrap"
-            >
-              Consulter le GPT
-            </Link>
-          </div>
-        </motion.div>
-      )}
+      <SuiviHero
+        suivi={suivi}
+        profile={profile}
+        nbConsultations={consultations.length}
+        nbLessonsDone={lessonsDone}
+        nbLessonsTotal={lessonsTotal}
+        nextObjectif={objWithDays}
+      />
 
-      {/* Stats principales */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {[
-          {
-            label: "Énergie moy. 7j",
-            value: avgEnergy,
-            suffix: "/10",
-            icon: BookHeart,
-            color: getEnergyColor(avgEnergy),
-            href: "/athlete/energy-log",
-            delay: 0,
-          },
-          {
-            label: "Poids actuel",
-            value: lastWeight?.weight_kg.toFixed(1),
-            suffix: "kg",
-            icon: Scale,
-            color: "text-blue-400",
-            href: "/athlete/body",
-            delay: 0.05,
-          },
-          {
-            label: "IRE actuel (trail)",
-            value: lastIRE?.ire_value.toFixed(2),
-            suffix: "",
-            icon: TrendingUp,
-            color: lastIRE?.ire_value >= 1.0 ? "text-green-400" : lastIRE?.ire_value >= 0.8 ? "text-amber-400" : "text-red-400",
-            href: "/athlete/body",
-            delay: 0.1,
-          },
-          {
-            label: nextRaceA ? `Jours avant ${nextRaceA.name.split(" ")[0]}...` : "Prochain objectif A",
-            value: daysToNextA ?? "—",
-            suffix: daysToNextA ? "j" : "",
-            icon: Target,
-            color: "text-red-400",
-            href: "/athlete/roadmap",
-            delay: 0.15,
-          },
-        ].map(({ label, value, suffix, icon: Icon, color, href, delay }) => (
-          <motion.div
-            key={label}
-            variants={fadeUp}
-            initial="initial"
-            animate="animate"
-            transition={{ duration: 0.3, delay }}
-          >
-            <Link href={href}>
-              <div className="stat-card hover:border-[var(--color-primary)]/30 cursor-pointer transition-all group">
-                <div className="flex items-center justify-between">
-                  <span className="stat-label">{label}</span>
-                  <Icon className={`w-4 h-4 ${color}`} />
-                </div>
-                <div className={`stat-value ${color}`}>
-                  {value}
-                  <span className="text-sm font-normal text-[var(--color-text-muted)] ml-1">
-                    {suffix}
-                  </span>
-                </div>
-                <ChevronRight className="w-3 h-3 text-[var(--color-text-muted)] opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-            </Link>
-          </motion.div>
-        ))}
+      {/* Mon accompagnement */}
+      <NavGrid
+        title="Mon accompagnement"
+        items={[
+          { href: "/athlete/academy", label: "Académie", ic: "▷", color: "var(--color-primary)" },
+          { href: "/athlete/consultations", label: "Mes consultations", ic: "◳", color: "var(--color-dark)" },
+        ]}
+      />
+
+      {/* KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <Kpi label="Poids actuel" value={profile?.poids || "—"} unit="kg" color="var(--color-primary)" />
+        <Kpi
+          label="Score dispo énergétique"
+          value={avgScore ? avgScore.toFixed(1) : "—"}
+          unit="kcal/kg"
+          color="var(--color-success)"
+          warn={avgScore < 30 && avgScore > 0}
+          note={avgScore ? (avgScore < 30 ? "⚠ déficit" : "sain") : "—"}
+        />
+        <Kpi label="Tol. glucides" value={profile?.tolGlucCAP || "—"} unit="g/h" color="var(--color-dark)" />
+        <Kpi
+          label="Prochain objectif"
+          value={objWithDays ? "J-" + objWithDays.daysLeft : "—"}
+          color="#8a8a88"
+          note={objWithDays?.name || "aucun"}
+        />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-6">
-        {/* Énergie 7 jours — mini chart */}
-        <motion.div
-          variants={fadeUp}
-          initial="initial"
-          animate="animate"
-          transition={{ duration: 0.3, delay: 0.2 }}
-          className="card lg:col-span-2"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="font-semibold font-display text-sm">Énergie — 7 derniers jours</h3>
-              <p className="text-xs text-[var(--color-text-muted)] mt-0.5">Saisie quotidienne</p>
-            </div>
-            <Link href="/athlete/energy-log" className="btn-ghost text-xs">
-              Voir tout
-            </Link>
-          </div>
+      {/* Sections */}
+      {groupedSections.map((section) => (
+        <NavGrid
+          key={section.grp}
+          title={section.grp}
+          items={section.items.map((it) => ({ ...it, color: "var(--color-primary)" }))}
+        />
+      ))}
 
-          <div className="flex items-center gap-3 mb-4">
-            {last7Energy.map((e) => (
-              <div key={e.logged_date} className="flex-1 flex flex-col items-center gap-1.5">
-                <div className="text-xs font-semibold" style={{ color: e.energy_score >= 7 ? "#22c55e" : e.energy_score >= 5 ? "#f59e0b" : "#ef4444" }}>
-                  {e.energy_score}
-                </div>
-                <div className="w-full rounded-full overflow-hidden" style={{ height: 40, display: "flex", alignItems: "flex-end" }}>
-                  <div
-                    className="w-full rounded-t-sm transition-all"
-                    style={{
-                      height: `${(e.energy_score / 10) * 100}%`,
-                      backgroundColor: e.energy_score >= 7 ? "#22c55e" : e.energy_score >= 5 ? "#f59e0b" : "#ef4444",
-                      opacity: 0.8,
-                    }}
-                  />
-                </div>
-                <div className="text-[10px] text-[var(--color-text-muted)] capitalize">
-                  {format(new Date(e.logged_date), "EEE", { locale: fr }).slice(0, 3)}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <Link href="/athlete/energy-log" className="btn-primary w-full justify-center text-sm mt-2">
-            <BookHeart className="w-4 h-4" />
-            Saisir mon énergie du jour
-          </Link>
-        </motion.div>
-
-        {/* Formation */}
-        <motion.div
-          variants={fadeUp}
-          initial="initial"
-          animate="animate"
-          transition={{ duration: 0.3, delay: 0.25 }}
-          className="card"
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold font-display text-sm">Formation</h3>
-            <Link href="/athlete/formation" className="btn-ghost text-xs">
-              Continuer
-            </Link>
-          </div>
-
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-14 h-14 rounded-full border-4 border-[var(--color-primary)]/30 flex items-center justify-center relative">
-              <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 56 56">
-                <circle cx="28" cy="28" r="24" fill="none" stroke="var(--color-primary)" strokeWidth="4" strokeDasharray={`${formationPct * 1.507} 150.7`} />
-              </svg>
-              <span className="text-sm font-bold text-[var(--color-primary)]">{formationPct}%</span>
-            </div>
-            <div>
-              <p className="text-sm font-semibold">{completedModules}/{totalModules} modules</p>
-              <p className="text-xs text-[var(--color-text-muted)]">complétés</p>
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            {mockFormationModules.slice(0, 3).map((mod) => {
-              const prog = mockFormationProgress.find((p) => p.module_id === mod.id);
-              return (
-                <div key={mod.id} className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full shrink-0 ${prog?.completed ? "bg-green-500" : prog?.progress_pct && prog.progress_pct > 0 ? "bg-amber-500" : "bg-[var(--color-border)]"}`} />
-                  <span className="text-xs text-[var(--color-text-muted)] truncate flex-1">{mod.title}</span>
-                  {prog?.completed && <span className="text-[10px] text-green-500 shrink-0">✓</span>}
-                  {!prog?.completed && prog?.progress_pct && prog.progress_pct > 0 && (
-                    <span className="text-[10px] text-amber-500 shrink-0">{prog.progress_pct}%</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </motion.div>
-      </div>
-
-      {/* Prochaine course A */}
-      {nextRaceA && (
-        <motion.div
-          variants={fadeUp}
-          initial="initial"
-          animate="animate"
-          transition={{ duration: 0.3, delay: 0.3 }}
-          className="card mb-6 border-[var(--color-primary)]/20"
-        >
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center shrink-0">
-              <Target className="w-6 h-6 text-red-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="badge bg-red-500/20 text-red-400 text-[10px]">OBJECTIF A</span>
-                <span className="text-xs text-[var(--color-text-muted)]">{formatDate(nextRaceA.date)}</span>
-              </div>
-              <h3 className="font-bold font-display">{nextRaceA.name}</h3>
-              <p className="text-sm text-[var(--color-text-muted)]">
-                {nextRaceA.distance_km}km · D+{nextRaceA.elevation_m}m · Objectif {nextRaceA.goal_time}
-              </p>
-            </div>
-            <div className="text-right shrink-0">
-              <div className="text-3xl font-bold font-display text-red-400">{daysToNextA}</div>
-              <div className="text-xs text-[var(--color-text-muted)]">jours</div>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {/* Accès rapide */}
-      <motion.div
-        variants={fadeUp}
-        initial="initial"
-        animate="animate"
-        transition={{ duration: 0.3, delay: 0.35 }}
-      >
-        <h2 className="text-sm font-semibold text-[var(--color-text-muted)] mb-3 uppercase tracking-wider">
-          Accès rapide
-        </h2>
-        <div className="grid grid-cols-3 lg:grid-cols-6 gap-3">
-          {quickLinks.map(({ href, icon: Icon, label, color }) => (
-            <Link key={href} href={href}>
-              <div className="card-2 flex flex-col items-center gap-2 py-4 hover:border-[var(--color-primary)]/30 cursor-pointer transition-all text-center group">
-                <Icon className={`w-5 h-5 ${color} group-hover:scale-110 transition-transform`} />
-                <span className="text-[11px] text-[var(--color-text-muted)] leading-tight">{label}</span>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </motion.div>
+      <NavGrid
+        title="Nutrition à l'effort & outils"
+        items={ATHLETE_NAV[5].items.map((it) => ({
+          ...it,
+          color: "var(--color-dark)",
+        }))}
+      />
     </div>
   );
 }

@@ -1,5 +1,4 @@
-import { Sidebar } from "@/components/layout/Sidebar";
-import { MobileNav } from "@/components/layout/MobileNav";
+import { AthleteSidebar } from "@/components/athlete/AthleteSidebar";
 
 export default function AthleteLayout({
   children,
@@ -8,16 +7,10 @@ export default function AthleteLayout({
 }) {
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
-      {/* Sidebar desktop */}
-      <Sidebar role="athlete" />
-
-      {/* Main content */}
-      <main className="lg:pl-[212px] pb-20 lg:pb-0">
+      <AthleteSidebar />
+      <main className="lg:pl-[262px]">
         <div className="max-w-7xl mx-auto p-5 lg:p-8">{children}</div>
       </main>
-
-      {/* Bottom nav mobile */}
-      <MobileNav />
     </div>
   );
 }

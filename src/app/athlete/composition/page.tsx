@@ -2,13 +2,13 @@
 
 import { PageHeader, Empty } from "@/components/ui/PageHeader";
 
-export default function products_page() {
+export default function composition_page() {
   return (
     <div>
       <PageHeader
-        kicker="Nutrition à l'effort"
-        title="Produits de l'effort"
-        desc="Catalogue de 94 produits + favoris."
+        kicker="Comprendre où tu en es"
+        title="Composition corporelle"
+        desc="Suivi des masses et IRE pour ton poids de forme."
       />
       <div className="card p-10 text-center">
         <div className="text-[var(--color-text-muted)] text-sm">

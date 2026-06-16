@@ -246,7 +246,7 @@ export default function AthleteDashboardPage() {
     <div>
       <PageHeader
         kicker="Tableau de bord"
-        title="Ultra Performance"
+        title="Mission Performance"
       />
 
       <SuiviHero

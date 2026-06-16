@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 :root {
-  /* NUTRIOCUS Ultra Performance — Design System */
+  /* NUTRIOCUS Mission Performance — Design System */
   --color-primary: #FF4501;          /* Orange signature */
   --color-primary-dark: #cc3700;
   --color-primary-light: #fff3ee;
@@ -22,7 +22,7 @@
   --font-body: 'Helvetica Neue', Helvetica, Arial, sans-serif;
   --radius: 0.625rem;
 
-  /* Chart colors (Ultra Performance) */
+  /* Chart colors (Mission Performance) */
   --chart-carbs: #FF4501;
   --chart-fat: #5f8c0a;
   --chart-intensity: #0a0a0a;
@@ -384,7 +384,7 @@
     color: var(--color-primary);
   }
 
-  /* ============ DECORATIVE BARS (Ultra Performance signature) ============ */
+  /* ============ DECORATIVE BARS (Mission Performance signature) ============ */
   .deco-bars {
     @apply flex gap-1 mt-2;
   }

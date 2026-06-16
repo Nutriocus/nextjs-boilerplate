@@ -59,7 +59,7 @@ export default function CoachLayout({
               margin: "10px 0 20px 2px",
             }}
           >
-            Ultra Performance · Coach
+            Mission Performance · Coach
           </div>
         </div>
 
@@ -110,7 +110,7 @@ export default function CoachLayout({
               lineHeight: 1.5,
             }}
           >
-            v2 · Ultra Performance
+            v2 · Mission Performance
           </div>
         </div>
       </aside>

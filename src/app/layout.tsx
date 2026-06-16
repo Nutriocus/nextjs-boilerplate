@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "@/styles/globals.css";
 
 export const metadata: Metadata = {
-  title: "NUTRIOCUS — Ultra Performance",
+  title: "NUTRIOCUS — Mission Performance",
   description: "Plateforme de coaching nutritionnel pour athlètes d'endurance",
   keywords: ["nutrition", "trail", "triathlon", "endurance", "coaching"],
 };

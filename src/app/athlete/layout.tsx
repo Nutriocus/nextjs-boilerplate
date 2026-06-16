@@ -12,7 +12,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <MobileTopbar
         isOpen={open}
         onToggle={() => setOpen((o) => !o)}
-        subtitle="Ultra Performance"
+        subtitle="Mission Performance"
       />
       <AthleteSidebar
         mobileOpen={open}

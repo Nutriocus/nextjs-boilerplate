@@ -137,7 +137,7 @@ export function AthleteSidebar({
               margin: "10px 0 4px 2px",
             }}
           >
-            Ultra Performance
+            Mission Performance
           </div>
           {isCoachView && athleteName && (
             <div

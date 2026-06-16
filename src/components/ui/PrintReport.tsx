@@ -39,10 +39,10 @@ export function PrintButton({
 
 /**
  * A self-contained printable page (A4). Only visible during print.
- * Renders a NUTRIOCUS Ultra Performance themed header.
+ * Renders a NUTRIOCUS Mission Performance themed header.
  */
 export function PrintReport({
-  kicker = "Ultra Performance",
+  kicker = "Mission Performance",
   title,
   subtitle,
   children,
@@ -145,7 +145,7 @@ export function PrintReport({
         >
           <span style={{ fontWeight: 800, color: PRINT_COLOR.ink }}>
             NUTRIOCUS
-            <span style={{ color: PRINT_COLOR.orange }}>.</span> Ultra Performance
+            <span style={{ color: PRINT_COLOR.orange }}>.</span> Mission Performance
           </span>
           <span>
             Édité le {new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" })}

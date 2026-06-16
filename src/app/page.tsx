@@ -31,7 +31,7 @@ export default function HomePage() {
             lineHeight: 1.04,
           }}
         >
-          Ultra Performance
+          Mission Performance
         </h1>
         <div className="flex gap-1 justify-center mt-3">
           <div className="h-1 w-16 bg-[var(--color-primary)] rounded-full" />

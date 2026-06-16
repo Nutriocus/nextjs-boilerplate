@@ -1,7 +1,8 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 
 export const ATHLETE_NAV = [
@@ -58,20 +59,55 @@ export const ATHLETE_NAV = [
 ];
 
 export function AthleteSidebar({
-  isCoachView,
-  athleteId,
-  athleteName,
   mobileOpen = false,
   onCloseMobile,
 }: {
-  isCoachView?: boolean;
-  athleteId?: string;
-  athleteName?: string;
   mobileOpen?: boolean;
   onCloseMobile?: () => void;
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const athleteIdFromUrl = searchParams?.get("athleteId") || null;
+  const [athleteName, setAthleteName] = useState<string | null>(null);
+  const [isCoach, setIsCoach] = useState(false);
+
+  // Detect if current user is a coach (so we can show "Retour coach" link)
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: coach } = await supabase
+        .from("coaches")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      setIsCoach(!!coach);
+    })();
+  }, []);
+
+  // Fetch athlete name when navigating via ?athleteId
+  useEffect(() => {
+    if (!athleteIdFromUrl) {
+      setAthleteName(null);
+      return;
+    }
+    (async () => {
+      const { data } = await supabase
+        .from("athletes")
+        .select("first_name, last_name")
+        .eq("id", athleteIdFromUrl)
+        .maybeSingle();
+      if (data) setAthleteName(`${data.first_name} ${data.last_name}`);
+    })();
+  }, [athleteIdFromUrl]);
+
+  const isCoachView = isCoach && !!athleteIdFromUrl;
+  const athleteId = athleteIdFromUrl || undefined;
+
+  // Append ?athleteId=... to all nav links when in coach view
+  const buildHref = (href: string) =>
+    isCoachView && athleteId ? `${href}?athleteId=${athleteId}` : href;
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -109,11 +145,35 @@ export function AthleteSidebar({
                 fontSize: 11,
                 color: "var(--color-primary)",
                 fontWeight: 700,
-                margin: "0 0 16px 2px",
+                margin: "0 0 6px 2px",
               }}
             >
-              Vue : {athleteName}
+              👁 Vue coach : {athleteName}
             </div>
+          )}
+          {isCoachView && (
+            <Link href="/coach" onClick={() => onCloseMobile?.()}>
+              <div
+                className="sidebar-link"
+                style={{
+                  background: "var(--color-primary)",
+                  color: "#fff",
+                  fontWeight: 700,
+                  marginBottom: 4,
+                }}
+              >
+                <span style={{ width: 16, textAlign: "center" }}>⌂</span>
+                Dashboard coach
+              </div>
+            </Link>
+          )}
+          {isCoachView && athleteId && (
+            <Link href={`/coach/athletes/${athleteId}`} onClick={() => onCloseMobile?.()}>
+              <div className="sidebar-link" style={{ marginBottom: 10 }}>
+                <span style={{ width: 16, textAlign: "center" }}>📋</span>
+                Fiche athlète
+              </div>
+            </Link>
           )}
           {!isCoachView && <div style={{ marginBottom: 16 }} />}
         </div>
@@ -130,7 +190,7 @@ export function AthleteSidebar({
                 return (
                   <Link
                     key={item.href}
-                    href={item.href}
+                    href={buildHref(item.href)}
                     onClick={() => onCloseMobile?.()}
                   >
                     <div className={`sidebar-link ${active ? "active" : ""}`}>
@@ -152,7 +212,7 @@ export function AthleteSidebar({
             <Link href="/coach/athletes" onClick={() => onCloseMobile?.()}>
               <div className="sidebar-link w-full" style={{ color: "#c9c9c5" }}>
                 <span style={{ width: 16, textAlign: "center" }}>←</span>
-                Retour coach
+                Liste de mes athlètes
               </div>
             </Link>
           ) : (

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader, Empty, Field } from "@/components/ui/PageHeader";
+import { PrintReport, PrintH } from "@/components/ui/PrintReport";
 
 type MealItem = { name: string; qty: string; tip: string };
 type MealSection = { title: string; items: MealItem[] };
@@ -133,22 +134,25 @@ function PlanCard({
   onEdit,
   onDuplicate,
   onDelete,
+  onPrint,
 }: {
   plan: MealPlan;
   onEdit: (p: MealPlan) => void;
   onDuplicate: (p: MealPlan) => void;
   onDelete: (p: MealPlan) => void;
+  onPrint: (p: MealPlan) => void;
 }) {
   return (
     <div className="card overflow-hidden">
       <div
-        className="px-4 py-3 flex justify-between items-center text-white"
+        className="px-4 py-3 flex justify-between items-center text-white flex-wrap gap-2"
         style={{ background: TYPE_COLORS[plan.type] || "var(--color-dark)" }}
       >
         <div className="font-extrabold uppercase text-base" style={{ fontFamily: "var(--font-display)" }}>
           {plan.name}
         </div>
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 flex-wrap">
+          <button onClick={() => onPrint(plan)} className="btn-ghost btn-xs" style={{ color: "#fff", border: "1px solid rgba(255,255,255,0.4)" }}>PDF</button>
           <button onClick={() => onEdit(plan)} className="btn-ghost btn-xs" style={{ color: "#fff", border: "1px solid rgba(255,255,255,0.4)" }}>Éditer</button>
           <button onClick={() => onDuplicate(plan)} className="btn-ghost btn-xs" style={{ color: "#fff", border: "1px solid rgba(255,255,255,0.4)" }}>Dupliquer</button>
           <button onClick={() => onDelete(plan)} className="btn-ghost btn-xs" style={{ color: "#fff", border: "1px solid rgba(255,255,255,0.4)" }}>✕</button>
@@ -286,6 +290,7 @@ function PlanEditor({ plan, onSave, onCancel }: { plan: MealPlan; onSave: (p: Me
 export default function MealPlansPage() {
   const [plans, setPlans, loaded] = useAthleteData<MealPlan[]>("meal", DEFAULT_PLANS);
   const [editing, setEditing] = useState<MealPlan | null>(null);
+  const [printPlan, setPrintPlan] = useState<MealPlan | null>(null);
 
   const save = (p: MealPlan) => {
     setPlans((prev) => (prev.some((x) => x.id === p.id) ? prev.map((x) => (x.id === p.id ? p : x)) : [...prev, p]));
@@ -298,6 +303,14 @@ export default function MealPlansPage() {
 
   const del = (p: MealPlan) => {
     if (confirm("Supprimer " + p.name + " ?")) setPlans((prev) => prev.filter((x) => x.id !== p.id));
+  };
+
+  const print = (p: MealPlan) => {
+    setPrintPlan(p);
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => setPrintPlan(null), 1500);
+    }, 200);
   };
 
   const create = () => {
@@ -325,6 +338,7 @@ export default function MealPlansPage() {
 
   return (
     <div>
+      <div className="screen-only">
       <PageHeader
         kicker="Structurer ton quotidien"
         title="Plans alimentaires"
@@ -336,10 +350,101 @@ export default function MealPlansPage() {
 
       <div className="flex flex-col gap-4">
         {plans.map((p) => (
-          <PlanCard key={p.id} plan={p} onEdit={setEditing} onDuplicate={duplicate} onDelete={del} />
+          <PlanCard key={p.id} plan={p} onEdit={setEditing} onDuplicate={duplicate} onDelete={del} onPrint={print} />
         ))}
         {plans.length === 0 && <Empty>Aucun plan.</Empty>}
       </div>
+      </div>
+
+      {printPlan && (
+        <PrintReport
+          kicker="Structurer ton quotidien"
+          title="Plan alimentaire"
+          subtitle={printPlan.name}
+        >
+          {printPlan.sections.map((s, i) => (
+            <div key={i} className="no-break" style={{ marginTop: i ? 14 : 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 7 }}>
+                <span style={{ width: 6, height: 16, background: "#FF4501", borderRadius: 3 }} />
+                <span style={{ fontWeight: 800, fontSize: 12.5, textTransform: "uppercase", letterSpacing: ".05em" }}>
+                  {s.title}
+                </span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 16px" }}>
+                {s.items.map((it, j) => (
+                  <div
+                    key={j}
+                    style={{ border: "1px solid #e6e6e3", borderRadius: 9, padding: "7px 11px" }}
+                  >
+                    <div style={{ fontWeight: 800, color: "#FF4501", fontSize: 12.5 }}>{it.name}</div>
+                    <div style={{ fontSize: 12 }}>{it.qty}</div>
+                    {it.tip && (
+                      <div style={{ fontSize: 10.5, color: "#787876", fontStyle: "italic" }}>{it.tip}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {(printPlan.kcal || printPlan.gluc) && (
+            <div
+              className="no-break"
+              style={{
+                marginTop: 16,
+                background: "#0a0a0a",
+                borderRadius: 12,
+                padding: "13px 18px",
+                display: "flex",
+                gap: 24,
+                justifyContent: "center",
+                color: "#fff",
+                fontSize: 13,
+                flexWrap: "wrap",
+              }}
+            >
+              {printPlan.kcal && (
+                <span>
+                  <b style={{ color: "#d0ff2c", fontSize: 16 }}>{printPlan.kcal}</b> kcal
+                </span>
+              )}
+              {printPlan.prot && (
+                <span>
+                  Prot. <b>{printPlan.prot}</b> g
+                </span>
+              )}
+              {printPlan.lip && (
+                <span>
+                  Lip. <b>{printPlan.lip}</b> g
+                </span>
+              )}
+              {printPlan.gluc && (
+                <span>
+                  Gluc. <b style={{ color: "#d0ff2c", fontSize: 16 }}>{printPlan.gluc}</b> g
+                </span>
+              )}
+            </div>
+          )}
+
+          {printPlan.supplements && printPlan.supplements.length > 0 && (
+            <>
+              <div className="no-break" style={{ marginTop: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 7 }}>
+                  <span style={{ width: 6, height: 16, background: "#FF4501", borderRadius: 3 }} />
+                  <span style={{ fontWeight: 800, fontSize: 12.5, textTransform: "uppercase", letterSpacing: ".05em" }}>
+                    Compléments
+                  </span>
+                </div>
+                {printPlan.supplements.map((sup, i) => (
+                  <div key={i} style={{ fontSize: 12, padding: "2px 0" }}>
+                    • {sup}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </PrintReport>
+      )}
     </div>
   );
 }

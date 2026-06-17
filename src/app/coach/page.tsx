@@ -21,7 +21,7 @@ type AthleteRow = {
   status: string | null;
 };
 
-type Profile = { poids?: number | string; vo2max?: number | string };
+type Profile = { poids?: number | string; vo2max?: number | string; photo?: string };
 type EventItem = { id?: string; date: string; name: string };
 type Consultation = { id: string; date: string; type?: string };
 type MealPlan = { id: string; name: string; status?: "actif" | "archive"; dateDebut?: string; dateFin?: string; kcal?: number | string; maintenanceKcal?: number | string };
@@ -41,6 +41,7 @@ type Alert = {
 
 type AthleteSummary = {
   athlete: AthleteRow;
+  photo: string | null;
   poids: number | null;
   vo2max: number | null;
   nextRace: { name: string; date: string; days: number } | null;
@@ -246,6 +247,7 @@ export default function CoachDashboard() {
 
           return {
             athlete: a,
+            photo: profile?.photo || null,
             poids: profile.poids != null ? toNum(profile.poids) : null,
             vo2max: profile.vo2max != null ? toNum(profile.vo2max) : null,
             nextRace,
@@ -434,13 +436,20 @@ export default function CoachDashboard() {
                       className="flex items-center gap-3 p-3 rounded-[10px] transition hover:bg-[var(--color-surface-2)]"
                       style={{ border: "1px solid var(--color-border)", borderLeft: hasHigh ? "4px solid var(--color-danger)" : athleteAlerts.length > 0 ? "4px solid var(--color-primary)" : "1px solid var(--color-border)" }}
                     >
-                      <div
-                        className="w-11 h-11 rounded-full flex items-center justify-center font-extrabold shrink-0"
-                        style={{ background: "var(--color-primary)", color: "#fff", fontFamily: "var(--font-display)" }}
-                      >
-                        {a.first_name[0]}
-                        {a.last_name[0]}
-                      </div>
+                      {s.photo ? (
+                        <div className="w-11 h-11 rounded-full overflow-hidden shrink-0" style={{ border: "2px solid var(--color-border)" }}>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={s.photo} alt="" className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div
+                          className="w-11 h-11 rounded-full flex items-center justify-center font-extrabold shrink-0"
+                          style={{ background: "var(--color-primary)", color: "#fff", fontFamily: "var(--font-display)" }}
+                        >
+                          {a.first_name[0]}
+                          {a.last_name[0]}
+                        </div>
+                      )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="text-sm uppercase" style={{ fontFamily: "var(--font-display)", fontWeight: 800, letterSpacing: "-0.01em" }}>

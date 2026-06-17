@@ -14,7 +14,7 @@ export function MobileTopbar({
   return (
     <div className="mobile-topbar">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/logos/nutriocus-white.png" alt="NUTRIOCUS" style={{ height: 22, width: "auto" }} />
+      <img src="/logos/nutriocus-white.png" alt="NUTRIOCUS" style={{ height: 34, width: "auto" }} />
 
       {subtitle && (
         <div className="text-[10px] text-[#8a8a88] uppercase tracking-wider truncate mx-2 flex-1 text-center">

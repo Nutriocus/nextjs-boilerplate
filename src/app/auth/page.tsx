@@ -109,7 +109,7 @@ function AuthForm() {
           <div className="mb-6">
             <div className="mb-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/logos/nutriocus-orange.png" alt="NUTRIOCUS" style={{ height: 32, width: "auto", display: "block" }} />
+              <img src="/logos/nutriocus-orange.png" alt="NUTRIOCUS" style={{ height: 48, width: "auto", display: "block" }} />
             </div>
             <div className="kicker">Espace</div>
             <h1

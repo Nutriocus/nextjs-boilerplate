@@ -108,7 +108,7 @@ export function PrintReport({
             )}
           </div>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logos/nutriocus-white.png" alt="NUTRIOCUS" style={{ height: 22, width: "auto" }} />
+          <img src="/logos/nutriocus-white.png" alt="NUTRIOCUS" style={{ height: 32, width: "auto" }} />
         </div>
 
         {/* Decorative bars */}

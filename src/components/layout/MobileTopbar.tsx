@@ -13,15 +13,9 @@ export function MobileTopbar({
 }) {
   return (
     <div className="mobile-topbar">
-      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white text-[var(--color-dark)]">
-        <span
-          className="font-extrabold tracking-tight text-xs"
-          style={{ fontFamily: "var(--font-display)" }}
-        >
-          NUTRIOCUS
-          <span className="text-[var(--color-primary)]">.</span>
-        </span>
-      </div>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/logos/nutriocus-white.png" alt="NUTRIOCUS" style={{ height: 22, width: "auto" }} />
+
       {subtitle && (
         <div className="text-[10px] text-[#8a8a88] uppercase tracking-wider truncate mx-2 flex-1 text-center">
           {subtitle}

@@ -41,15 +41,8 @@ export default function CoachLayout({
 
       <aside className={`sidebar ${open ? "is-open" : ""}`}>
         <div className="px-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white text-[var(--color-dark)]">
-            <span
-              className="font-extrabold tracking-tight text-xs"
-              style={{ fontFamily: "var(--font-display)" }}
-            >
-              NUTRIOCUS
-              <span className="text-[var(--color-primary)]">.</span>
-            </span>
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logos/nutriocus-white.png" alt="NUTRIOCUS" style={{ height: 26, width: "auto", display: "block" }} />
           <div
             style={{
               fontSize: 10,

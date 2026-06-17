@@ -107,14 +107,9 @@ function AuthForm() {
         >
           {/* Header */}
           <div className="mb-6">
-            <div className="inline-flex items-center gap-2 mb-3 px-3 py-1 rounded-full bg-[var(--color-dark)] text-white">
-              <span
-                className="font-extrabold tracking-tight text-xs"
-                style={{ fontFamily: "var(--font-display)" }}
-              >
-                NUTRIOCUS
-                <span className="text-[var(--color-primary)]">.</span>
-              </span>
+            <div className="mb-3">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logos/nutriocus-orange.png" alt="NUTRIOCUS" style={{ height: 32, width: "auto", display: "block" }} />
             </div>
             <div className="kicker">Espace</div>
             <h1

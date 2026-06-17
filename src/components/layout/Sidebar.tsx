@@ -74,13 +74,9 @@ export function Sidebar({ role = "athlete" }: SidebarProps) {
   return (
     <aside className="sidebar">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-4 py-4 border-b border-[var(--color-border)]">
-        <div className="w-8 h-8 rounded-lg bg-[var(--color-primary)] flex items-center justify-center shrink-0">
-          <Zap className="w-4.5 h-4.5 text-white" />
-        </div>
-        <span className="font-bold font-display text-sm tracking-tight">
-          NUTRIOCUS
-        </span>
+      <div className="flex items-center px-4 py-4 border-b border-[var(--color-border)]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/logos/nutriocus-white.png" alt="NUTRIOCUS" style={{ height: 24, width: "auto" }} />
       </div>
 
       {/* Navigation */}

@@ -107,15 +107,8 @@ export function PrintReport({
               </div>
             )}
           </div>
-          <div
-            style={{
-              fontWeight: 800,
-              fontSize: 16,
-              letterSpacing: "-0.02em",
-            }}
-          >
-            NUTRIOCUS<span style={{ color: PRINT_COLOR.orange }}>.</span>
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logos/nutriocus-white.png" alt="NUTRIOCUS" style={{ height: 22, width: "auto" }} />
         </div>
 
         {/* Decorative bars */}

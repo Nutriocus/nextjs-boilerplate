@@ -119,9 +119,9 @@ export function AthleteSidebar({
     <>
       <aside className={`sidebar ${mobileOpen ? "is-open" : ""}`}>
         {/* Brand */}
-        <div style={{ margin: "0 -14px 4px" }}>
+        <div className="px-2" style={{ marginBottom: 4 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logos/nutriocus-white.png" alt="NUTRIOCUS" style={{ width: "100%", height: "auto", display: "block" }} />
+          <img src="/logos/nutriocus-white.png" alt="NUTRIOCUS" style={{ width: "55%", height: "auto", display: "block", maxWidth: "100%" }} />
         </div>
         <div className="px-2">
           <div

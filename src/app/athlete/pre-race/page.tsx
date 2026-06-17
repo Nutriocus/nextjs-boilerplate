@@ -640,14 +640,26 @@ export default function PreRacePage() {
         title="Préparation alimentaire (J-4 → Jour J)"
         subtitle={poids ? `${poids} kg · Cibles glucidiques jour par jour` : undefined}
       >
-        {(["J-4", "J-3", "J-2", "J-1"] as PreraceDay[]).map((day) => {
+        {(() => {
+          const days: PreraceDay[] = ["J-4", "J-3", "J-2", "J-1"];
+          const visibleDays = days.filter((d) => {
+            const meals = buildDayMealsWithOverrides(d);
+            return MEAL_ORDER.some((m) => (meals[m] || []).length > 0);
+          });
+          return visibleDays.map((day, dayIdx) => {
           const meals = buildDayMealsWithOverrides(day);
           const visible = MEAL_ORDER.filter((m) => (meals[m] || []).length > 0);
-          if (visible.length === 0) return null;
           const gkLocal = toNum(local.gPerKg[day.replace("J-", "j").toLowerCase() as keyof PreraceData["gPerKg"]]);
           const total = Math.round(gkLocal * poids);
           return (
-            <div key={day} style={{ marginTop: 12 }}>
+            <div
+              key={day}
+              style={{
+                marginTop: dayIdx === 0 ? 12 : 0,
+                breakBefore: dayIdx === 0 ? "auto" : "page",
+                pageBreakBefore: dayIdx === 0 ? "auto" : "always",
+              }}
+            >
               <PrintH>{day} — Cible {total} g CHO</PrintH>
               {visible.map((m) => (
                 <div key={m} className="no-break" style={{ marginTop: 6 }}>
@@ -668,10 +680,11 @@ export default function PreRacePage() {
               ))}
             </div>
           );
-        })}
+          });
+        })()}
 
         {possibilities.length > 0 && (
-          <>
+          <div style={{ breakBefore: "page", pageBreakBefore: "always" }}>
             <PrintH>
               Jour de course — petit déjeuner course
               {isRaceDayCustomized() && <span style={{ color: "#FF4501", marginLeft: 6 }}>✦ Personnalisé</span>}
@@ -690,14 +703,14 @@ export default function PreRacePage() {
                 </div>
               ))}
             </div>
-          </>
+          </div>
         )}
 
         {local.notes && (
-          <>
+          <div style={{ breakBefore: "page", pageBreakBefore: "always" }}>
             <PrintH>Notes & sensations</PrintH>
             <div style={{ fontSize: 11, whiteSpace: "pre-wrap" }}>{local.notes}</div>
-          </>
+          </div>
         )}
       </PrintReport>
     </div>

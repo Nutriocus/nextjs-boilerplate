@@ -11,13 +11,20 @@ import {
   MEAL_ORDER,
   type PreraceDay,
   type PreraceFood,
+  type PreraceRacePossibility,
   type Meal,
 } from "@/data/prerace-plans";
+
+type DayKey = PreraceDay | "J-J";
 
 type PreraceData = {
   poids: number | string;
   gPerKg: { j4: number | string; j3: number | string; j2: number | string; j1: number | string };
   notes: string;
+  // Surcharges spécifiques à l'athlète : si présent, remplace entièrement la section pour ce (jour, repas).
+  customDays?: Partial<Record<PreraceDay, Partial<Record<Meal, PreraceFood[]>>>>;
+  // Surcharge pour les 3 possibilités du Jour J.
+  customRaceDay?: PreraceRacePossibility[];
 };
 
 const DEFAULT: PreraceData = {
@@ -31,7 +38,6 @@ function toNum(v: unknown): number {
   return isNaN(n) ? 0 : n;
 }
 
-type DayKey = PreraceDay | "J-J";
 const DAYS: { k: DayKey; label: string; desc: string }[] = [
   { k: "J-4", label: "J-4", desc: "Début de la charge progressive — féculents bien tolérés" },
   { k: "J-3", label: "J-3", desc: "Montée de la charge glucidique" },
@@ -71,6 +77,57 @@ function FoodCard({ item }: { item: PreraceFood }) {
   );
 }
 
+function FoodEditor({
+  items,
+  onChange,
+}: {
+  items: PreraceFood[];
+  onChange: (next: PreraceFood[]) => void;
+}) {
+  const updateItem = (idx: number, key: keyof PreraceFood, value: string) => {
+    onChange(items.map((it, i) => (i === idx ? { ...it, [key]: value } : it)));
+  };
+  const removeItem = (idx: number) => onChange(items.filter((_, i) => i !== idx));
+  const addItem = () => onChange([...items, { food: "", qty: "", tip: "" }]);
+
+  return (
+    <div className="flex flex-col gap-2">
+      {items.map((it, i) => (
+        <div key={i} className="grid grid-cols-1 md:grid-cols-[1fr_1.2fr_1.4fr_auto] gap-1.5">
+          <input
+            className="input"
+            placeholder="Aliment"
+            value={it.food}
+            onChange={(e) => updateItem(i, "food", e.target.value)}
+          />
+          <input
+            className="input"
+            placeholder="Quantité"
+            value={it.qty}
+            onChange={(e) => updateItem(i, "qty", e.target.value)}
+          />
+          <input
+            className="input"
+            placeholder="Conseil (optionnel)"
+            value={it.tip}
+            onChange={(e) => updateItem(i, "tip", e.target.value)}
+          />
+          <button
+            onClick={() => removeItem(i)}
+            className="btn-ghost btn-sm"
+            style={{ color: "var(--color-danger)" }}
+          >
+            ✕
+          </button>
+        </div>
+      ))}
+      <button onClick={addItem} className="btn-ghost btn-xs self-start mt-1">
+        + Ajouter un aliment
+      </button>
+    </div>
+  );
+}
+
 export default function PreRacePage() {
   const [profile] = useAthleteData<{ poids?: number | string }>("profile", {});
   const [data, setData, loaded] = useAthleteData<PreraceData>("prerace", DEFAULT);
@@ -78,6 +135,11 @@ export default function PreRacePage() {
   const [selectedDay, setSelectedDay] = useState<DayKey>("J-4");
   const [selectedMeal, setSelectedMeal] = useState<Meal | "tous">("tous");
   const [selectedPossibility, setSelectedPossibility] = useState(0);
+
+  // Édition par repas (jour + repas) ou par possibilité (jour J)
+  const [editingMeal, setEditingMeal] = useState<{ day: PreraceDay; meal: Meal } | null>(null);
+  const [editBuffer, setEditBuffer] = useState<PreraceFood[]>([]);
+  const [editingRace, setEditingRace] = useState<PreraceRacePossibility[] | null>(null);
 
   useEffect(() => {
     if (loaded) {
@@ -93,20 +155,84 @@ export default function PreRacePage() {
   const bucket = closestWeightBucket(poids);
   const weightPlan = PRERACE_PLANS[bucket];
 
-  const updatePoids = (v: string) => {
-    const d = { ...local, poids: v };
-    setLocal(d);
-    setData(d);
+  const persist = (next: PreraceData) => {
+    setLocal(next);
+    setData(next);
   };
-  const updateGperKg = (k: keyof PreraceData["gPerKg"], v: string) => {
-    const d = { ...local, gPerKg: { ...local.gPerKg, [k]: toNum(v) } };
-    setLocal(d);
-    setData(d);
+
+  const updatePoids = (v: string) => persist({ ...local, poids: v });
+  const updateGperKg = (k: keyof PreraceData["gPerKg"], v: string) =>
+    persist({ ...local, gPerKg: { ...local.gPerKg, [k]: toNum(v) } });
+  const updateNotes = (v: string) => persist({ ...local, notes: v });
+
+  // ============== Helpers d'override ==============
+  const getEffectiveMealItems = (day: PreraceDay, meal: Meal): PreraceFood[] => {
+    const custom = local.customDays?.[day]?.[meal];
+    if (custom) return custom;
+    return weightPlan?.days[day]?.[meal] || [];
   };
-  const updateNotes = (v: string) => {
-    const d = { ...local, notes: v };
-    setLocal(d);
-    setData(d);
+
+  const isMealCustomized = (day: PreraceDay, meal: Meal): boolean =>
+    Boolean(local.customDays?.[day]?.[meal]);
+
+  const saveMealOverride = (day: PreraceDay, meal: Meal, items: PreraceFood[]) => {
+    const cleaned = items
+      .map((it) => ({ food: it.food.trim(), qty: it.qty.trim(), tip: it.tip.trim() }))
+      .filter((it) => it.food);
+    const customDays = { ...(local.customDays || {}) };
+    customDays[day] = { ...(customDays[day] || {}), [meal]: cleaned };
+    persist({ ...local, customDays });
+    setEditingMeal(null);
+  };
+
+  const resetMealOverride = (day: PreraceDay, meal: Meal) => {
+    if (!local.customDays?.[day]?.[meal]) return;
+    if (!confirm(`Réinitialiser ${MEAL_LABELS[meal]} de ${day} au plan standard ${bucket} kg ?`)) return;
+    const customDays = { ...local.customDays };
+    const dayMap = { ...(customDays[day] || {}) };
+    delete dayMap[meal];
+    if (Object.keys(dayMap).length === 0) delete customDays[day];
+    else customDays[day] = dayMap;
+    persist({ ...local, customDays });
+  };
+
+  const startEditMeal = (day: PreraceDay, meal: Meal) => {
+    setEditBuffer(getEffectiveMealItems(day, meal).map((it) => ({ ...it })));
+    setEditingMeal({ day, meal });
+  };
+
+  const getEffectiveRaceDay = (): PreraceRacePossibility[] =>
+    local.customRaceDay || weightPlan?.raceDay || [];
+  const isRaceDayCustomized = (): boolean => Boolean(local.customRaceDay);
+
+  const startEditRaceDay = () => {
+    const base = getEffectiveRaceDay();
+    const seed: PreraceRacePossibility[] =
+      base.length > 0
+        ? base.map((p) => ({ ...p, items: p.items.map((it) => ({ ...it })) }))
+        : [{ label: "Possibilité 1", description: "", items: [{ food: "", qty: "", tip: "" }] }];
+    setEditingRace(seed);
+  };
+  const saveRaceDayOverride = () => {
+    if (!editingRace) return;
+    const cleaned = editingRace
+      .map((p) => ({
+        label: p.label.trim() || "Possibilité",
+        description: p.description?.trim() || "",
+        items: p.items
+          .map((it) => ({ food: it.food.trim(), qty: it.qty.trim(), tip: it.tip.trim() }))
+          .filter((it) => it.food),
+      }))
+      .filter((p) => p.items.length > 0);
+    persist({ ...local, customRaceDay: cleaned });
+    setEditingRace(null);
+  };
+  const resetRaceDayOverride = () => {
+    if (!local.customRaceDay) return;
+    if (!confirm(`Réinitialiser le Jour J au plan standard ${bucket} kg ?`)) return;
+    const next = { ...local };
+    delete next.customRaceDay;
+    persist(next);
   };
 
   if (!loaded) {
@@ -121,13 +247,18 @@ export default function PreRacePage() {
   const dayDescriptor = DAYS.find((d) => d.k === selectedDay)!;
   const isJJ = selectedDay === "J-J";
 
-  // For non-JJ days, retrieve meals from the weight plan
-  const dayPlan = !isJJ ? weightPlan?.days[selectedDay as PreraceDay] : undefined;
-  const availableMeals: Meal[] = !isJJ && dayPlan ? MEAL_ORDER.filter((m) => (dayPlan[m] || []).length > 0) : [];
+  // Build per-day meal map applying overrides
+  const buildDayMealsWithOverrides = (day: PreraceDay): Record<Meal, PreraceFood[]> => {
+    const out = { petit_dej: [], collation: [], dejeuner: [], malto: [], diner: [] } as Record<Meal, PreraceFood[]>;
+    for (const m of MEAL_ORDER) out[m] = getEffectiveMealItems(day, m);
+    return out;
+  };
+
+  const dayPlan = !isJJ ? buildDayMealsWithOverrides(selectedDay as PreraceDay) : null;
+  const availableMeals: Meal[] = dayPlan ? MEAL_ORDER.filter((m) => (dayPlan[m] || []).length > 0) : [];
   const totalItems = availableMeals.reduce((s, m) => s + (dayPlan?.[m]?.length || 0), 0);
 
-  // For JJ, retrieve race day possibilities
-  const possibilities = weightPlan?.raceDay || [];
+  const possibilities = getEffectiveRaceDay();
 
   const gKey = (selectedDay === "J-J" ? "j1" : selectedDay.replace("J-", "j").toLowerCase()) as keyof PreraceData["gPerKg"];
   const gk = toNum(local.gPerKg[gKey]);
@@ -139,7 +270,7 @@ export default function PreRacePage() {
         <PageHeader
           kicker="Avant la course"
           title="Préparation alimentaire (J-4 → Jour J)"
-          desc="Plan détaillé par jour, organisé par repas. Sélectionne le jour puis le repas que tu prépares."
+          desc="Plan détaillé par jour, organisé par repas. Personnalisable repas par repas pour s'adapter à l'athlète."
           action={<PrintButton label="Exporter en PDF" />}
         />
 
@@ -175,6 +306,8 @@ export default function PreRacePage() {
                 setSelectedDay(d.k);
                 setSelectedMeal("tous");
                 setSelectedPossibility(0);
+                setEditingMeal(null);
+                setEditingRace(null);
               }}
               className={selectedDay === d.k ? "btn-primary btn-sm" : "btn-ghost btn-sm"}
               style={{ minWidth: 90 }}
@@ -204,12 +337,99 @@ export default function PreRacePage() {
             )}
           </div>
 
-          {/* JOUR J : possibilités du race day */}
+          {/* JOUR J : possibilités du race day + édition globale */}
           {isJJ ? (
             <div className="p-4">
-              {possibilities.length === 0 ? (
+              <div className="flex justify-end gap-2 mb-3">
+                {isRaceDayCustomized() && (
+                  <>
+                    <span className="badge" style={{ background: "rgba(255,69,1,0.12)", color: "var(--color-primary)" }}>
+                      ✦ Personnalisé
+                    </span>
+                    <button onClick={resetRaceDayOverride} className="btn-ghost btn-xs">
+                      Réinitialiser au plan standard
+                    </button>
+                  </>
+                )}
+                {!editingRace && (
+                  <button onClick={startEditRaceDay} className="btn-dark btn-sm">
+                    ✎ Modifier les possibilités
+                  </button>
+                )}
+              </div>
+
+              {editingRace ? (
+                <div className="card p-3" style={{ border: "2px solid var(--color-primary)" }}>
+                  <div className="flex flex-col gap-4">
+                    {editingRace.map((p, i) => (
+                      <div key={i} className="bg-[var(--color-surface-2)] rounded-lg p-3">
+                        <div className="grid grid-cols-1 md:grid-cols-[1fr_2fr_auto] gap-2 mb-2 items-end">
+                          <Field label="Titre">
+                            <input
+                              className="input"
+                              value={p.label}
+                              onChange={(e) =>
+                                setEditingRace(
+                                  editingRace.map((q, idx) => (idx === i ? { ...q, label: e.target.value } : q)),
+                                )
+                              }
+                            />
+                          </Field>
+                          <Field label="Description (optionnel)">
+                            <input
+                              className="input"
+                              value={p.description || ""}
+                              onChange={(e) =>
+                                setEditingRace(
+                                  editingRace.map((q, idx) => (idx === i ? { ...q, description: e.target.value } : q)),
+                                )
+                              }
+                            />
+                          </Field>
+                          <button
+                            onClick={() => setEditingRace(editingRace.filter((_, idx) => idx !== i))}
+                            className="btn-ghost btn-sm"
+                            style={{ color: "var(--color-danger)" }}
+                          >
+                            Supprimer
+                          </button>
+                        </div>
+                        <FoodEditor
+                          items={p.items}
+                          onChange={(next) =>
+                            setEditingRace(editingRace.map((q, idx) => (idx === i ? { ...q, items: next } : q)))
+                          }
+                        />
+                      </div>
+                    ))}
+                    <button
+                      onClick={() =>
+                        setEditingRace([
+                          ...editingRace,
+                          {
+                            label: `Possibilité ${editingRace.length + 1}`,
+                            description: "",
+                            items: [{ food: "", qty: "", tip: "" }],
+                          },
+                        ])
+                      }
+                      className="btn-ghost btn-sm self-start"
+                    >
+                      + Ajouter une possibilité
+                    </button>
+                  </div>
+                  <div className="flex justify-end gap-2 mt-3">
+                    <button onClick={() => setEditingRace(null)} className="btn-ghost btn-sm">
+                      Annuler
+                    </button>
+                    <button onClick={saveRaceDayOverride} className="btn-primary btn-sm">
+                      Enregistrer
+                    </button>
+                  </div>
+                </div>
+              ) : possibilities.length === 0 ? (
                 <Empty>
-                  Les possibilités du jour de course pour {bucket} kg ne sont pas encore renseignées par ton coach.
+                  Les possibilités du jour de course pour {bucket} kg ne sont pas encore renseignées.
                 </Empty>
               ) : (
                 <>
@@ -260,39 +480,133 @@ export default function PreRacePage() {
                       style={selectedMeal === m ? { background: MEAL_COLORS[m] } : {}}
                     >
                       {MEAL_ICONS[m]} {MEAL_LABELS[m]} ({(dayPlan?.[m] || []).length})
+                      {isMealCustomized(selectedDay as PreraceDay, m) && " ✦"}
                     </button>
                   ))}
                 </div>
               )}
 
               <div className="p-4">
-                {!dayPlan || availableMeals.length === 0 ? (
-                  <Empty>
-                    Le plan {dayDescriptor.label} pour {bucket} kg n&apos;est pas encore renseigné par ton coach.
-                  </Empty>
+                {availableMeals.length === 0 ? (
+                  <div className="space-y-3">
+                    <Empty>
+                      Le plan {dayDescriptor.label} pour {bucket} kg n&apos;est pas encore renseigné.
+                      Tu peux créer un repas personnalisé pour cet athlète.
+                    </Empty>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {MEAL_ORDER.map((m) => (
+                        <button
+                          key={m}
+                          onClick={() => {
+                            setEditBuffer([{ food: "", qty: "", tip: "" }]);
+                            setEditingMeal({ day: selectedDay as PreraceDay, meal: m });
+                          }}
+                          className="btn-ghost btn-sm"
+                        >
+                          + {MEAL_ICONS[m]} {MEAL_LABELS[m]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ) : selectedMeal === "tous" ? (
                   <div className="space-y-4">
-                    {availableMeals.map((m) => (
-                      <div key={m}>
-                        <div
-                          className="text-white font-bold text-[11px] uppercase rounded-lg px-3 py-1.5 mb-2"
-                          style={{ background: MEAL_COLORS[m], letterSpacing: ".08em" }}
-                        >
-                          {MEAL_ICONS[m]} {MEAL_LABELS[m]}
+                    {availableMeals.map((m) => {
+                      const customized = isMealCustomized(selectedDay as PreraceDay, m);
+                      return (
+                        <div key={m}>
+                          <div
+                            className="flex items-center gap-2 text-white font-bold text-[11px] uppercase rounded-lg px-3 py-1.5 mb-2"
+                            style={{ background: MEAL_COLORS[m], letterSpacing: ".08em" }}
+                          >
+                            <span>{MEAL_ICONS[m]} {MEAL_LABELS[m]}</span>
+                            {customized && (
+                              <span
+                                className="text-[9px] px-1.5 py-0.5 rounded"
+                                style={{ background: "rgba(255,255,255,0.25)" }}
+                              >
+                                ✦ Personnalisé
+                              </span>
+                            )}
+                            <span style={{ flex: 1 }} />
+                            <button
+                              onClick={() => startEditMeal(selectedDay as PreraceDay, m)}
+                              className="text-[10px] px-2 py-0.5 rounded"
+                              style={{ background: "rgba(255,255,255,0.18)", color: "#fff" }}
+                            >
+                              ✎ Modifier
+                            </button>
+                            {customized && (
+                              <button
+                                onClick={() => resetMealOverride(selectedDay as PreraceDay, m)}
+                                className="text-[10px] px-2 py-0.5 rounded"
+                                style={{ background: "rgba(255,255,255,0.10)", color: "#fff" }}
+                              >
+                                ↺ Reset
+                              </button>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {(dayPlan?.[m] || []).map((it, i) => (
+                              <FoodCard key={i} item={it} />
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  (() => {
+                    const m = selectedMeal as Meal;
+                    const customized = isMealCustomized(selectedDay as PreraceDay, m);
+                    return (
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          {customized && (
+                            <span className="badge" style={{ background: "rgba(255,69,1,0.12)", color: "var(--color-primary)" }}>
+                              ✦ Personnalisé
+                            </span>
+                          )}
+                          <span style={{ flex: 1 }} />
+                          <button onClick={() => startEditMeal(selectedDay as PreraceDay, m)} className="btn-dark btn-sm">
+                            ✎ Modifier
+                          </button>
+                          {customized && (
+                            <button onClick={() => resetMealOverride(selectedDay as PreraceDay, m)} className="btn-ghost btn-sm">
+                              Réinitialiser au plan standard
+                            </button>
+                          )}
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                          {(dayPlan[m] || []).map((it, i) => (
+                          {(dayPlan?.[m] || []).map((it, i) => (
                             <FoodCard key={i} item={it} />
                           ))}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                    {(dayPlan[selectedMeal] || []).map((it, i) => (
-                      <FoodCard key={i} item={it} />
-                    ))}
+                    );
+                  })()
+                )}
+
+                {/* Editor inline du repas */}
+                {editingMeal && editingMeal.day === selectedDay && (
+                  <div className="card mt-4 p-3" style={{ border: "2px solid var(--color-primary)" }}>
+                    <div className="font-extrabold mb-2" style={{ fontFamily: "var(--font-display)" }}>
+                      ✎ Édition — {MEAL_ICONS[editingMeal.meal]} {MEAL_LABELS[editingMeal.meal]} ({editingMeal.day})
+                    </div>
+                    <div className="text-xs text-[var(--color-text-muted)] mb-3">
+                      Ces modifications ne s&apos;appliquent qu&apos;à cet athlète et écrasent le plan standard {bucket} kg pour ce repas.
+                    </div>
+                    <FoodEditor items={editBuffer} onChange={setEditBuffer} />
+                    <div className="flex justify-end gap-2 mt-3">
+                      <button onClick={() => setEditingMeal(null)} className="btn-ghost btn-sm">
+                        Annuler
+                      </button>
+                      <button
+                        onClick={() => saveMealOverride(editingMeal.day, editingMeal.meal, editBuffer)}
+                        className="btn-primary btn-sm"
+                      >
+                        Enregistrer
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -327,20 +641,22 @@ export default function PreRacePage() {
         subtitle={poids ? `${poids} kg · Cibles glucidiques jour par jour` : undefined}
       >
         {(["J-4", "J-3", "J-2", "J-1"] as PreraceDay[]).map((day) => {
-          const plan = weightPlan?.days[day];
-          if (!plan) return null;
+          const meals = buildDayMealsWithOverrides(day);
+          const visible = MEAL_ORDER.filter((m) => (meals[m] || []).length > 0);
+          if (visible.length === 0) return null;
           const gkLocal = toNum(local.gPerKg[day.replace("J-", "j").toLowerCase() as keyof PreraceData["gPerKg"]]);
           const total = Math.round(gkLocal * poids);
           return (
             <div key={day} style={{ marginTop: 12 }}>
               <PrintH>{day} — Cible {total} g CHO</PrintH>
-              {MEAL_ORDER.filter((m) => (plan[m] || []).length > 0).map((m) => (
+              {visible.map((m) => (
                 <div key={m} className="no-break" style={{ marginTop: 6 }}>
                   <div style={{ fontWeight: 800, fontSize: 11, textTransform: "uppercase", letterSpacing: ".05em", marginBottom: 4 }}>
                     {MEAL_LABELS[m]}
+                    {isMealCustomized(day, m) && <span style={{ color: "#FF4501", marginLeft: 6 }}>✦ Personnalisé</span>}
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 12px" }}>
-                    {(plan[m] || []).map((it, i) => (
+                    {meals[m].map((it, i) => (
                       <div key={i} style={{ border: "1px solid #e6e6e3", borderRadius: 8, padding: "5px 9px" }}>
                         <div style={{ fontWeight: 800, color: "#FF4501", fontSize: 11 }}>{it.food}</div>
                         {it.qty && <div style={{ fontSize: 10.5 }}>{it.qty}</div>}
@@ -356,7 +672,10 @@ export default function PreRacePage() {
 
         {possibilities.length > 0 && (
           <>
-            <PrintH>Jour de course — petit déjeuner course</PrintH>
+            <PrintH>
+              Jour de course — petit déjeuner course
+              {isRaceDayCustomized() && <span style={{ color: "#FF4501", marginLeft: 6 }}>✦ Personnalisé</span>}
+            </PrintH>
             <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(possibilities.length, 3)}, 1fr)`, gap: 8 }}>
               {possibilities.map((p, idx) => (
                 <div key={idx} className="no-break" style={{ border: "1px solid #e6e6e3", borderRadius: 9, padding: "8px 10px" }}>

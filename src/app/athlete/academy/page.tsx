@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAthleteData } from "@/lib/athlete-storage";
+import { useCoachData } from "@/lib/coach-storage";
+import { supabase } from "@/lib/supabase";
 import { PageHeader, Empty } from "@/components/ui/PageHeader";
 import { VideoEmbed } from "@/components/ui/VideoEmbed";
 
-type Lesson = { id: string; title: string; url: string; duration: string; done: boolean };
+type Lesson = { id: string; title: string; url: string; duration: string };
 type Module = { id: string; title: string; lessons: Lesson[] };
 type Formation = { id: string; title: string; desc: string; modules: Module[] };
 
@@ -20,7 +22,7 @@ const DEFAULT: Formation[] = [
       {
         id: "m1",
         title: "Module 1 — Introduction",
-        lessons: [{ id: newId(), title: "Bienvenue & objectifs", url: "", duration: "", done: false }],
+        lessons: [{ id: newId(), title: "Bienvenue & objectifs", url: "", duration: "" }],
       },
     ],
   },
@@ -32,23 +34,47 @@ const DEFAULT: Formation[] = [
       {
         id: "m1",
         title: "Module 1 — Stratégie de course",
-        lessons: [{ id: newId(), title: "Construire sa stratégie", url: "", duration: "", done: false }],
+        lessons: [{ id: newId(), title: "Construire sa stratégie", url: "", duration: "" }],
       },
     ],
   },
 ];
 
-function progress(f: Formation): { t: number; d: number; pct: number } {
-  let t = 0, d = 0;
-  f.modules.forEach((m) => m.lessons.forEach((l) => { t++; if (l.done) d++; }));
+function progressOf(f: Formation, doneMap: Record<string, boolean>): { t: number; d: number; pct: number } {
+  let t = 0;
+  let d = 0;
+  f.modules.forEach((m) =>
+    m.lessons.forEach((l) => {
+      t++;
+      if (doneMap[l.id]) d++;
+    }),
+  );
   return { t, d, pct: t ? Math.round((d / t) * 100) : 0 };
 }
 
 export default function AcademyPage() {
-  const [academy, setAcademy, loaded] = useAthleteData<Formation[]>("academy", DEFAULT);
+  // Shared library across all athletes of the coach
+  const [academy, setAcademy, loadedAcademy] = useCoachData<Formation[]>("academy", DEFAULT);
+  // Personal progress per athlete (lesson id → done)
+  const [done, setDone, loadedDone] = useAthleteData<Record<string, boolean>>("academy_progress", {});
+
   const [view, setView] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
+  const [isCoach, setIsCoach] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: coach } = await supabase
+        .from("coaches")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      setIsCoach(!!coach);
+    })();
+  }, []);
 
   const f = academy.find((x) => x.id === view);
 
@@ -56,7 +82,7 @@ export default function AcademyPage() {
     setAcademy((p) => p.map((x) => (x.id === id ? { ...x, ...patch } : x)));
   }
   function delF(id: string) {
-    if (confirm("Supprimer cette formation ?")) {
+    if (confirm("Supprimer cette formation (pour tous les athlètes) ?")) {
       setAcademy((p) => p.filter((x) => x.id !== id));
       setView(null);
     }
@@ -81,7 +107,7 @@ export default function AcademyPage() {
   }
   function addLesson(mi: number) {
     if (!f) return;
-    updateModule(mi, { lessons: [...f.modules[mi].lessons, { id: newId(), title: "Nouvelle leçon", url: "", duration: "", done: false }] });
+    updateModule(mi, { lessons: [...f.modules[mi].lessons, { id: newId(), title: "Nouvelle leçon", url: "", duration: "" }] });
   }
   function updateLesson(mi: number, li: number, patch: Partial<Lesson>) {
     if (!f) return;
@@ -91,12 +117,11 @@ export default function AcademyPage() {
     if (!f) return;
     updateModule(mi, { lessons: f.modules[mi].lessons.filter((_, i) => i !== li) });
   }
-  function toggleDone(mi: number, li: number) {
-    if (!f) return;
-    updateLesson(mi, li, { done: !f.modules[mi].lessons[li].done });
+  function toggleDone(lesson: Lesson) {
+    setDone((p) => ({ ...p, [lesson.id]: !p[lesson.id] }));
   }
 
-  if (!loaded) {
+  if (!loadedAcademy || !loadedDone) {
     return (
       <div>
         <PageHeader kicker="Académie Nutriocus" title="Académie" />
@@ -106,7 +131,7 @@ export default function AcademyPage() {
   }
 
   if (f) {
-    const prog = progress(f);
+    const prog = progressOf(f, done);
     const lesson = selectedLesson || (f.modules[0]?.lessons[0] ?? null);
 
     return (
@@ -115,15 +140,17 @@ export default function AcademyPage() {
           <button onClick={() => { setView(null); setSelectedLesson(null); setEditing(false); }} className="btn-ghost btn-sm">
             ← Toutes les formations
           </button>
-          <div className="flex gap-2">
-            <button onClick={() => setEditing((e) => !e)} className={editing ? "btn-primary btn-sm" : "btn-ghost btn-sm"}>
-              {editing ? "Terminer l'édition" : "Éditer"}
-            </button>
-            <button onClick={() => delF(f.id)} className="btn-ghost btn-sm" style={{ color: "var(--color-danger)" }}>Supprimer</button>
-          </div>
+          {isCoach && (
+            <div className="flex gap-2">
+              <button onClick={() => setEditing((e) => !e)} className={editing ? "btn-primary btn-sm" : "btn-ghost btn-sm"}>
+                {editing ? "Terminer l'édition" : "✎ Éditer (global)"}
+              </button>
+              <button onClick={() => delF(f.id)} className="btn-ghost btn-sm" style={{ color: "var(--color-danger)" }}>Supprimer</button>
+            </div>
+          )}
         </div>
 
-        {editing ? (
+        {editing && isCoach ? (
           <input className="input text-2xl font-extrabold mb-1.5" value={f.title} onChange={(e) => updateF(f.id, { title: e.target.value })} />
         ) : (
           <h1
@@ -132,6 +159,12 @@ export default function AcademyPage() {
           >
             {f.title}
           </h1>
+        )}
+
+        {editing && isCoach && (
+          <div className="text-xs text-[var(--color-primary)] mb-2">
+            ✏ Mode édition coach — tes modifications sont partagées avec tous tes athlètes.
+          </div>
         )}
 
         <div className="flex items-center gap-3 mb-4 flex-wrap">
@@ -149,14 +182,14 @@ export default function AcademyPage() {
           </div>
 
           <div>
-            {editing && (
+            {editing && isCoach && (
               <div className="mb-2.5">
                 <button onClick={addModule} className="btn-primary btn-sm">+ Module</button>
               </div>
             )}
             {f.modules.map((m, mi) => (
               <div key={m.id} className="card p-3 mb-2.5">
-                {editing ? (
+                {editing && isCoach ? (
                   <div className="flex gap-1.5 mb-1.5">
                     <input className="input font-bold" value={m.title} onChange={(e) => updateModule(mi, { title: e.target.value })} />
                     <button onClick={() => delModule(mi)} className="btn-ghost btn-xs" style={{ color: "var(--color-danger)" }}>✕</button>
@@ -166,7 +199,7 @@ export default function AcademyPage() {
                 )}
                 {m.lessons.map((l, li) => (
                   <div key={l.id} className="mb-1.5">
-                    {editing ? (
+                    {editing && isCoach ? (
                       <div className="flex flex-col gap-1 bg-[var(--color-surface-2)] p-2 rounded-lg">
                         <div className="flex gap-1.5">
                           <input className="input text-sm" placeholder="Titre leçon" value={l.title} onChange={(e) => updateLesson(mi, li, { title: e.target.value })} />
@@ -181,7 +214,7 @@ export default function AcademyPage() {
                         className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer"
                         style={{ background: lesson?.id === l.id ? "#fff3ee" : "transparent" }}
                       >
-                        <input type="checkbox" checked={l.done} onClick={(e) => e.stopPropagation()} onChange={() => toggleDone(mi, li)} />
+                        <input type="checkbox" checked={!!done[l.id]} onClick={(e) => e.stopPropagation()} onChange={() => toggleDone(l)} />
                         <span className="flex-1 text-sm" style={{ fontWeight: lesson?.id === l.id ? 700 : 500 }}>
                           {l.title}
                         </span>
@@ -191,7 +224,7 @@ export default function AcademyPage() {
                     )}
                   </div>
                 ))}
-                {editing && <button onClick={() => addLesson(mi)} className="btn-ghost btn-xs">+ Leçon</button>}
+                {editing && isCoach && <button onClick={() => addLesson(mi)} className="btn-ghost btn-xs">+ Leçon</button>}
               </div>
             ))}
           </div>
@@ -205,17 +238,22 @@ export default function AcademyPage() {
       <PageHeader
         kicker="Académie Nutriocus"
         title="Académie"
-        action={<button onClick={addF} className="btn-primary">+ Formation</button>}
-        desc="Tes formations complètes et leurs vidéos. Suis ta progression leçon par leçon."
+        action={isCoach ? <button onClick={addF} className="btn-primary">+ Formation</button> : undefined}
+        desc={
+          isCoach
+            ? "Bibliothèque partagée avec tous tes athlètes Mission Performance. Tes modifications sont visibles par tous."
+            : "Tes formations complètes et leurs vidéos. Suis ta progression leçon par leçon."
+        }
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {academy.map((f) => {
-          const p = progress(f);
+          const p = progressOf(f, done);
           return (
             <div key={f.id} className="card overflow-hidden cursor-pointer" onClick={() => setView(f.id)}>
-              <div className="h-[90px] bg-[var(--color-dark)] flex items-center justify-center text-[var(--color-primary)] font-display font-extrabold text-2xl">
-                NUTRIOCUS<span className="text-[var(--color-primary)]">.</span>
+              <div className="h-[90px] bg-[var(--color-dark)] flex items-center justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logos/nutriocus-white.png" alt="NUTRIOCUS" style={{ height: 38, width: "auto" }} />
               </div>
               <div className="p-4">
                 <div className="font-extrabold text-base mb-1">{f.title}</div>

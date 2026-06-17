@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo } from "react";
 import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader, Empty, Field } from "@/components/ui/PageHeader";
 import { PrintReport, PrintH, PrintButton, PrintKpi } from "@/components/ui/PrintReport";
 import { PRODUCTS_CATALOG, Product } from "@/lib/products-catalog";
-import { parseRacePlanFromPdfFile } from "@/lib/parse-race-plan-pdf";
 
 // ============================================================
 // TYPES
@@ -325,9 +324,6 @@ export default function RaceStrategyPage() {
   const [planEdit, setPlanEdit] = useState<RacePlan | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
-  const [importingPdf, setImportingPdf] = useState(false);
-  const [pdfDebug, setPdfDebug] = useState<{ lines: string[]; reason: string } | null>(null);
-  const pdfInputRef = useRef<HTMLInputElement | null>(null);
   const [printPlan, setPrintPlan] = useState<RacePlan | null>(null);
   const [printStrat, setPrintStrat] = useState<Strategy | null>(null);
 
@@ -376,47 +372,6 @@ export default function RaceStrategyPage() {
     setRacePlans((p) => [...p, parsed]);
     setImportText("");
     setImportOpen(false);
-  };
-
-  const handleImportPdf = async (file: File) => {
-    setImportingPdf(true);
-    setPdfDebug(null);
-    try {
-      const { plan: parsed, rawLines } = await parseRacePlanFromPdfFile(file);
-      if (!parsed) {
-        setPdfDebug({
-          lines: rawLines,
-          reason:
-            rawLines.length === 0
-              ? "Aucun texte n'a pu être extrait du PDF (PDF scanné/image ?)."
-              : "Texte extrait mais format non reconnu (en-têtes COURSE/OBJECTIF/GLUCIDES/HYDRATATION manquants).",
-        });
-        return;
-      }
-      const plan: RacePlan = {
-        id: newId(),
-        name: parsed.name || "Plan importé",
-        km: parsed.km,
-        dplus: parsed.dplus,
-        objectif: parsed.objectif,
-        choPerH: parsed.choPerH,
-        hydratationPerH: parsed.hydratationPerH,
-        avantCourse: parsed.avantCourse,
-        segments: parsed.segments,
-      };
-      // Ouvre l'éditeur pour relecture/correction avant enregistrement
-      setPlanEdit(plan);
-      setImportOpen(false);
-    } catch (e) {
-      console.error(e);
-      setPdfDebug({
-        lines: [],
-        reason: "Erreur lors de la lecture du PDF : " + (e as Error).message,
-      });
-    } finally {
-      setImportingPdf(false);
-      if (pdfInputRef.current) pdfInputRef.current.value = "";
-    }
   };
 
   const downloadExport = (plan: RacePlan) => {
@@ -792,75 +747,9 @@ export default function RaceStrategyPage() {
       {tab === "plans" && (
         <>
           <div className="flex justify-end gap-2 mb-3.5 flex-wrap">
-            <input
-              ref={pdfInputRef}
-              type="file"
-              accept="application/pdf,.pdf"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) handleImportPdf(f);
-              }}
-            />
-            <button
-              onClick={() => pdfInputRef.current?.click()}
-              disabled={importingPdf}
-              className="btn-ghost"
-              title="Importer un plan depuis un PDF Nutriocus"
-            >
-              {importingPdf ? "Lecture du PDF…" : "📄 Importer un PDF"}
-            </button>
-            <button onClick={() => setImportOpen((o) => !o)} className="btn-ghost">Importer (texte)</button>
+            <button onClick={() => setImportOpen((o) => !o)} className="btn-ghost">Importer un plan</button>
             <button onClick={() => setPlanEdit(blankRacePlan())} className="btn-primary">+ Nouveau plan</button>
           </div>
-
-          {pdfDebug && (
-            <div className="card p-4 mb-4" style={{ border: "2px solid var(--color-danger)" }}>
-              <div className="flex justify-between items-start gap-3 mb-2">
-                <div>
-                  <div className="font-extrabold text-[var(--color-danger)]" style={{ fontFamily: "var(--font-display)" }}>
-                    ⚠ Lecture du PDF — impossible d&apos;importer automatiquement
-                  </div>
-                  <div className="text-sm text-[var(--color-text-muted)] mt-1">{pdfDebug.reason}</div>
-                </div>
-                <button onClick={() => setPdfDebug(null)} className="btn-ghost btn-sm">✕</button>
-              </div>
-              {pdfDebug.lines.length > 0 && (
-                <>
-                  <div className="text-xs text-[var(--color-text-muted)] mt-2 mb-1">
-                    Texte extrait par le PDF reader ({pdfDebug.lines.length} lignes) — copie-colle ce contenu et envoie-le moi pour ajuster le parser :
-                  </div>
-                  <textarea
-                    className="input"
-                    readOnly
-                    style={{ minHeight: 200, resize: "vertical", fontFamily: "monospace", fontSize: 11 }}
-                    value={pdfDebug.lines.map((l, i) => `${i + 1}. ${l}`).join("\n")}
-                  />
-                  <div className="flex justify-end gap-2 mt-2">
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(pdfDebug.lines.join("\n"));
-                        alert("Texte copié dans le presse-papier.");
-                      }}
-                      className="btn-ghost btn-sm"
-                    >
-                      Copier le texte extrait
-                    </button>
-                    <button
-                      onClick={() => {
-                        setImportText(pdfDebug.lines.join("\n"));
-                        setImportOpen(true);
-                        setPdfDebug(null);
-                      }}
-                      className="btn-dark btn-sm"
-                    >
-                      Coller dans l&apos;import texte
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
 
           {importOpen && (
             <div className="card p-4 mb-4" style={{ border: "2px solid var(--color-dark)" }}>

@@ -5,6 +5,7 @@ import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader, Empty, Field } from "@/components/ui/PageHeader";
 import { VideoEmbed } from "@/components/ui/VideoEmbed";
 import { PrintReport, PrintH, PrintButton } from "@/components/ui/PrintReport";
+import { RichMarkdown } from "@/components/ui/RichMarkdown";
 
 type Consultation = {
   id: string;
@@ -87,7 +88,11 @@ export default function ConsultationsPage() {
           )}
           <div className="card p-5">
             <div className="font-extrabold mb-2">Compte rendu</div>
-            <div className="whitespace-pre-wrap text-sm leading-relaxed">{cur.compteRendu || "—"}</div>
+            {cur.compteRendu ? (
+              <RichMarkdown variant="screen">{cur.compteRendu}</RichMarkdown>
+            ) : (
+              <div className="text-[var(--color-text-muted)] text-sm">—</div>
+            )}
           </div>
         </div>
 
@@ -99,15 +104,16 @@ export default function ConsultationsPage() {
           <PrintH>Compte rendu</PrintH>
           <div
             style={{
-              whiteSpace: "pre-wrap",
-              fontSize: 13,
-              lineHeight: 1.7,
               border: "1px solid #e6e6e3",
               borderRadius: 10,
               padding: "14px 16px",
             }}
           >
-            {cur.compteRendu || "—"}
+            {cur.compteRendu ? (
+              <RichMarkdown variant="print">{cur.compteRendu}</RichMarkdown>
+            ) : (
+              "—"
+            )}
           </div>
           {cur.replay && (
             <div style={{ marginTop: 12, fontSize: 11.5, color: "#787876" }}>
@@ -144,12 +150,15 @@ export default function ConsultationsPage() {
             <Field label="Compte rendu">
               <textarea
                 className="input"
-                style={{ minHeight: 140, resize: "vertical" }}
+                style={{ minHeight: 200, resize: "vertical", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 13 }}
                 value={draft.compteRendu}
                 onChange={(e) => update("compteRendu", e.target.value)}
-                placeholder="Points clés, décisions, axes de travail…"
+                placeholder={`Points clés, décisions, axes de travail…\n\nSupporte le Markdown — copie-colle directement depuis ChatGPT :\n# Titre principal\n## Sous-titre\n**texte en gras**\n- liste à puces\n1. liste numérotée\n[lien](https://...)\n| col1 | col2 |  (tableau)`}
               />
             </Field>
+            <div className="text-xs text-[var(--color-text-muted)] mt-1">
+              ✏️ Markdown supporté (titres #, **gras**, listes, tableaux…). Copie-colle directement depuis ChatGPT.
+            </div>
           </div>
           <div className="flex justify-end gap-2 mt-3">
             <button onClick={() => setOpen(false)} className="btn-ghost">Annuler</button>

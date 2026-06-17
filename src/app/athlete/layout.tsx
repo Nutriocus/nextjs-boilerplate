@@ -3,6 +3,7 @@
 import { useState, Suspense } from "react";
 import { AthleteSidebar } from "@/components/athlete/AthleteSidebar";
 import { MobileTopbar } from "@/components/layout/MobileTopbar";
+import { GlobalAthleteSearch } from "@/components/coach/GlobalAthleteSearch";
 
 function Shell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -23,6 +24,8 @@ function Shell({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
+
+      <GlobalAthleteSearch />
     </div>
   );
 }

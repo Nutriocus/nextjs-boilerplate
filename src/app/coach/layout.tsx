@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { MobileTopbar } from "@/components/layout/MobileTopbar";
+import { GlobalAthleteSearch } from "@/components/coach/GlobalAthleteSearch";
 
 const NAV = [
   {
@@ -118,6 +119,8 @@ export default function CoachLayout({
           {children}
         </div>
       </main>
+
+      <GlobalAthleteSearch />
     </div>
   );
 }

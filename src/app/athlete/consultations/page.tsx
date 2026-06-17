@@ -6,6 +6,14 @@ import { PageHeader, Empty, Field } from "@/components/ui/PageHeader";
 import { VideoEmbed } from "@/components/ui/VideoEmbed";
 import { PrintReport, PrintH, PrintButton } from "@/components/ui/PrintReport";
 import { RichMarkdown } from "@/components/ui/RichMarkdown";
+import { RichTextEditor } from "@/components/ui/RichTextEditor";
+import { RichHtml } from "@/components/ui/RichHtml";
+
+// Heuristic: content starting with '<' is treated as HTML (TipTap), otherwise
+// as legacy plain-text / Markdown so older consultations keep rendering nicely.
+function isHtml(s: string): boolean {
+  return /^\s*</.test(s);
+}
 
 type Consultation = {
   id: string;
@@ -89,7 +97,11 @@ export default function ConsultationsPage() {
           <div className="card p-5">
             <div className="font-extrabold mb-2">Compte rendu</div>
             {cur.compteRendu ? (
-              <RichMarkdown variant="screen">{cur.compteRendu}</RichMarkdown>
+              isHtml(cur.compteRendu) ? (
+                <RichHtml html={cur.compteRendu} variant="screen" />
+              ) : (
+                <RichMarkdown variant="screen">{cur.compteRendu}</RichMarkdown>
+              )
             ) : (
               <div className="text-[var(--color-text-muted)] text-sm">—</div>
             )}
@@ -110,7 +122,11 @@ export default function ConsultationsPage() {
             }}
           >
             {cur.compteRendu ? (
-              <RichMarkdown variant="print">{cur.compteRendu}</RichMarkdown>
+              isHtml(cur.compteRendu) ? (
+                <RichHtml html={cur.compteRendu} variant="print" />
+              ) : (
+                <RichMarkdown variant="print">{cur.compteRendu}</RichMarkdown>
+              )
             ) : (
               "—"
             )}
@@ -148,17 +164,13 @@ export default function ConsultationsPage() {
           </div>
           <div className="mt-2.5">
             <Field label="Compte rendu">
-              <textarea
-                className="input"
-                style={{ minHeight: 200, resize: "vertical", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 13 }}
+              <RichTextEditor
                 value={draft.compteRendu}
-                onChange={(e) => update("compteRendu", e.target.value)}
-                placeholder={`Points clés, décisions, axes de travail…\n\nSupporte le Markdown — copie-colle directement depuis ChatGPT :\n# Titre principal\n## Sous-titre\n**texte en gras**\n- liste à puces\n1. liste numérotée\n[lien](https://...)\n| col1 | col2 |  (tableau)`}
+                onChange={(html) => update("compteRendu", html)}
+                placeholder={"Points clés, décisions, axes de travail…"}
+                minHeight={260}
               />
             </Field>
-            <div className="text-xs text-[var(--color-text-muted)] mt-1">
-              ✏️ Markdown supporté (titres #, **gras**, listes, tableaux…). Copie-colle directement depuis ChatGPT.
-            </div>
           </div>
           <div className="flex justify-end gap-2 mt-3">
             <button onClick={() => setOpen(false)} className="btn-ghost">Annuler</button>

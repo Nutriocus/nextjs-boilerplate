@@ -9,6 +9,7 @@ import { fr } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
 import { loadData } from "@/lib/athlete-storage";
 import { PageHeader, Kpi, Empty } from "@/components/ui/PageHeader";
+import { InstallPrompt } from "@/components/ui/InstallPrompt";
 
 // ============== TYPES ==============
 type AthleteRow = {
@@ -329,6 +330,8 @@ export default function CoachDashboard() {
           </div>
         }
       />
+
+      <InstallPrompt />
 
       {/* KPI grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">

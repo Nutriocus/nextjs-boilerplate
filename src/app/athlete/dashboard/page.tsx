@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { PageHeader, Kpi } from "@/components/ui/PageHeader";
 import { ATHLETE_NAV } from "@/components/athlete/AthleteSidebar";
 import { useAthleteData } from "@/lib/athlete-storage";
+import { InstallPrompt } from "@/components/ui/InstallPrompt";
 
 const DEFAULT_PROFILE = {
   sexe: "Homme",
@@ -248,6 +249,8 @@ export default function AthleteDashboardPage() {
         kicker="Tableau de bord"
         title="Mission Performance"
       />
+
+      <InstallPrompt />
 
       <SuiviHero
         suivi={suivi}

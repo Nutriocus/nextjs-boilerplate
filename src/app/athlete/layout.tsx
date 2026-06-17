@@ -20,7 +20,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         onCloseMobile={() => setOpen(false)}
       />
       <main className="lg:pl-[262px]">
-        <div className="max-w-7xl mx-auto px-4 lg:px-8 pt-[70px] lg:pt-8 pb-8">
+        <div className="max-w-7xl mx-auto px-4 lg:px-8 pt-[96px] lg:pt-8 pb-8">
           {children}
         </div>
       </main>

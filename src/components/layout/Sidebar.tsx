@@ -76,7 +76,7 @@ export function Sidebar({ role = "athlete" }: SidebarProps) {
       {/* Logo */}
       <div className="flex items-center px-4 py-4 border-b border-[var(--color-border)]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/logos/nutriocus-white.png" alt="NUTRIOCUS" style={{ height: 38, width: "auto" }} />
+        <img src="/logos/nutriocus-white.png" alt="NUTRIOCUS" style={{ height: 114, width: "auto" }} />
       </div>
 
       {/* Navigation */}

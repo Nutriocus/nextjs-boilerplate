@@ -43,7 +43,7 @@ export default function CoachLayout({
       <aside className={`sidebar ${open ? "is-open" : ""}`}>
         <div className="px-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logos/nutriocus-white.png" alt="NUTRIOCUS" style={{ height: 44, width: "auto", display: "block", marginLeft: -6 }} />
+          <img src="/logos/nutriocus-white.png" alt="NUTRIOCUS" style={{ height: 132, width: "auto", display: "block", marginLeft: -6 }} />
           <div
             style={{
               fontSize: 10,
@@ -115,7 +115,7 @@ export default function CoachLayout({
       />
 
       <main className="lg:pl-[262px]">
-        <div className="max-w-7xl mx-auto px-4 lg:px-8 pt-[70px] lg:pt-8 pb-8">
+        <div className="max-w-7xl mx-auto px-4 lg:px-8 pt-[96px] lg:pt-8 pb-8">
           {children}
         </div>
       </main>

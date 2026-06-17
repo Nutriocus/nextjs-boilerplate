@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader, Empty, Field } from "@/components/ui/PageHeader";
 import { PrintReport, PrintH, PrintButton, PrintKpi } from "@/components/ui/PrintReport";
 import { PRODUCTS_CATALOG, Product } from "@/lib/products-catalog";
+import { parseRacePlanFromPdfFile } from "@/lib/parse-race-plan-pdf";
 
 // ============================================================
 // TYPES
@@ -324,6 +325,8 @@ export default function RaceStrategyPage() {
   const [planEdit, setPlanEdit] = useState<RacePlan | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
+  const [importingPdf, setImportingPdf] = useState(false);
+  const pdfInputRef = useRef<HTMLInputElement | null>(null);
   const [printPlan, setPrintPlan] = useState<RacePlan | null>(null);
   const [printStrat, setPrintStrat] = useState<Strategy | null>(null);
 
@@ -372,6 +375,37 @@ export default function RaceStrategyPage() {
     setRacePlans((p) => [...p, parsed]);
     setImportText("");
     setImportOpen(false);
+  };
+
+  const handleImportPdf = async (file: File) => {
+    setImportingPdf(true);
+    try {
+      const parsed = await parseRacePlanFromPdfFile(file);
+      if (!parsed) {
+        alert("Impossible de lire ce PDF. Format attendu : plan de course Nutriocus (en-tête COURSE / OBJECTIF / GLUCIDES / HYDRATATION, puis AVANT LA COURSE, puis ravitaillements).");
+        return;
+      }
+      const plan: RacePlan = {
+        id: newId(),
+        name: parsed.name || "Plan importé",
+        km: parsed.km,
+        dplus: parsed.dplus,
+        objectif: parsed.objectif,
+        choPerH: parsed.choPerH,
+        hydratationPerH: parsed.hydratationPerH,
+        avantCourse: parsed.avantCourse,
+        segments: parsed.segments,
+      };
+      // Ouvre l'éditeur pour relecture/correction avant enregistrement
+      setPlanEdit(plan);
+      setImportOpen(false);
+    } catch (e) {
+      console.error(e);
+      alert("Erreur lors de la lecture du PDF : " + (e as Error).message);
+    } finally {
+      setImportingPdf(false);
+      if (pdfInputRef.current) pdfInputRef.current.value = "";
+    }
   };
 
   const downloadExport = (plan: RacePlan) => {
@@ -747,7 +781,25 @@ export default function RaceStrategyPage() {
       {tab === "plans" && (
         <>
           <div className="flex justify-end gap-2 mb-3.5 flex-wrap">
-            <button onClick={() => setImportOpen((o) => !o)} className="btn-ghost">Importer un plan</button>
+            <input
+              ref={pdfInputRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) handleImportPdf(f);
+              }}
+            />
+            <button
+              onClick={() => pdfInputRef.current?.click()}
+              disabled={importingPdf}
+              className="btn-ghost"
+              title="Importer un plan depuis un PDF Nutriocus"
+            >
+              {importingPdf ? "Lecture du PDF…" : "📄 Importer un PDF"}
+            </button>
+            <button onClick={() => setImportOpen((o) => !o)} className="btn-ghost">Importer (texte)</button>
             <button onClick={() => setPlanEdit(blankRacePlan())} className="btn-primary">+ Nouveau plan</button>
           </div>
 

@@ -326,6 +326,7 @@ export default function RaceStrategyPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
   const [importingPdf, setImportingPdf] = useState(false);
+  const [pdfDebug, setPdfDebug] = useState<{ lines: string[]; reason: string } | null>(null);
   const pdfInputRef = useRef<HTMLInputElement | null>(null);
   const [printPlan, setPrintPlan] = useState<RacePlan | null>(null);
   const [printStrat, setPrintStrat] = useState<Strategy | null>(null);
@@ -379,10 +380,17 @@ export default function RaceStrategyPage() {
 
   const handleImportPdf = async (file: File) => {
     setImportingPdf(true);
+    setPdfDebug(null);
     try {
-      const parsed = await parseRacePlanFromPdfFile(file);
+      const { plan: parsed, rawLines } = await parseRacePlanFromPdfFile(file);
       if (!parsed) {
-        alert("Impossible de lire ce PDF. Format attendu : plan de course Nutriocus (en-tête COURSE / OBJECTIF / GLUCIDES / HYDRATATION, puis AVANT LA COURSE, puis ravitaillements).");
+        setPdfDebug({
+          lines: rawLines,
+          reason:
+            rawLines.length === 0
+              ? "Aucun texte n'a pu être extrait du PDF (PDF scanné/image ?)."
+              : "Texte extrait mais format non reconnu (en-têtes COURSE/OBJECTIF/GLUCIDES/HYDRATATION manquants).",
+        });
         return;
       }
       const plan: RacePlan = {
@@ -401,7 +409,10 @@ export default function RaceStrategyPage() {
       setImportOpen(false);
     } catch (e) {
       console.error(e);
-      alert("Erreur lors de la lecture du PDF : " + (e as Error).message);
+      setPdfDebug({
+        lines: [],
+        reason: "Erreur lors de la lecture du PDF : " + (e as Error).message,
+      });
     } finally {
       setImportingPdf(false);
       if (pdfInputRef.current) pdfInputRef.current.value = "";
@@ -802,6 +813,54 @@ export default function RaceStrategyPage() {
             <button onClick={() => setImportOpen((o) => !o)} className="btn-ghost">Importer (texte)</button>
             <button onClick={() => setPlanEdit(blankRacePlan())} className="btn-primary">+ Nouveau plan</button>
           </div>
+
+          {pdfDebug && (
+            <div className="card p-4 mb-4" style={{ border: "2px solid var(--color-danger)" }}>
+              <div className="flex justify-between items-start gap-3 mb-2">
+                <div>
+                  <div className="font-extrabold text-[var(--color-danger)]" style={{ fontFamily: "var(--font-display)" }}>
+                    ⚠ Lecture du PDF — impossible d&apos;importer automatiquement
+                  </div>
+                  <div className="text-sm text-[var(--color-text-muted)] mt-1">{pdfDebug.reason}</div>
+                </div>
+                <button onClick={() => setPdfDebug(null)} className="btn-ghost btn-sm">✕</button>
+              </div>
+              {pdfDebug.lines.length > 0 && (
+                <>
+                  <div className="text-xs text-[var(--color-text-muted)] mt-2 mb-1">
+                    Texte extrait par le PDF reader ({pdfDebug.lines.length} lignes) — copie-colle ce contenu et envoie-le moi pour ajuster le parser :
+                  </div>
+                  <textarea
+                    className="input"
+                    readOnly
+                    style={{ minHeight: 200, resize: "vertical", fontFamily: "monospace", fontSize: 11 }}
+                    value={pdfDebug.lines.map((l, i) => `${i + 1}. ${l}`).join("\n")}
+                  />
+                  <div className="flex justify-end gap-2 mt-2">
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(pdfDebug.lines.join("\n"));
+                        alert("Texte copié dans le presse-papier.");
+                      }}
+                      className="btn-ghost btn-sm"
+                    >
+                      Copier le texte extrait
+                    </button>
+                    <button
+                      onClick={() => {
+                        setImportText(pdfDebug.lines.join("\n"));
+                        setImportOpen(true);
+                        setPdfDebug(null);
+                      }}
+                      className="btn-dark btn-sm"
+                    >
+                      Coller dans l&apos;import texte
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
           {importOpen && (
             <div className="card p-4 mb-4" style={{ border: "2px solid var(--color-dark)" }}>

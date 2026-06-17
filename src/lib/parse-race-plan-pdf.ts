@@ -26,25 +26,47 @@ const newId = () => Math.random().toString(36).slice(2, 9);
 async function extractPdfLines(file: File): Promise<string[]> {
   // Dynamic import keeps pdfjs out of the SSR bundle.
   const pdfjs = await import("pdfjs-dist");
-  // Worker loaded from jsdelivr CDN, version-matched to the lib.
-  pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+
+  // Try to load the worker from CDN. If that fails (CDN blocked, version
+  // mismatch, CORS), fall back to processing on the main thread so the
+  // import still works.
+  let useWorker = true;
+  try {
+    pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+  } catch {
+    useWorker = false;
+  }
 
   const data = await file.arrayBuffer();
-  const pdf = await pdfjs.getDocument({ data }).promise;
+
+  let pdf;
+  try {
+    pdf = await pdfjs.getDocument({ data }).promise;
+  } catch (firstErr) {
+    // Retry with worker disabled — slower but works without external worker.
+    console.warn("[parse-race-plan-pdf] worker load failed, retrying without worker", firstErr);
+    useWorker = false;
+    pdf = await pdfjs.getDocument({
+      data,
+      disableWorker: true,
+      isEvalSupported: false,
+    } as Parameters<typeof pdfjs.getDocument>[0]).promise;
+  }
+
   const allLines: string[] = [];
 
   for (let p = 1; p <= pdf.numPages; p++) {
     const page = await pdf.getPage(p);
     const content = await page.getTextContent();
-    // Group items by Y position (rounded). Items with same Y → same line.
+    // Group items by Y position (rounded to nearest 2px to absorb small jitter).
     const rows = new Map<number, { x: number; str: string }[]>();
     for (const it of content.items as { str: string; transform: number[] }[]) {
+      if (!it.str || !it.transform) continue;
       const x = it.transform[4];
-      const y = Math.round(it.transform[5]);
+      const y = Math.round(it.transform[5] / 2) * 2;
       if (!rows.has(y)) rows.set(y, []);
       rows.get(y)!.push({ x, str: it.str });
     }
-    // Sort rows top-down, items left-right inside each row
     const ys = Array.from(rows.keys()).sort((a, b) => b - a);
     for (const y of ys) {
       const items = rows.get(y)!.sort((a, b) => a.x - b.x);
@@ -52,6 +74,9 @@ async function extractPdfLines(file: File): Promise<string[]> {
       if (line) allLines.push(line);
     }
   }
+
+  console.log(`[parse-race-plan-pdf] extracted ${allLines.length} lines (worker=${useWorker})`);
+  console.log("[parse-race-plan-pdf] first 30 lines:\n" + allLines.slice(0, 30).map((l, i) => `${i + 1}. ${l}`).join("\n"));
   return allLines;
 }
 
@@ -145,28 +170,44 @@ export function parseRacePlanLines(lines: string[]): ParsedRacePlan | null {
   let mode: "idle" | "avant" | "segment" | "summary" = "idle";
   let current: ParsedRacePlan["segments"][number] | null = null;
 
+  // Title: usually the first non-trivial line of the document.
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    if (line.length < 6) continue;
+    if (/^(COURSE|OBJECTIF|GLUCIDES|HYDRATATION|AVANT)\b/i.test(line)) break;
+    plan.name = line;
+    break;
+  }
+
   for (const raw of lines) {
     const line = raw.trim();
     if (!line) continue;
 
-    // Skip the cumulative summary block at the end (useful info but doesn't fit our model)
+    // Skip the bottom cumulative summary (useful info but doesn't fit our model)
     if (isSummaryHeader(line)) {
       mode = "summary";
       continue;
     }
     if (mode === "summary") continue;
 
-    // Headers
-    if (/^COURSE\b/i.test(line)) {
-      const m = line.match(/COURSE\s+([\d,\.]+)\s*KM\s*-\s*([\d,\.]+)\s*m?\s*D\+/i);
+    // Headers — case-insensitive, tolerant to spacing.
+    if (/COURSE\s+[\d,\.]+\s*KM/i.test(line) && !plan.km) {
+      const m = line.match(/([\d,\.]+)\s*KM\s*[-–]\s*([\d,\.]+)\s*m?\s*D\+/i);
       if (m) {
         plan.km = m[1].replace(",", ".");
         plan.dplus = m[2].replace(",", ".");
+      } else {
+        const km = line.match(/([\d,\.]+)\s*KM/i);
+        if (km) plan.km = km[1].replace(",", ".");
+        const dp = line.match(/([\d,\.]+)\s*m?\s*D\+/i);
+        if (dp) plan.dplus = dp[1].replace(",", ".");
       }
+      if (line === plan.name) continue;
       continue;
     }
     if (/^OBJECTIF\b/i.test(line)) {
-      plan.objectif = line.replace(/^OBJECTIF\s+/i, "").trim();
+      plan.objectif = line.replace(/^OBJECTIF\s*[:=]?\s*/i, "").trim();
       continue;
     }
     if (/^GLUCIDES\b/i.test(line)) {
@@ -182,10 +223,8 @@ export function parseRacePlanLines(lines: string[]): ParsedRacePlan | null {
       continue;
     }
     if (/^TEMPS\s+ESTIME/i.test(line)) {
-      // Duration to NEXT segment — attach to current segment
       if (current) {
-        const val = line.replace(/^TEMPS\s+ESTIME\s*=?\s*/i, "").trim();
-        // Only set if not already filled by header
+        const val = line.replace(/^TEMPS\s+ESTIME\s*[:=]?\s*/i, "").trim();
         if (!current.temps) current.temps = val;
       }
       continue;
@@ -206,11 +245,8 @@ export function parseRacePlanLines(lines: string[]): ParsedRacePlan | null {
       continue;
     }
 
-    // Title detection (first non-empty line if not yet captured)
-    if (!plan.name && /UTMB|KM|D\+|TRAIL|COURSE|MARATHON|RACE/i.test(line)) {
-      plan.name = line;
-      continue;
-    }
+    // Skip the title line itself if it appears again
+    if (line === plan.name) continue;
 
     // Content
     if (mode === "avant") {
@@ -220,21 +256,19 @@ export function parseRacePlanLines(lines: string[]): ParsedRacePlan | null {
     }
   }
 
-  // Fallback: if no name detected yet, use first segment's name minus 'DEPART...'
-  if (!plan.name && plan.segments.length > 0) {
-    plan.name = "Plan importé";
-  }
+  if (!plan.name && plan.segments.length > 0) plan.name = "Plan importé";
   if (!plan.name) return null;
-
-  // Reject if nothing useful was parsed
   if (plan.segments.length === 0 && plan.avantCourse.length === 0) return null;
 
   return plan;
 }
 
-export async function parseRacePlanFromPdfFile(file: File): Promise<ParsedRacePlan | null> {
+export async function parseRacePlanFromPdfFile(
+  file: File,
+): Promise<{ plan: ParsedRacePlan | null; rawLines: string[] }> {
   const lines = await extractPdfLines(file);
-  return parseRacePlanLines(lines);
+  const plan = parseRacePlanLines(lines);
+  return { plan, rawLines: lines };
 }
 
 export function parsedToRacePlan<T extends ParsedRacePlan>(parsed: T) {

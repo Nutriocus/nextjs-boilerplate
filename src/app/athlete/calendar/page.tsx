@@ -61,11 +61,18 @@ const KIND_LABELS: Record<CalendarItem["kind"], string> = {
 
 // ============== HELPERS ==============
 function toISODate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  // Build the YYYY-MM-DD string from LOCAL components.
+  // (d.toISOString() converts to UTC and can shift by 1 day depending on tz.)
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function parseISO(s: string): Date {
-  return new Date(s + "T00:00:00");
+  // Parse YYYY-MM-DD as a LOCAL date (avoids UTC shift).
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, (m || 1) - 1, d || 1);
 }
 
 function addDays(s: string, n: number): string {

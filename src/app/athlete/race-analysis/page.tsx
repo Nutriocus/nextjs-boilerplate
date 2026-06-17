@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader, Empty, Field, Badge } from "@/components/ui/PageHeader";
 import { PrintReport, PrintH, PrintButton, PrintKpi } from "@/components/ui/PrintReport";
+import { CommentThread } from "@/components/ui/CommentThread";
 
 type DomNote = { note: "vert" | "orange" | "rouge" | ""; com: string };
 type Race = {
@@ -252,6 +253,13 @@ export default function RaceAnalysisPage() {
             <textarea className="input mt-2" style={{ minHeight: 80, resize: "vertical" }} value={editing.conclusion} onChange={(e) => updateField("conclusion", e.target.value)} />
           </Field>
         </div>
+
+        <CommentThread
+          contextType="race-analysis"
+          contextId={editing.id}
+          title="Débrief post-course"
+          intro="Échange asynchrone coach ↔ athlète sur ce bilan."
+        />
         </div>
 
         <PrintReport

@@ -8,6 +8,7 @@ import { PrintReport, PrintH, PrintButton } from "@/components/ui/PrintReport";
 import { RichMarkdown } from "@/components/ui/RichMarkdown";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { RichHtml } from "@/components/ui/RichHtml";
+import { CommentThread } from "@/components/ui/CommentThread";
 
 // Heuristic: content starting with '<' is treated as HTML (TipTap), otherwise
 // as legacy plain-text / Markdown so older consultations keep rendering nicely.
@@ -106,6 +107,13 @@ export default function ConsultationsPage() {
               <div className="text-[var(--color-text-muted)] text-sm">—</div>
             )}
           </div>
+
+          <CommentThread
+            contextType="consultation"
+            contextId={cur.id}
+            title="Échange consultation"
+            intro="Questions, retours, précisions sur cette consultation."
+          />
         </div>
 
         <PrintReport

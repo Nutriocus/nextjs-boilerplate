@@ -10,6 +10,7 @@ export const ATHLETE_NAV = [
     grp: "",
     items: [
       { href: "/athlete/dashboard", label: "Tableau de bord", ic: "◧" },
+      { href: "/athlete/calendar", label: "Calendrier", ic: "▦" },
       { href: "/athlete/profile", label: "Mon profil", ic: "●" },
     ],
   },

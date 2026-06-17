@@ -19,30 +19,217 @@ type Supplement = {
   commentaires: string;
 };
 
-const CATALOGUE = [
-  { nom: "Vitamine D", cat: "sante" },
-  { nom: "Multivitamines", cat: "sante" },
-  { nom: "Oméga 3", cat: "sante" },
-  { nom: "Magnésium (bisglycinate)", cat: "sante" },
-  { nom: "Glycine", cat: "sante" },
-  { nom: "Glutamine", cat: "sante" },
-  { nom: "Vitamine C", cat: "sante" },
-  { nom: "Fer bisglycinate", cat: "sante" },
-  { nom: "Taurine", cat: "sante" },
-  { nom: "Mélatonine", cat: "sante" },
-  { nom: "Ashwagandha", cat: "sante" },
-  { nom: "Rhodiola Rosea", cat: "sante" },
-  { nom: "Choline", cat: "sante" },
-  { nom: "Bacopa Monnieri", cat: "sante" },
-  { nom: "Curcumine", cat: "sante" },
-  { nom: "Probiotiques", cat: "sante" },
-  { nom: "Collagène", cat: "sante" },
-  { nom: "Glucosamine / Chondroïtine", cat: "sante" },
-  { nom: "Créatine", cat: "perf" },
-  { nom: "Caféine", cat: "perf" },
-  { nom: "Bêta-alanine", cat: "perf" },
-  { nom: "Citrulline", cat: "perf" },
-  { nom: "Nitrates / Jus de betterave", cat: "perf" },
+type CatalogueEntry = {
+  nom: string;
+  cat: "sante" | "perf";
+  posologie?: string;
+  frequence?: string;
+  effets: string;
+};
+
+const CATALOGUE: CatalogueEntry[] = [
+  // ============ SANTÉ / RÉCUPÉRATION / QUOTIDIEN ============
+  {
+    nom: "Vitamine D",
+    cat: "sante",
+    posologie: "3000 UI",
+    frequence: "Le matin",
+    effets:
+      "Amélioration du système immunitaire, réduction de l'inflammation et amélioration de la récupération. Aide à renforcer les os et à prévenir les fractures. Réduction du risque de blessures musculaires. Améliore la force musculaire, l'endurance, l'équilibre et la coordination. Régulation du métabolisme, de la fonction cardiaque, de la santé cognitive et émotionnelle et de la régulation hormonale.",
+  },
+  {
+    nom: "Oméga 3",
+    cat: "sante",
+    posologie: "3 gélules",
+    frequence: "Le matin",
+    effets:
+      "Amélioration de la récupération avec des rôles anti-inflammatoires et antioxydants. Amélioration de la force musculaire, de la performance anaérobie et de la capacité d'endurance. Soutien de la santé cardiovasculaire. Soutien de la fonction cognitive.",
+  },
+  {
+    nom: "Multivitamines",
+    cat: "sante",
+    posologie: "2 gélules",
+    frequence: "Le matin",
+    effets:
+      "Optimisation de la récupération grâce aux propriétés antioxydantes. Comblement des déficits et des carences ainsi que des besoins accrus du sportif d'endurance. Soutien du système immunitaire. Optimisation de la performance physique et mentale.",
+  },
+  {
+    nom: "Glycine",
+    cat: "sante",
+    effets:
+      "Participe à la synthèse des protéines. Favorise la relaxation, réduit l'anxiété et le stress et améliore la qualité du sommeil. Participe à la synthèse du collagène et favorise une bonne santé tendino-articulaire. Participe à la synthèse du glutathion (antioxydant puissant aidant à la détoxification). Participe à la régulation des réponses inflammatoires et immunitaires. Participe à la régulation du métabolisme.",
+  },
+  {
+    nom: "Magnésium (bisglycinate)",
+    cat: "sante",
+    effets:
+      "Rôle clé dans la contraction musculaire et la relaxation. Améliore la récupération du sportif en réduisant les niveaux d'inflammation. Rôle essentiel dans l'élimination du lactate. Permet d'optimiser les taux de testostérone biologiquement actifs. Maintien de l'équilibre électrolytique. Réduit les troubles de l'humeur et améliore la qualité du sommeil. Maintien d'une bonne densité minérale osseuse et réduction du risque de blessures liées aux os.",
+  },
+  {
+    nom: "Glutamine",
+    cat: "sante",
+    effets:
+      "Favorise une santé intestinale optimale chez le sportif. Maintien de l'intégrité de la muqueuse intestinale. Renforce la fonction immunitaire et prévient les infections intestinales. Améliore l'assimilation des nutriments. Prévention contre les troubles digestifs.",
+  },
+  {
+    nom: "Vitamine C",
+    cat: "sante",
+    effets:
+      "Lutte contre le stress oxydatif par son rôle d'antioxydant. Soutien du système immunitaire et réduit le risque d'infection. Participe à la synthèse du collagène. Améliore l'absorption du fer non héminique (fer végétal). Améliore la fonction pulmonaire. Améliore la durée et la qualité du sommeil.",
+  },
+  {
+    nom: "Fer bisglycinate",
+    cat: "sante",
+    posologie: "14 mg / jour",
+    frequence: "Le matin",
+    effets:
+      "Réduction de la fatigue chez le sportif. Augmentation des niveaux de fer sérique, de ferritine en cas de carences. Augmentation des niveaux d'hémoglobine en cas d'anémie.",
+  },
+  {
+    nom: "Taurine",
+    cat: "sante",
+    effets:
+      "Permet de soulager la fatigue visuelle avec un effet protecteur sur la fonction rétinienne. Améliore les performances cognitives, l'agilité et l'équilibre. Augmente l'oxydation lipidique d'un exercice à jeun. Retarde les douleurs musculaires. Améliore les performances aérobies. Améliore le développement du système nerveux central et la formation de la mémoire. Possède un rôle d'antioxydant.",
+  },
+  {
+    nom: "Mélatonine",
+    cat: "sante",
+    effets:
+      "Permet de traiter les troubles du sommeil (insomnies, troubles du rythme circadien). Permet d'aider à compenser un décalage horaire.",
+  },
+  {
+    nom: "Ashwagandha",
+    cat: "sante",
+    effets:
+      "Permet de lutter contre la fatigue et d'améliorer les fonctions cognitives. Améliore la production de testostérone. Favorise la réduction du stress avec une réduction du cortisol. Favorise une amélioration de la qualité du sommeil. Favorise la force musculaire, l'endurance et la récupération après l'exercice.",
+  },
+  {
+    nom: "Rhodiola Rosea",
+    cat: "sante",
+    effets:
+      "Amélioration du métabolisme énergétique. Réduction de la fatigue, de l'épuisement et du burnout. Meilleure régulation des hormones du stress (cortisol et noradrénaline).",
+  },
+  {
+    nom: "Choline",
+    cat: "sante",
+    effets:
+      "Amélioration de la concentration et des performances cognitives. Amélioration de la mémoire et de l'apprentissage.",
+  },
+  {
+    nom: "Bacopa Monnieri",
+    cat: "sante",
+    effets:
+      "Propriétés antioxydantes et anti-inflammatoires. Améliore la mémoire, la concentration et les capacités d'apprentissage. Effets bénéfiques sur le stress et l'anxiété.",
+  },
+  {
+    nom: "Curcumine",
+    cat: "sante",
+    effets:
+      "Propriétés antioxydantes, anti-inflammatoires et antimicrobiennes. Effet neuroprotecteur.",
+  },
+  {
+    nom: "Probiotiques",
+    cat: "sante",
+    effets:
+      "Amélioration de l'absorption des nutriments. Réduction des troubles digestifs. Régulation de l'inflammation. Renforcement de l'immunité.",
+  },
+  {
+    nom: "Collagène",
+    cat: "sante",
+    effets:
+      "Diminution des douleurs articulaires. Amélioration de la récupération après une blessure. Prévention de la perte osseuse. Diminution du risque d'ostéoporose. Augmentation de la densité minérale osseuse.",
+  },
+  {
+    nom: "Glucosamine / Chondroïtine",
+    cat: "sante",
+    effets:
+      "Participe à la structure des tissus conjonctifs et cartilagineux. Stimulation de la synthèse du collagène. Inhibition de la dégradation du collagène.",
+  },
+
+  // ============ PERFORMANCE ============
+  {
+    nom: "Caféine",
+    cat: "perf",
+    effets:
+      "Amélioration des performances chez le sportif. Diminution de la perception de l'effort réalisé. Réduit la sensation de fatigue et de douleurs. Augmente la concentration et la vigilance du sportif.",
+  },
+  {
+    nom: "Créatine",
+    cat: "perf",
+    effets:
+      "Participe au métabolisme énergétique anaérobie alactique. Améliore la mémoire de travail. Améliore la force musculaire, la puissance et la capacité à effectuer des efforts intenses. Effets anticataboliques. Augmente la rétention d'eau intracellulaire. Stimule la croissance musculaire. Favorise la synthèse du glycogène musculaire.",
+  },
+  {
+    nom: "L-Citrulline",
+    cat: "perf",
+    effets:
+      "Entraîne une vasodilatation des vaisseaux sanguins. Augmente l'approvisionnement des nutriments et de l'oxygène aux muscles. Améliore la récupération du sportif.",
+  },
+  {
+    nom: "Bêta-alanine",
+    cat: "perf",
+    effets:
+      "Retarde la fatigue chez l'athlète et améliore les performances. Réduit l'acidité intramusculaire par sa conversion en carnosine. Permet de tolérer une intensité plus importante sur un sprint.",
+  },
+  {
+    nom: "Bicarbonate de sodium",
+    cat: "perf",
+    effets:
+      "Retarde la fatigue chez l'athlète et améliore les performances. Réduit l'acidité extramusculaire en gérant mieux les ions H+. Permet de tolérer une intensité plus importante sur un sprint.",
+  },
+  {
+    nom: "Taurine (performance)",
+    cat: "perf",
+    effets:
+      "Améliore la performance sur des efforts < 15 min. Améliore la thermorégulation à l'effort. Améliore l'absorption des BCAA.",
+  },
+  {
+    nom: "Jus de betterave",
+    cat: "perf",
+    effets:
+      "Entraîne une vasodilatation des vaisseaux sanguins. Augmente l'approvisionnement des nutriments et de l'oxygène aux muscles. Améliore la performance pour des efforts < 30 min. Amélioration de la récupération post-effort.",
+  },
+  {
+    nom: "Nitrates",
+    cat: "perf",
+    effets:
+      "Entraîne une vasodilatation des vaisseaux sanguins. Augmente l'approvisionnement des nutriments et de l'oxygène aux muscles. Améliore la performance pour des efforts < 30 min. Effet positif sur la fonction cognitive avec une amélioration du temps de réaction.",
+  },
+  {
+    nom: "HMB",
+    cat: "perf",
+    effets:
+      "Augmentation de la biogenèse mitochondriale. Augmentation de l'AMPK. Augmentation du pic de puissance anaérobie. Réduction de la masse grasse chez l'athlète. Effet favorable sur les performances d'endurance et sur la VO2 max.",
+  },
+  {
+    nom: "Carnitine",
+    cat: "perf",
+    effets:
+      "Augmente le flux de la glycolyse. Augmentation de l'oxydation des acides gras.",
+  },
+  {
+    nom: "Jus de cerise",
+    cat: "perf",
+    effets:
+      "Amélioration de la récupération post-effort. Réduction de l'inflammation due à l'exercice.",
+  },
+  {
+    nom: "Cétones",
+    cat: "perf",
+    effets: "Amélioration de l'utilisation des lipides à l'effort.",
+  },
+  {
+    nom: "Cordyceps",
+    cat: "perf",
+    effets:
+      "Augmentation de la vasodilatation en direction du cerveau. Augmentation de la neurotransmission vers le cerveau. Augmentation de la vigilance, de la concentration.",
+  },
+  {
+    nom: "BCAA",
+    cat: "perf",
+    effets:
+      "Réduction de la fatigue nerveuse. Amélioration de la récupération. Réduction de la dégradation musculaire à l'effort.",
+  },
 ];
 
 const DECISION_VARIANTS: Record<string, "green" | "orange" | "red" | "dark"> = {
@@ -91,7 +278,17 @@ export default function SupplementsPage() {
   function loadFromCatalogue(name: string) {
     if (!name) return;
     const item = CATALOGUE.find((c) => c.nom === name);
-    if (item && editing) setEditing({ ...editing, nom: item.nom, cat: item.cat as "sante" | "perf" });
+    if (!item || !editing) return;
+    setEditing({
+      ...editing,
+      nom: item.nom,
+      cat: item.cat,
+      // Auto-remplit posologie / fréquence / effets attendus depuis le catalogue.
+      // N'écrase pas un champ déjà personnalisé par l'utilisateur.
+      posologie: editing.posologie || item.posologie || editing.posologie,
+      frequence: editing.frequence && editing.frequence !== "Quotidien" ? editing.frequence : item.frequence || editing.frequence,
+      effetsAttendus: editing.effetsAttendus || item.effets,
+    });
   }
 
   if (!loaded) {
@@ -153,7 +350,29 @@ export default function SupplementsPage() {
             </Field>
           </div>
           <div className="mt-2.5">
-            <Field label="Effets attendus"><input className="input" value={editing.effetsAttendus} onChange={(e) => setEditing({ ...editing, effetsAttendus: e.target.value })} /></Field>
+            <Field label="Effets attendus">
+              <textarea
+                className="input"
+                style={{ minHeight: 90, resize: "vertical" }}
+                value={editing.effetsAttendus}
+                onChange={(e) => setEditing({ ...editing, effetsAttendus: e.target.value })}
+                placeholder="Sélectionne d'abord un complément dans le catalogue pour pré-remplir automatiquement les effets attendus."
+              />
+            </Field>
+            {(() => {
+              const cat = CATALOGUE.find((c) => c.nom === editing.nom);
+              if (!cat || editing.effetsAttendus === cat.effets) return null;
+              return (
+                <button
+                  type="button"
+                  onClick={() => setEditing({ ...editing, effetsAttendus: cat.effets })}
+                  className="btn-ghost btn-xs mt-1"
+                  style={{ color: "var(--color-primary)" }}
+                >
+                  ↺ Recharger les effets depuis le catalogue
+                </button>
+              );
+            })()}
           </div>
           <div className="grid grid-cols-2 gap-2.5 mt-2.5">
             <Field label="Effets perçus"><input className="input" value={editing.effetsPercus} onChange={(e) => setEditing({ ...editing, effetsPercus: e.target.value })} /></Field>
@@ -193,7 +412,22 @@ export default function SupplementsPage() {
                   {s.periode ? ` · ${s.periode}` : ""}
                   {s.dateDebut ? ` · depuis le ${dateLong(s.dateDebut)}` : ""}
                 </div>
-                {s.effetsAttendus && <div className="text-xs text-[#555] mt-1.5">{s.effetsAttendus}</div>}
+                {s.effetsAttendus && (
+                  <div className="mt-2">
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-[var(--color-text-muted)] mb-1">
+                      Effets attendus
+                    </div>
+                    <ul className="text-xs text-[#444] space-y-0.5 pl-4 list-disc">
+                      {s.effetsAttendus
+                        .split(/\.(?:\s+|$)/)
+                        .map((seg) => seg.trim())
+                        .filter((seg) => seg.length > 0)
+                        .map((seg, i) => (
+                          <li key={i}>{seg}{seg.endsWith(".") ? "" : "."}</li>
+                        ))}
+                    </ul>
+                  </div>
+                )}
                 {s.effetsPercus && <div className="text-xs text-[var(--color-success)] mt-1">Perçu : {s.effetsPercus}</div>}
               </div>
               <div className="flex flex-col gap-1.5 items-end">

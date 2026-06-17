@@ -6,7 +6,9 @@
 //   57 kg → complet (J-4 → J-1, race-day partagé)
 //   64 kg → complet (J-4 → J-1, race-day partagé)
 //   68 kg → complet (J-4 → J-1, race-day partagé)
-//   60 · 70 · 72 · 78 kg → J-4 à J-1 en attente (race-day partagé déjà OK)
+//   70 kg → complet (J-4 → J-1, race-day partagé)
+//   72 kg → complet (J-4 → J-1, race-day partagé)
+//   60 · 78 kg → J-4 à J-1 en attente (race-day partagé déjà OK)
 //   56 kg → non géré (volontairement skipé)
 
 export type PreraceFood = { food: string; qty: string; tip: string };
@@ -599,8 +601,275 @@ export const PRERACE_PLANS: Record<number, PreraceWeightPlan> = {
     },
     raceDay: RACE_DAY_BREAKFASTS,
   },
-  70: { weight: 70, days: {}, raceDay: RACE_DAY_BREAKFASTS },
-  72: { weight: 72, days: {}, raceDay: RACE_DAY_BREAKFASTS },
+  70: {
+    weight: 70,
+    days: {
+      "J-4": {
+        petit_dej: [
+          f("LAIT VEGETAL", "200 grammes", "Privilégier le lait d'avoine ou le lait d'amande"),
+          f("FRUIT", "1 unité = 150 grammes", "Privilégier les fruits de saison et biologiques."),
+          f("FLOCONS D'AVOINE", "100 grammes", "Priviligier les flocons d'avoine biologique sans gluten"),
+          f("CHOCOLAT NOIR", "10 grammes", "Privilégier le chocolat 70% de cacao"),
+        ],
+        dejeuner: [
+          f("VIANDES OU POISSON OU OEUFS", "150 grammes ou 4 oeufs", "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"),
+          f("HUILE D'OLIVE", "10 grammes pour la viande", "Privilégier l'huile d'olive biologique et pressée à froid"),
+          f("FECULENTS", "Céréales = 150g crus (450g riz; 375g pâtes cuites) // Patate douce ou Pommes de terre = 600g cuit", "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."),
+          f("PAIN COMPLET", "1 tranche = 30 grammes", ""),
+          f("FRUIT", "1 unité", "Privilégier les produits de saison et biologique."),
+          f("CHOCOLAT NOIR", "10 grammes", "Privilégier le chocolat 70% de cacao"),
+        ],
+        collation: [
+          f("OLEAGINEUX", "30 grammes", "Choisir entre amandes, noix, noix de cajou, noisettes, noix du brésil..."),
+          f("CHOCOLAT NOIR", "10 grammes", "Privilégier le chocolat 70% de cacao"),
+          f("FRUIT", "1 unité", "Privilégier les produits de saison et biologique."),
+        ],
+        diner: [
+          f("VIANDES OU POISSON OU OEUFS", "150 grammes ou 4 oeufs", "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"),
+          f("HUILE D'OLIVE", "10 grammes pour la viande", "Privilégier l'huile d'olive biologique et pressée à froid"),
+          f("FECULENTS", "Céréales = 150g crus (450g riz; 375g pâtes cuites) // Patate douce ou Pommes de terre = 600g cuit", "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."),
+          f("PAIN COMPLET", "1 tranche = 30 grammes", ""),
+          f("FRUIT", "1 unité", "Privilégier les produits de saison et biologique."),
+          f("YAOURT", "1 unité = 125 grammes", "Au choix"),
+        ],
+        malto: [
+          f("MALTODEXTRINE", "50 grammes dans 600ml d'eau", "Le prendre 30 minutes après le petit déjeuner."),
+          f("MALTODEXTRINE", "50 grammes dans 600ml d'eau", "Le prendre 30 minutes après la collation ou sur un entrainement"),
+          f("MALTODEXTRINE", "50 grammes dans 600ml d'eau", "Le prendre 1H avant le coucher"),
+        ],
+      },
+      "J-3": {
+        petit_dej: [
+          f("LAIT VEGETAL", "200 grammes", "Privilégier le lait d'avoine ou le lait d'amande"),
+          f("FRUIT", "1 unité = 150 grammes", "Privilégier les fruits de saison et biologiques."),
+          f("FLOCONS D'AVOINE", "100 grammes", "Priviligier les flocons d'avoine biologique sans gluten"),
+          f("CHOCOLAT NOIR", "10 grammes", "Privilégier le chocolat 70% de cacao"),
+        ],
+        dejeuner: [
+          f("VIANDES OU POISSON OU OEUFS", "150 grammes ou 4 oeufs", "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"),
+          f("HUILE D'OLIVE", "10 grammes pour la viande", "Privilégier l'huile d'olive biologique et pressée à froid"),
+          f("FECULENTS", "Céréales = 150g crus (450g riz; 375g pâtes cuites) // Patate douce ou Pommes de terre = 600g cuit", "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."),
+          f("PAIN COMPLET", "1 tranche = 30 grammes", ""),
+          f("FRUIT", "1 unité", "Privilégier les produits de saison et biologique."),
+          f("CHOCOLAT NOIR", "10 grammes", "Privilégier le chocolat 70% de cacao"),
+        ],
+        collation: [
+          f("OLEAGINEUX", "30 grammes", "Choisir entre amandes, noix, noix de cajou, noisettes, noix du brésil..."),
+          f("PAIN", "4 tranches = 120 grammes", "Possibilité de prendre du pain complet ou blanc"),
+          f("CONFITURE OU MIEL", "40 grammes", "Privilégier le miel d'acacia ou la confiture la plus riche en fruits"),
+          f("FRUIT", "1 unité", "Privilégier les produits de saison et biologique."),
+        ],
+        diner: [
+          f("VIANDES OU POISSON OU OEUFS", "150 grammes ou 4 oeufs", "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"),
+          f("HUILE D'OLIVE", "10 grammes pour la viande", "Privilégier l'huile d'olive biologique et pressée à froid"),
+          f("FECULENTS", "Céréales = 150g crus (450g riz; 375g pâtes cuites) // Patate douce ou Pommes de terre = 600g cuit", "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."),
+          f("PAIN COMPLET", "1 tranche = 30 grammes", ""),
+          f("YAOURT", "1 unité = 125 grammes", "Au choix"),
+          f("FRUIT", "1 unité", "Privilégier les produits de saison et biologique."),
+        ],
+        malto: [
+          f("MALTODEXTRINE", "50 grammes dans 600ml d'eau", "Le prendre 30 minutes après le petit déjeuner."),
+          f("MALTODEXTRINE", "60 grammes dans 600ml d'eau", "Le prendre 30 minutes après la collation ou sur un entrainement"),
+          f("MALTODEXTRINE", "50 grammes dans 600ml d'eau", "Le prendre 30 minutes après le déjeuner"),
+          f("MALTODEXTRINE", "60 grammes dans 600ml d'eau", "Le prendre 1H avant le coucher"),
+        ],
+      },
+      "J-2": {
+        petit_dej: [
+          f("LAIT VEGETAL", "200 grammes", "Privilégier le lait d'avoine ou le lait d'amande"),
+          f("FRUIT", "1 unité = 150 grammes", "Privilégier les fruits de saison et biologiques."),
+          f("FLOCONS D'AVOINE", "100 grammes", "Priviligier les flocons d'avoine biologique sans gluten"),
+          f("CHOCOLAT NOIR", "10 grammes", "Privilégier le chocolat 70% de cacao"),
+        ],
+        dejeuner: [
+          f("VIANDES OU POISSON OU OEUFS", "150 grammes ou 4 oeufs", "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"),
+          f("HUILE D'OLIVE", "10 grammes pour la viande", "Privilégier l'huile d'olive biologique et pressée à froid"),
+          f("FECULENTS", "Céréales = 150g crus (450g riz; 375g pâtes cuites) // Patate douce ou Pommes de terre = 600g cuit", "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."),
+          f("PAIN COMPLET", "1 tranche = 30 grammes", ""),
+          f("CHOCOLAT NOIR", "10 grammes", "Privilégier le chocolat 70% de cacao"),
+          f("FRUIT", "1 unité", "Privilégier les produits de saison et biologique."),
+        ],
+        collation: [
+          f("OLEAGINEUX", "30 grammes", "Choisir entre amandes, noix, noix de cajou, noisettes, noix du brésil..."),
+          f("PAIN", "4 tranches = 120 grammes", "Possibilité de prendre du pain complet ou blanc"),
+          f("FRUIT", "1 unité", "Privilégier les produits de saison et biologique."),
+          f("CONFITURE OU MIEL", "40 grammes", "Privilégier le miel d'acacia ou la confiture la plus riche en fruits"),
+        ],
+        diner: [
+          f("VIANDES OU POISSON OU OEUFS", "150 grammes ou 4 oeufs", "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"),
+          f("HUILE D'OLIVE", "10 grammes pour la viande", "Privilégier l'huile d'olive biologique et pressée à froid"),
+          f("FECULENTS", "Céréales = 150g crus (450g riz; 375g pâtes cuites) // Patate douce ou Pommes de terre = 600g cuit", "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."),
+          f("PAIN COMPLET", "1 tranche = 30 grammes", ""),
+          f("YAOURT", "1 unité = 125 grammes", "Au choix"),
+          f("FRUIT", "1 unité", "Privilégier les produits de saison et biologique."),
+        ],
+        malto: [
+          f("MALTODEXTRINE", "50 grammes dans 600ml d'eau", "Le prendre 30 minutes après le petit déjeuner."),
+          f("MALTODEXTRINE", "60 grammes dans 600ml d'eau", "Le prendre 30 minutes après la collation ou sur un entrainement"),
+          f("MALTODEXTRINE", "50 grammes dans 600ml d'eau", "Le prendre 30 minutes après le déjeuner"),
+          f("MALTODEXTRINE", "60 grammes dans 600ml d'eau", "Le prendre 1H avant le coucher"),
+        ],
+      },
+      "J-1": {
+        // Petit déjeuner sous forme de porridge — collation sous forme de smoothie.
+        petit_dej: [
+          f("LAIT VEGETAL", "200 grammes", "Privilégier le lait d'avoine ou le lait d'amande"),
+          f("FRUIT", "1 unité = 150 grammes", "Privilégier les fruits de saison et biologiques."),
+          f("FLOCONS D'AVOINE", "80 grammes", "Priviligier les flocons d'avoine biologique sans gluten"),
+          f("CHOCOLAT NOIR", "10 grammes", "Privilégier le chocolat 70% de cacao"),
+        ],
+        dejeuner: [
+          f("VIANDES OU POISSON", "150 grammes", "Privilégier les viandes maigres (dinde, poulet) ou les poissons blancs (colin, cabillaud, lieu)"),
+          f("RIZ BASMATI", "70 grammes crus = 210 grammes cuits", "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."),
+          f("PATATE DOUCE ECRASEE", "300 grammes", "Privilégier les produits de saison et biologique."),
+          f("HUILE D'OLIVE", "10 grammes pour la viande et 10 grammes pour la patate douce", "Privilégier l'huile d'olive biologique et pressée à froid"),
+          f("COMPOTE DE POMME", "200 grammes", "Privilégier de la compote sans sucres ajoutés"),
+        ],
+        collation: [
+          f("LAIT VEGETAL", "300 grammes", "Privilégier le lait d'avoine ou le lait d'amande"),
+          f("FRUIT", "1 unité = 150 grammes", "Privilégier les fruits de saison et biologiques."),
+          f("WHEY", "30 grammes", "Privilégier la whey isolate ou native"),
+          f("FLOCONS D'AVOINE", "60 grammes", "Priviligier les flocons d'avoine biologique sans gluten"),
+          f("CHOCOLAT NOIR", "10 grammes", "Privilégier le chocolat 70% de cacao"),
+        ],
+        diner: [
+          f("VIANDES OU POISSON", "150 grammes", "Privilégier les viandes maigres (dinde, poulet) ou les poissons blancs (colin, cabillaud, lieu)"),
+          f("HUILE D'OLIVE", "10 grammes pour la viande", "Privilégier l'huile d'olive biologique et pressée à froid"),
+          f("RIZ BASMATI", "130 grammes crus = 390 grammes cuits", "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."),
+          f("COMPOTE DE POMME", "200 grammes", "Privilégier de la compote sans sucres ajoutés"),
+        ],
+      },
+    },
+    raceDay: RACE_DAY_BREAKFASTS,
+  },
+  72: {
+    weight: 72,
+    days: {
+      "J-4": {
+        petit_dej: [
+          f("LAIT VEGETAL", "200 ml", "Privilégier le lait d'avoine ou d'amande"),
+          f("CHOCOLAT NOIR", "10 grammes", "Privilégier le chocolat noir 70% cacao"),
+          f("FLOCONS D'AVOINE", "70 grammes", "Privilégier les flocons d'avoine biologiques"),
+        ],
+        dejeuner: [
+          f("VIANDES OU POISSON OU OEUFS", "175 grammes ou 4 oeufs", "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"),
+          f("HUILE D'OLIVE", "10 grammes pour la viande et 10 grammes pour les légumes", "Privilégier l'huile d'olive biologique et pressée à froid"),
+          f("FECULENTS", "Céréales = 150g crus (450g riz, 375g pâtes cuites) // Patate douce ou Pommes de terre = 550g cuit", "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."),
+          f("LEGUMES", "150 grammes", "Privilégier les produits de saison et biologique."),
+          f("FRUIT", "1 unité", "Privilégier les produits de saison et biologique."),
+        ],
+        collation: [
+          f("PAIN DE MIE", "4 tranches", ""),
+          f("COMPOTE DE POMME SSA", "250 grammes", ""),
+        ],
+        diner: [
+          f("VIANDES OU POISSON OU OEUFS", "150 grammes ou 4 oeufs", "Privilégier les oeufs biologiques pour éviter les problèmes d'antibiotiques"),
+          f("HUILE D'OLIVE", "10 grammes pour la viande", "Privilégier l'huile d'olive biologique et pressée à froid"),
+          f("FECULENTS", "Céréales = 200g crus (600g riz, 500g pâtes cuites)", "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."),
+          // Collation post-dîner
+          f("FLOCON D'AVOINE", "70 grammes", "Collation post-dîner"),
+          f("FRUIT", "1 unité", "Collation post-dîner — privilégier les produits de saison et biologique."),
+          f("LAIT VEGETAL", "200 ml", "Collation post-dîner"),
+          f("CHOCOLAT NOIR", "10 grammes", "Collation post-dîner — privilégier le chocolat 70% de cacao"),
+        ],
+      },
+      "J-3": {
+        petit_dej: [
+          f("LAIT VEGETAL", "200 ml", "Privilégier le lait d'avoine ou d'amande"),
+          f("CHOCOLAT NOIR", "10 grammes", "Privilégier le chocolat noir 70% cacao"),
+          f("FLOCONS D'AVOINE", "70 grammes", "Privilégier les flocons d'avoine biologiques"),
+        ],
+        dejeuner: [
+          f("VIANDES OU POISSON OU OEUFS", "150 grammes ou 4 oeufs", "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"),
+          f("HUILE D'OLIVE", "10 grammes pour la viande", "Privilégier l'huile d'olive biologique et pressée à froid"),
+          f("FECULENTS", "Céréales = 220 g crus (660g riz, 550g pâtes cuites)", "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."),
+        ],
+        collation: [
+          f("PAIN DE MIE", "4 tranches", ""),
+          f("COMPOTE DE POMME SSA", "250 grammes", ""),
+        ],
+        diner: [
+          f("VIANDES OU POISSON OU OEUFS", "150 grammes ou 4 oeufs", "Privilégier les oeufs biologiques pour éviter les problèmes d'antibiotiques"),
+          f("HUILE D'OLIVE", "10 grammes pour la viande", "Privilégier l'huile d'olive biologique et pressée à froid"),
+          f("FECULENTS", "Céréales = 200g crus (600g riz, 500g pâtes cuites)", "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."),
+          // Collation post-dîner
+          f("FLOCON D'AVOINE", "70 grammes", "Collation post-dîner"),
+          f("FRUIT", "1 unité", "Collation post-dîner — privilégier les produits de saison et biologique."),
+          f("LAIT VEGETAL", "200 ml", "Collation post-dîner"),
+          f("CHOCOLAT NOIR", "10 grammes", "Collation post-dîner — privilégier le chocolat 70% de cacao"),
+        ],
+        malto: [
+          f("MALTODEXTRINE", "60 grammes dans 400ml d'eau", "Au petit déjeuner"),
+          f("MALTODEXTRINE", "60 grammes dans 400ml d'eau", "Au déjeuner"),
+          f("MALTODEXTRINE", "60 grammes dans 400ml d'eau", "À la collation"),
+        ],
+      },
+      "J-2": {
+        petit_dej: [
+          f("LAIT VEGETAL", "200 ml", "Privilégier le lait d'avoine ou d'amande"),
+          f("CHOCOLAT NOIR", "10 grammes", "Privilégier le chocolat noir 70% cacao"),
+          f("FLOCONS D'AVOINE", "70 grammes", "Privilégier les flocons d'avoine biologiques"),
+        ],
+        dejeuner: [
+          f("VIANDES OU POISSON OU OEUFS", "125 grammes", "Privilégier les viandes maigres (dinde, poulet, steack 5%) - 1 poisson gras max par semaine"),
+          f("HUILE D'OLIVE", "10 grammes pour la viande", "Privilégier l'huile d'olive biologique et pressée à froid"),
+          f("FECULENTS", "Céréales = 150 g crus de RIZ (450g cuits)", "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."),
+        ],
+        collation: [
+          f("PAIN DE MIE", "4 tranches", ""),
+          f("COMPOTE DE POMME SSA", "250 grammes", ""),
+        ],
+        diner: [
+          f("VIANDES OU POISSON OU OEUFS", "125 grammes", "Privilégier les oeufs biologiques pour éviter les problèmes d'antibiotiques"),
+          f("HUILE D'OLIVE", "10 grammes pour la viande", "Privilégier l'huile d'olive biologique et pressée à froid"),
+          f("FECULENTS", "Céréales = 200g crus (600g riz, 500g pâtes cuites)", "Privilégier le riz basmati, les pâtes semi-complètes, de la patate douce."),
+          f("CHOCOLAT NOIR", "10 grammes", "Privilégier le chocolat 70% de cacao"),
+          f("FLOCON D'AVOINE", "70 grammes", ""),
+          f("LAIT VEGETAL", "200 ml", ""),
+          f("FRUIT", "1 unité", "Privilégier les produits de saison et biologique."),
+          // Dîner 2 — optionnel
+          f("FECULENTS", "Céréales = 200g crus (600g riz, 500g pâtes cuites)", "Dîner 2 (optionnel — sinon ne prendre que la maltodextrine)"),
+          f("CHOCOLAT NOIR", "10 grammes", "Dîner 2 (optionnel) — privilégier le chocolat 70% de cacao"),
+        ],
+        malto: [
+          f("MALTODEXTRINE", "60 grammes dans 400ml d'eau", "Au petit déjeuner"),
+          f("MALTODEXTRINE", "60 grammes dans 400ml d'eau", "Au déjeuner"),
+          f("MALTODEXTRINE", "60 grammes dans 400ml d'eau", "À la collation"),
+          f("MALTODEXTRINE", "60 grammes dans 400ml d'eau", "Au Dîner 2 (optionnel)"),
+        ],
+      },
+      "J-1": {
+        petit_dej: [
+          f("LAIT VEGETAL", "200 ml", "Privilégier le lait d'avoine ou d'amande"),
+          f("CHOCOLAT NOIR", "10 grammes", "Privilégier le chocolat noir 70% cacao"),
+          f("MIEL", "10 grammes", "Privilégier le miel d'acacia"),
+          f("FLOCONS D'AVOINE", "100 grammes", "Privilégier les flocons d'avoine biologiques"),
+          f("FRUIT", "1 unité", "Privilégier les produits de saison et biologique."),
+        ],
+        dejeuner: [
+          f("VIANDES BLANCHES OU POISSON BLANC", "125 grammes", "Privilégier les viandes maigres (dinde, poulet) ou poisson blanc (colin, cabillaud)"),
+          f("HUILE D'OLIVE", "10 grammes pour la viande", "Privilégier l'huile d'olive biologique et pressée à froid"),
+          f("RIZ BASMATI", "120 grammes crus = 360 grammes cuits", ""),
+          f("PATATE DOUCE ECRASEE", "250 grammes", "Privilégier les produits de saison et biologique."),
+        ],
+        collation: [
+          // En cookie ou smoothie
+          f("FLOCON D'AVOINE", "120 grammes", "Privilégier les flocons d'avoine biologique"),
+          f("OEUFS", "2 unités", "À remplacer par 20 grammes de whey si smoothie"),
+          f("FRUIT", "2 unités", "Privilégier les produits de saison et biologique."),
+          f("LAIT VEGETAL", "200 ml", "Privilégier le lait d'amande ou d'avoine"),
+          f("CHOCOLAT NOIR", "10 grammes", "Privilégier le chocolat 70% de cacao"),
+          f("BEURRE DE CACAHUETE", "20 grammes", "Privilégier le 100% cacahuète"),
+        ],
+        diner: [
+          f("ESCALOPE DE DINDE", "150 grammes", ""),
+          f("HUILE D'OLIVE", "10 grammes pour la viande", "Privilégier l'huile d'olive biologique et pressée à froid"),
+          f("RIZ BASMATI", "140 grammes crus = 420 grammes cuits", ""),
+        ],
+      },
+    },
+    raceDay: RACE_DAY_BREAKFASTS,
+  },
   78: { weight: 78, days: {}, raceDay: RACE_DAY_BREAKFASTS },
 };
 

@@ -260,6 +260,24 @@
     color: var(--color-text);
     font-size: 14px;
     font-family: var(--font-body);
+    /* Prevent inputs from overflowing their flex/grid containers,
+       especially date inputs on iOS Safari which have an intrinsic min-width. */
+    box-sizing: border-box;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* Date / time inputs on iOS Safari render their own UI with a fixed
+     intrinsic width — neutralize it so they obey the container. */
+  .input[type="date"],
+  .input[type="time"],
+  .input[type="datetime-local"],
+  .input[type="month"],
+  .input[type="week"] {
+    -webkit-appearance: none;
+    appearance: none;
+    min-height: 38px;
+    line-height: 1.2;
   }
 
   .input:focus {

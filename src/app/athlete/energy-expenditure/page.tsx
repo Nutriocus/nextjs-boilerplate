@@ -16,27 +16,46 @@ import {
 } from "recharts";
 
 type CarbLoading = "none" | "1day" | "4days";
+type Discipline = "trail" | "cap_route" | "cyclisme" | "triathlon" | "natation";
 
 type Segment = {
   id: string;
   nom: string;
+  discipline?: Discipline; // overrides plan discipline for this segment (useful for triathlon)
   km: string;
   dplus: string;
   dmoins: string;
   dureeMin: string;
   fcCible: string;
-  cibleChoH: string; // override per segment (g/h). Empty = use plan default.
+  puissanceW: string; // optional: for cycling — use this instead of FC when present
+  cibleChoH: string;
 };
 
 type PacingPlan = {
   id: string;
   name: string;
   raceDate: string;
+  discipline: Discipline;
   carbLoading: CarbLoading;
-  rer: string;        // fallback / manual override (used when no physio data)
-  useProfile: boolean; // true = auto-compute RER per segment from athlete physio
+  rer: string;
+  useProfile: boolean;
   cibleCho: string;
   segments: Segment[];
+};
+
+const DISCIPLINE_LABELS: Record<Discipline, string> = {
+  trail: "Trail",
+  cap_route: "Course sur route",
+  cyclisme: "Cyclisme",
+  triathlon: "Triathlon",
+  natation: "Natation",
+};
+const DISCIPLINE_ICONS: Record<Discipline, string> = {
+  trail: "⛰",
+  cap_route: "🏃",
+  cyclisme: "🚴",
+  triathlon: "🏊🚴🏃",
+  natation: "🏊",
 };
 
 const WALL_THRESHOLD_G = 300;
@@ -180,6 +199,7 @@ function parseGptTable(text: string): Segment[] {
       dmoins: "",
       dureeMin,
       fcCible,
+      puissanceW: "",
       cibleChoH: "",
     });
   }
@@ -194,8 +214,20 @@ const BLANK_SEGMENT = (): Segment => ({
   dmoins: "",
   dureeMin: "",
   fcCible: "",
+  puissanceW: "",
   cibleChoH: "",
 });
+
+// Power-based energy expenditure (validated for cycling).
+// kcal = (kJ work output) / efficiency
+// 1 W × 1h = 3.6 kJ work · efficiency = 0.24 (rule "kJ ≈ kcal" derives from this).
+function powerKcalPerMin(powerW: number): number {
+  if (powerW <= 0) return 0;
+  // (W × 60 s/min) → J/min → /1000 → kJ/min → /0.24 efficiency → kJ total energy → ×0.239 kcal/kJ
+  // Simplified: kcal/min = powerW × 0.06 × 0.239 / 0.24 ≈ powerW × 0.0598
+  // Or equivalently: kcal/h ≈ powerW × 3.59
+  return (powerW * 60 * 0.239) / (1000 * 0.24);
+}
 
 const GPT_LINK = "https://chatgpt.com/g/g-trail-pacing-engine-nutriocus";
 
@@ -237,15 +269,16 @@ export default function EnergyExpenditurePage() {
     if (!current) return;
     updatePlan({ segments: current.segments.filter((s) => s.id !== sid) });
   };
-  const newPlan = () => {
+  const newPlan = (discipline: Discipline = "trail") => {
     const hasPhysio = !!(toNum(profile.sv1) && toNum(profile.sv2) && toNum(profile.rerSV1) && toNum(profile.rerSV2));
     const p: PacingPlan = {
       id: newId(),
-      name: "Nouvelle stratégie de pacing",
+      name: "Nouvelle stratégie " + DISCIPLINE_LABELS[discipline],
       raceDate: today(),
+      discipline,
       carbLoading: "none",
       rer: "0.88",
-      useProfile: hasPhysio, // auto-enable if data available
+      useProfile: hasPhysio,
       cibleCho: String(defaultTol),
       segments: [BLANK_SEGMENT()],
     };
@@ -302,8 +335,14 @@ export default function EnergyExpenditurePage() {
     if (!current) return [];
     return current.segments.map((s) => {
       const fc = toNum(s.fcCible);
+      const power = toNum(s.puissanceW);
       const dur = toNum(s.dureeMin);
-      const kcalPerMin = keytelKcalPerMin(fc, poidsKg, ageY, isWoman);
+      // POWER-based estimation (preferred when available, esp. for cycling)
+      // Falls back to Keytel HR-based formula
+      const usePower = power > 0;
+      const kcalPerMin = usePower
+        ? powerKcalPerMin(power)
+        : keytelKcalPerMin(fc, poidsKg, ageY, isWoman);
       const kcalTotal = Math.max(0, kcalPerMin * dur);
       const rer = rerForSegment(fc);
       const choFrac = choFractionFromRER(rer);
@@ -315,7 +354,6 @@ export default function EnergyExpenditurePage() {
       const pente = toNum(s.km) > 0
         ? ((toNum(s.dplus) - toNum(s.dmoins)) / (toNum(s.km) * 1000)) * 100
         : 0;
-      // FC zone label
       let zone = "—";
       if (hasPhysio && fc > 0) {
         if (fc < physio.sv1) zone = "< SV1";
@@ -334,6 +372,7 @@ export default function EnergyExpenditurePage() {
         pente: Math.round(pente * 10) / 10,
         rer: Math.round(rer * 100) / 100,
         choFracPct: Math.round(choFrac * 100),
+        usePower,
         zone,
         dur,
       };
@@ -403,44 +442,70 @@ export default function EnergyExpenditurePage() {
           title="Dépenses énergétiques en course"
           desc="Estimation segment par segment, déplétion du glycogène en temps réel, et minimum d'apport CHO pour ne pas rencontrer le mur."
           action={
-            <div className="flex gap-1.5 flex-wrap">
-              <a href={GPT_LINK} target="_blank" rel="noopener noreferrer" className="btn-dark btn-sm">
-                🤖 GPT Trail Pacing
-              </a>
-              <button onClick={newPlan} className="btn-primary">+ Nouveau plan</button>
-            </div>
+            <a href={GPT_LINK} target="_blank" rel="noopener noreferrer" className="btn-dark btn-sm">
+              🤖 GPT Trail Pacing
+            </a>
           }
         />
 
-        {plans.length === 0 ? (
-          <div className="card p-6 text-center">
-            <div className="text-4xl mb-2">🏔️</div>
-            <div className="font-extrabold text-lg mb-2" style={{ fontFamily: "var(--font-display)" }}>
-              Crée ton premier plan de pacing
-            </div>
-            <div className="text-sm text-[var(--color-text-muted)] max-w-md mx-auto mb-4">
-              Génère ton plan via le <b>GPT Trail Pacing Engine Nutriocus</b>, puis colle-le ici.
-              On calcule la dépense, la déplétion du glycogène et le minimum d&apos;apport CHO.
-            </div>
-            <button onClick={newPlan} className="btn-primary">+ Nouveau plan</button>
+        <div className="card p-4 mb-4">
+          <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)] mb-2" style={{ letterSpacing: ".06em" }}>
+            + Nouveau plan par discipline
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {plans.map((p) => (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+            {(["trail", "cap_route", "cyclisme", "natation", "triathlon"] as Discipline[]).map((d) => (
               <button
-                key={p.id}
-                onClick={() => setCurrentId(p.id)}
-                className="card p-4 text-left cursor-pointer hover:-translate-y-0.5 transition"
-                style={{ borderLeft: "5px solid var(--color-primary)" }}
+                key={d}
+                onClick={() => newPlan(d)}
+                className="card p-3 text-left cursor-pointer hover:-translate-y-0.5 transition"
+                style={{ border: "1px solid var(--color-border)" }}
               >
-                <div className="font-extrabold text-base mb-1" style={{ fontFamily: "var(--font-display)" }}>
-                  {p.name}
-                </div>
-                <div className="text-xs text-[var(--color-text-muted)]">
-                  {p.segments.length} segment{p.segments.length > 1 ? "s" : ""} · cible {p.cibleCho || defaultTol} g/h · {CARB_LOADING_LABELS[p.carbLoading]}
+                <div className="text-xl mb-1">{DISCIPLINE_ICONS[d]}</div>
+                <div className="font-bold text-sm">{DISCIPLINE_LABELS[d]}</div>
+                <div className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+                  {d === "cyclisme" ? "Puissance + FC" : d === "natation" ? "FC + cadence" : "FC"}
                 </div>
               </button>
             ))}
+          </div>
+        </div>
+
+        {plans.length === 0 ? (
+          <div className="card p-6 text-center">
+            <div className="text-4xl mb-2">📋</div>
+            <div className="font-extrabold text-lg mb-2" style={{ fontFamily: "var(--font-display)" }}>
+              Aucun plan créé
+            </div>
+            <div className="text-sm text-[var(--color-text-muted)] max-w-md mx-auto">
+              Sélectionne une discipline ci-dessus pour créer ton premier plan. Le calcul s&apos;adapte automatiquement (puissance pour le vélo, FC pour la course/trail/natation).
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {plans.map((p) => {
+              const disc = p.discipline || "trail";
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setCurrentId(p.id)}
+                  className="card p-4 text-left cursor-pointer hover:-translate-y-0.5 transition"
+                  style={{ borderLeft: "5px solid var(--color-primary)" }}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xl">{DISCIPLINE_ICONS[disc]}</span>
+                    <span className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]" style={{ letterSpacing: ".06em" }}>
+                      {DISCIPLINE_LABELS[disc]}
+                    </span>
+                  </div>
+                  <div className="font-extrabold text-base mb-1" style={{ fontFamily: "var(--font-display)" }}>
+                    {p.name}
+                  </div>
+                  <div className="text-xs text-[var(--color-text-muted)]">
+                    {p.segments.length} segment{p.segments.length > 1 ? "s" : ""} · cible {p.cibleCho || defaultTol} g/h · {CARB_LOADING_LABELS[p.carbLoading]}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
@@ -480,6 +545,17 @@ export default function EnergyExpenditurePage() {
           </Field>
           <Field label="Date course">
             <input type="date" className="input" value={current.raceDate} onChange={(e) => updatePlan({ raceDate: e.target.value })} />
+          </Field>
+          <Field label="Discipline">
+            <select
+              className="input"
+              value={current.discipline || "trail"}
+              onChange={(e) => updatePlan({ discipline: e.target.value as Discipline })}
+            >
+              {(["trail", "cap_route", "cyclisme", "natation", "triathlon"] as Discipline[]).map((d) => (
+                <option key={d} value={d}>{DISCIPLINE_ICONS[d]} {DISCIPLINE_LABELS[d]}</option>
+              ))}
+            </select>
           </Field>
           <Field
             label={
@@ -732,6 +808,7 @@ export default function EnergyExpenditurePage() {
               <th>Pente</th>
               <th>Durée</th>
               <th>FC</th>
+              <th title="Puissance moyenne (W) — utilisée prioritairement à la FC pour les cyclistes">Puiss. (W)</th>
               <th title="RER calculé pour la FC du segment">RER</th>
               <th>kcal</th>
               <th title="Glucides oxydés sur le segment (= kcal × % CHO du RER)">CHO oxydés</th>
@@ -757,9 +834,19 @@ export default function EnergyExpenditurePage() {
                 </td>
                 <td><input className="input" style={{ width: 55 }} value={s.dureeMin} onChange={(e) => updateSeg(s.id, { dureeMin: e.target.value })} /></td>
                 <td><input className="input" style={{ width: 55 }} value={s.fcCible} onChange={(e) => updateSeg(s.id, { fcCible: e.target.value })} /></td>
+                <td>
+                  <input
+                    className="input"
+                    style={{ width: 60 }}
+                    value={s.puissanceW}
+                    onChange={(e) => updateSeg(s.id, { puissanceW: e.target.value })}
+                    placeholder={current?.discipline === "cyclisme" || current?.discipline === "triathlon" ? "180" : ""}
+                    title="Puissance moyenne (W) — prioritaire sur la FC quand renseignée"
+                  />
+                </td>
                 <td
                   style={{ fontWeight: 600, color: "var(--color-text-muted)" }}
-                  title={`${s.choFracPct}% CHO oxydés à RER ${s.rer}${s.zone !== "—" ? ` · ${s.zone}` : ""}`}
+                  title={`${s.usePower ? "Calcul puissance (W)" : `${s.choFracPct}% CHO oxydés à RER ${s.rer}${s.zone !== "—" ? ` · ${s.zone}` : ""}`}`}
                 >
                   {s.rer > 0 ? (
                     <span>
@@ -769,7 +856,13 @@ export default function EnergyExpenditurePage() {
                     </span>
                   ) : "—"}
                 </td>
-                <td style={{ fontWeight: 800, color: "var(--color-primary)" }}>{s.kcalTotal > 0 ? s.kcalTotal : "—"}</td>
+                <td
+                  style={{ fontWeight: 800, color: "var(--color-primary)" }}
+                  title={s.usePower ? "Calcul puissance (W → kcal)" : "Calcul FC (formule Keytel)"}
+                >
+                  {s.kcalTotal > 0 ? s.kcalTotal : "—"}
+                  {s.usePower && <span className="text-[9px] block" style={{ color: "var(--color-text-muted)", fontWeight: 400 }}>via W</span>}
+                </td>
                 <td>{s.gChoOxidized > 0 ? `${s.gChoOxidized.toFixed(0)} g` : "—"}</td>
                 <td>
                   <input
@@ -798,6 +891,7 @@ export default function EnergyExpenditurePage() {
                 <td>{formatDuration(totals.totMin)}</td>
                 <td></td>
                 <td></td>
+                <td></td>
                 <td style={{ color: "var(--color-primary)" }}>{totals.totKcal.toLocaleString("fr-FR")}</td>
                 <td>{Math.round(totals.totGChoOxi)} g</td>
                 <td style={{ color: "var(--color-primary)", textAlign: "center" }} title="Cible CHO/h moyenne, pondérée par la durée des segments">
@@ -822,7 +916,7 @@ export default function EnergyExpenditurePage() {
         Calcul basé sur ton profil : {profile.sexe || "—"} · {poidsKg || "—"} kg · {ageY || "—"} ans
         {hasPhysio ? ` · FCmax ${physio.fcmax} · SV1 ${physio.sv1} · SV2 ${physio.sv2} · RER SV1/SV2 ${physio.rerSV1}/${physio.rerSV2}` : ""}.
         <br />
-        ⓘ Formule Keytel (2005) pour les kcal · CHO = (RER−0,7) / 0,3 × kcal totales · réserves selon la stratégie de pré-charge glycogénique.
+        ⓘ Formule Keytel (2005, basée FC) pour les kcal · si une puissance (W) est renseignée sur un segment, on utilise <b>kcal = W × 3,6 × heures</b> (plus précis pour le vélo) · CHO = (RER−0,7) / 0,3 × kcal totales · réserves selon la stratégie de pré-charge glycogénique.
         {useProfilePhysio && " · RER calculé par segment via interpolation FC ↔ SV1/SV2."}
       </div>
     </div>

@@ -7,6 +7,7 @@ import { PageHeader, Kpi } from "@/components/ui/PageHeader";
 import { ATHLETE_NAV } from "@/components/athlete/AthleteSidebar";
 import { useAthleteData } from "@/lib/athlete-storage";
 import { InstallPrompt } from "@/components/ui/InstallPrompt";
+import { OnboardingChecklist } from "@/components/athlete/OnboardingChecklist";
 
 const DEFAULT_PROFILE = {
   sexe: "Homme",
@@ -251,6 +252,7 @@ export default function AthleteDashboardPage() {
       />
 
       <InstallPrompt />
+      <OnboardingChecklist />
 
       <SuiviHero
         suivi={suivi}

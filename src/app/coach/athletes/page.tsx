@@ -163,6 +163,7 @@ export default function CoachAthletesPage() {
         kicker="Espace coach"
         title="Mes athlètes"
         desc={`${cards.length} athlète${cards.length > 1 ? "s" : ""} · ${filtered.length === cards.length ? "tous affichés" : `${filtered.length} résultat${filtered.length > 1 ? "s" : ""}`}`}
+        action={<Link href="/coach/athletes/new" className="btn-primary">+ Nouvel athlète</Link>}
       />
 
       {/* Search */}

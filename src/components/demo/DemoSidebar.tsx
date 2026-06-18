@@ -53,7 +53,7 @@ const DEMO_NAV = [
       { href: "/demo/products", label: "Produits de l'effort", ic: "⚡" },
       { href: "/demo/tolerance", label: "Tests de tolérance", ic: "◔" },
       { href: "/demo/recovery", label: "Récupération", ic: "◖" },
-      { href: "/demo/ai-tools", label: "Outils IA", ic: "✦" },
+      { href: "/demo/ai-tools", label: "Outils IA", ic: "✦", locked: true },
     ],
   },
 ];
@@ -144,7 +144,12 @@ export function DemoSidebar({
         </div>
 
         <div className="mt-auto pt-4">
-          <a href={DEMO_CTA_URL} target="_blank" rel="noopener noreferrer">
+          <a
+            href={DEMO_CTA_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            data-allow-demo="1"
+          >
             <div
               className="sidebar-link w-full"
               style={{

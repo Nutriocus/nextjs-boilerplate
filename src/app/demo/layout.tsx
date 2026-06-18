@@ -1,19 +1,34 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { DemoProvider } from "@/lib/demo-context";
 import { DemoSidebar } from "@/components/demo/DemoSidebar";
 import { DemoBanner } from "@/components/demo/DemoBanner";
 import { MobileTopbar } from "@/components/layout/MobileTopbar";
+import "@/styles/demo.css";
 
 function Shell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (!t) return;
+      const link = t.closest('a[target="_blank"]') as HTMLAnchorElement | null;
+      if (link && link.dataset.allowDemo !== "1") {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, []);
 
   return (
     <div
       className="min-h-screen bg-[var(--color-background)]"
       data-demo="1"
-      style={{ paddingTop: 40 }}
+      style={{ paddingTop: 44 }}
     >
       <DemoBanner />
       <MobileTopbar
@@ -24,12 +39,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <DemoSidebar mobileOpen={open} onCloseMobile={() => setOpen(false)} />
       <main className="lg:pl-[262px]">
         <div className="max-w-7xl mx-auto px-4 lg:px-8 pt-[96px] lg:pt-8 pb-8">
-          <div
-            className="demo-readonly"
-            style={{ pointerEvents: "auto" }}
-          >
-            {children}
-          </div>
+          {children}
         </div>
       </main>
     </div>

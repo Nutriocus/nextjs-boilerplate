@@ -11,9 +11,9 @@ export function DemoBanner() {
         left: 0,
         right: 0,
         zIndex: 60,
-        background: "linear-gradient(90deg, #f47216 0%, #ff8a3d 100%)",
+        background: "var(--color-primary)",
         color: "#fff",
-        padding: "8px 16px",
+        padding: "9px 16px",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -23,16 +23,21 @@ export function DemoBanner() {
         fontSize: 13,
         fontWeight: 700,
         letterSpacing: "-0.01em",
-        boxShadow: "0 2px 12px rgba(0,0,0,0.08)",
+        boxShadow: "0 2px 12px rgba(255, 69, 1, 0.25)",
+        borderBottom: "1px solid rgba(255, 255, 255, 0.15)",
       }}
     >
       <span>
-        🎬 <span style={{ opacity: 0.95 }}>Mode démo — données fictives, navigation en lecture seule</span>
+        🎬{" "}
+        <span style={{ opacity: 0.95 }}>
+          Mode démo — aperçu en lecture seule
+        </span>
       </span>
       <a
         href={DEMO_CTA_URL}
         target="_blank"
         rel="noopener noreferrer"
+        data-allow-demo="1"
         style={{
           background: "#0a0a0a",
           color: "#fff",
@@ -45,9 +50,12 @@ export function DemoBanner() {
           textTransform: "uppercase",
           whiteSpace: "nowrap",
           transition: "transform .15s ease",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: 6,
         }}
       >
-        Réserver mon accompagnement →
+        📅 Réserver mon accompagnement →
       </a>
     </div>
   );

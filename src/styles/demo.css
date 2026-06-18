@@ -1,0 +1,97 @@
+/* =====================================================================
+ * Demo mode read-only enforcement.
+ * Applied via [data-demo="1"] wrapper on the /demo route.
+ * Allows: navigation (sidebar, tabs with .btn-sm), HelpSection expand,
+ *         elements explicitly marked with [data-allow-demo="1"].
+ * Blocks:  form inputs, primary action buttons, external links, exports.
+ * ===================================================================== */
+
+[data-demo="1"] {
+  /* ---------------- Form inputs ---------------- */
+  input:not([type="checkbox"]):not([type="radio"]):not([data-allow-demo]),
+  textarea:not([data-allow-demo]),
+  select:not([data-allow-demo]),
+  [contenteditable]:not([data-allow-demo]) {
+    pointer-events: none !important;
+    cursor: not-allowed !important;
+    opacity: 0.55 !important;
+    background: rgba(0, 0, 0, 0.03) !important;
+    user-select: none !important;
+  }
+
+  input[type="checkbox"]:not([data-allow-demo]),
+  input[type="radio"]:not([data-allow-demo]) {
+    pointer-events: none !important;
+    cursor: not-allowed !important;
+    opacity: 0.55 !important;
+  }
+
+  /* ---------------- Primary / dark / danger action buttons ----------------
+     Tabs use .btn-sm and remain active. */
+  .btn-primary:not(.btn-sm):not([data-allow-demo]),
+  .btn-dark:not(.btn-sm):not([data-allow-demo]),
+  .btn-danger:not([data-allow-demo]),
+  button[type="submit"]:not([data-allow-demo]) {
+    pointer-events: none !important;
+    cursor: not-allowed !important;
+    opacity: 0.55 !important;
+    position: relative;
+    filter: grayscale(0.25);
+  }
+
+  .btn-primary:not(.btn-sm):not([data-allow-demo])::after,
+  .btn-dark:not(.btn-sm):not([data-allow-demo])::after,
+  .btn-danger:not([data-allow-demo])::after,
+  button[type="submit"]:not([data-allow-demo])::after {
+    content: " 🔒";
+    margin-left: 6px;
+    font-size: 0.85em;
+    display: inline-block;
+    transform: translateY(-1px);
+  }
+
+  /* ---------------- External links (target="_blank") ----------------
+     All external links go OUT of the demo → locked. */
+  a[target="_blank"]:not([data-allow-demo]) {
+    pointer-events: none !important;
+    cursor: not-allowed !important;
+    opacity: 0.55 !important;
+    position: relative;
+    filter: grayscale(0.25);
+  }
+
+  a[target="_blank"]:not([data-allow-demo])::after {
+    content: " 🔒";
+    margin-left: 4px;
+    font-size: 0.85em;
+    display: inline-block;
+    transform: translateY(-1px);
+  }
+
+  /* ---------------- Print / export buttons (by class hints) ---------------- */
+  .print-button:not([data-allow-demo]),
+  [data-action="print"]:not([data-allow-demo]),
+  [data-action="export"]:not([data-allow-demo]) {
+    pointer-events: none !important;
+    cursor: not-allowed !important;
+    opacity: 0.55 !important;
+    filter: grayscale(0.25);
+  }
+
+  .print-button:not([data-allow-demo])::after,
+  [data-action="print"]:not([data-allow-demo])::after,
+  [data-action="export"]:not([data-allow-demo])::after {
+    content: " 🔒";
+    margin-left: 4px;
+  }
+
+  /* Disable @media print export of the demo */
+  @media print {
+    body { display: none !important; }
+  }
+}
+
+/* Allow the body padding to push content below the fixed banner */
+body[data-demo-padding="1"] {
+  padding-top: 0;
+}

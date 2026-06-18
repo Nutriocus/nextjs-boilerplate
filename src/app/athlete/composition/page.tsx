@@ -29,13 +29,29 @@ type Compo = {
   photoNote?: string;
 };
 
+type DiscKey = "cap" | "trail" | "cyc" | "nat";
+
 type Test = {
   id: string;
   date: string;
+  discipline?: DiscKey; // optional for backward compatibility with old entries
   poids: number;
   puissance: number;
   vitesse: number;
   fc: number;
+};
+
+const DISC_LABELS: Record<DiscKey, string> = {
+  cap: "Course",
+  trail: "Trail",
+  cyc: "Cyclisme",
+  nat: "Natation",
+};
+const DISC_ICONS: Record<DiscKey, string> = {
+  cap: "🏃",
+  trail: "⛰",
+  cyc: "🚴",
+  nat: "🏊",
 };
 
 function toNum(v: unknown): number {
@@ -153,8 +169,16 @@ export default function CompositionPage() {
     photo: "",
     photoNote: "",
   });
-  const [tDraft, setTDraft] = useState({
+  const [tDraft, setTDraft] = useState<{
+    date: string;
+    discipline: DiscKey;
+    poids: string;
+    puissance: string;
+    vitesse: string;
+    fc: string;
+  }>({
     date: today(),
+    discipline: "trail",
     poids: "",
     puissance: "",
     vitesse: "",
@@ -241,14 +265,29 @@ export default function CompositionPage() {
     setCompo((prev) => prev.filter((x) => x.id !== id));
   }
 
-  function ireFor(t: Test): { cap: number | null; trail: number | null; cyc: number | null; nat: number | null; tri: number | null } {
-    if (!t.poids || !t.fc) return { cap: null, trail: null, cyc: null, nat: null, tri: null };
-    const cap = t.vitesse / (t.fc * t.poids);
-    const trail = t.puissance / t.poids / t.fc;
-    const cyc = t.puissance / (t.fc * t.poids);
-    const nat = t.vitesse / (t.fc * t.poids);
-    const tri = 0.15 * nat + 0.55 * cyc + 0.3 * cap;
-    return { cap, trail, cyc, nat, tri };
+  // IRE for a SPECIFIC test, computed only for its declared discipline.
+  // Triathlon is not a "test discipline" — it's computed as a composite below.
+  function ireForTest(t: Test): number | null {
+    if (!t.poids || !t.fc) return null;
+    // Backward-compat: if no discipline, infer from available fields (legacy entries)
+    const d: DiscKey =
+      t.discipline ||
+      (t.puissance && !t.vitesse ? "cyc" : t.vitesse ? "cap" : "trail");
+    switch (d) {
+      case "cap":
+      case "nat":
+        return t.vitesse ? t.vitesse / (t.fc * t.poids) : null;
+      case "trail":
+        return t.puissance ? t.puissance / t.poids / t.fc : null;
+      case "cyc":
+        return t.puissance ? t.puissance / (t.fc * t.poids) : null;
+    }
+  }
+  function effectiveDiscipline(t: Test): DiscKey {
+    if (t.discipline) return t.discipline;
+    if (t.puissance && !t.vitesse) return "cyc";
+    if (t.vitesse && !t.puissance) return "cap";
+    return "trail";
   }
 
   function addTest() {
@@ -259,6 +298,7 @@ export default function CompositionPage() {
         {
           id: newId(),
           date: tDraft.date,
+          discipline: tDraft.discipline,
           poids: toNum(tDraft.poids),
           puissance: toNum(tDraft.puissance),
           vitesse: toNum(tDraft.vitesse),
@@ -266,14 +306,14 @@ export default function CompositionPage() {
         },
       ].sort((a, b) => (a.date < b.date ? -1 : 1)),
     );
-    setTDraft({ date: today(), poids: "", puissance: "", vitesse: "", fc: "" });
+    setTDraft({ date: today(), discipline: tDraft.discipline, poids: "", puissance: "", vitesse: "", fc: "" });
   }
 
   function removeTest(id: string) {
     setTests((prev) => prev.filter((t) => t.id !== id));
   }
 
-  const discKey: Record<string, "cap" | "trail" | "cyc" | "nat" | "tri"> = {
+  const discKey: Record<string, DiscKey | "tri"> = {
     Trail: "trail", Course: "cap", Cyclisme: "cyc", Natation: "nat", Triathlon: "tri",
   };
   const formula: Record<string, string> = {
@@ -281,12 +321,52 @@ export default function CompositionPage() {
     Course: "Vitesse / (FC × Poids)",
     Cyclisme: "Puissance / (FC × Poids)",
     Natation: "Vitesse / (FC × Poids)",
-    Triathlon: "0,15·Nat + 0,55·Cyc + 0,3·CAP",
+    Triathlon: "0,15·IRE Nat + 0,55·IRE Cyc + 0,30·IRE CAP",
   };
-  const ireChart = [...tests]
-    .sort((a, b) => (a.date < b.date ? -1 : 1))
-    .map((t) => ({ d: dateShort(t.date), v: ireFor(t)[discKey[disc] || "trail"] }))
-    .filter((x) => x.v != null);
+
+  // Helper: most recent IRE of a given discipline up to (and including) a date
+  function latestIreUpTo(d: string, disc: DiscKey): { ire: number; t: Test } | null {
+    const candidates = tests
+      .filter((t) => effectiveDiscipline(t) === disc && t.date <= d)
+      .map((t) => ({ t, ire: ireForTest(t) }))
+      .filter((x): x is { t: Test; ire: number } => x.ire != null && x.ire > 0)
+      .sort((a, b) => (a.t.date < b.t.date ? 1 : -1));
+    return candidates[0] || null;
+  }
+
+  // Composite Triathlon IRE for a given date — needs latest of cap+cyc+nat as of that date
+  function triathlonIreAt(d: string): { ire: number | null; missing: DiscKey[] } {
+    const cap = latestIreUpTo(d, "cap");
+    const cyc = latestIreUpTo(d, "cyc");
+    const nat = latestIreUpTo(d, "nat");
+    const missing: DiscKey[] = [];
+    if (!cap) missing.push("cap");
+    if (!cyc) missing.push("cyc");
+    if (!nat) missing.push("nat");
+    if (!cap || !cyc || !nat) return { ire: null, missing };
+    return { ire: 0.15 * nat.ire + 0.55 * cyc.ire + 0.3 * cap.ire, missing: [] };
+  }
+
+  const currentDiscKey = discKey[disc] || "trail";
+
+  const ireChart = useMemo(() => {
+    if (currentDiscKey === "tri") {
+      // For triathlon: compute composite at every date where at least one new test was added
+      const allDates = Array.from(new Set(tests.map((t) => t.date))).sort();
+      return allDates
+        .map((d) => {
+          const { ire } = triathlonIreAt(d);
+          return { d: dateShort(d), v: ire };
+        })
+        .filter((x) => x.v != null);
+    }
+    return [...tests]
+      .filter((t) => effectiveDiscipline(t) === currentDiscKey)
+      .sort((a, b) => (a.date < b.date ? -1 : 1))
+      .map((t) => ({ d: dateShort(t.date), v: ireForTest(t) }))
+      .filter((x) => x.v != null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tests, currentDiscKey]);
 
   const compoWithPhotos = sorted.filter((c) => c.photo);
 
@@ -748,35 +828,101 @@ export default function CompositionPage() {
 
       {/* Best IRE analysis */}
       {(() => {
-        const discK = discKey[disc] || "trail";
+        if (currentDiscKey === "tri") {
+          // For triathlon: composite isn't tied to a single test, show current composite + missing
+          const todayD = today();
+          const current = triathlonIreAt(todayD);
+          if (current.ire == null) {
+            return (
+              <div className="card p-4 mb-3" style={{ borderLeft: "5px solid var(--color-text-muted)", background: "var(--color-surface-2)" }}>
+                <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)] mb-1" style={{ letterSpacing: ".08em" }}>
+                  🎯 IRE Triathlon composite
+                </div>
+                <div className="text-sm">
+                  Le calcul du Triathlon nécessite un test dans chacune des 3 disciplines.
+                  <br />
+                  Disciplines manquantes : <b className="text-[var(--color-danger)]">
+                    {current.missing.map((d) => DISC_LABELS[d]).join(" · ")}
+                  </b>
+                </div>
+              </div>
+            );
+          }
+          return (
+            <div className="card p-4 mb-3" style={{ borderLeft: "5px solid var(--color-success)", background: "rgba(95,140,10,0.06)" }}>
+              <div className="text-[10px] uppercase font-bold text-[var(--color-success)] mb-1" style={{ letterSpacing: ".08em" }}>
+                🎯 IRE Triathlon composite actuel
+              </div>
+              <div className="text-sm leading-relaxed">
+                Composite calculé à partir de tes derniers tests : <b className="text-[var(--color-success)]">{current.ire.toFixed(4)}</b>
+                <br />
+                <span className="text-xs text-[var(--color-text-muted)]">
+                  = 15 % de l&apos;IRE Natation + 55 % de l&apos;IRE Cyclisme + 30 % de l&apos;IRE Course (CAP).
+                </span>
+              </div>
+            </div>
+          );
+        }
+        // Single discipline: find best IRE for tests of THAT discipline only
         const withIre = tests
-          .map((t) => ({ t, ire: ireFor(t)[discK] }))
-          .filter((x) => x.ire != null && x.ire > 0);
-        if (withIre.length === 0) return null;
-        const best = withIre.reduce((a, b) => ((b.ire as number) > (a.ire as number) ? b : a));
+          .filter((t) => effectiveDiscipline(t) === currentDiscKey)
+          .map((t) => ({ t, ire: ireForTest(t) }))
+          .filter((x): x is { t: Test; ire: number } => x.ire != null && x.ire > 0);
+        if (withIre.length === 0) {
+          return (
+            <div className="card p-4 mb-3" style={{ borderLeft: "5px solid var(--color-text-muted)", background: "var(--color-surface-2)" }}>
+              <div className="text-sm text-[var(--color-text-muted)]">
+                Aucun test renseigné en <b>{disc}</b>. Ajoute un test en sélectionnant la discipline {DISC_ICONS[currentDiscKey]} {DISC_LABELS[currentDiscKey]}.
+              </div>
+            </div>
+          );
+        }
+        const best = withIre.reduce((a, b) => (b.ire > a.ire ? b : a));
         return (
           <div className="card p-4 mb-3" style={{ borderLeft: "5px solid var(--color-success)", background: "rgba(95,140,10,0.06)" }}>
             <div className="text-[10px] uppercase font-bold text-[var(--color-success)] mb-1" style={{ letterSpacing: ".08em" }}>
-              🎯 Poids de forme estimé
+              🎯 Poids de forme estimé — {disc}
             </div>
             <div className="text-sm leading-relaxed">
               Ton indice de rendement énergétique a été <b className="text-[var(--color-success)]">le plus efficient le {dateLong(best.t.date)}</b> au poids
-              de <b className="text-[var(--color-success)]">{best.t.poids} kg</b> (IRE = {(best.ire as number).toFixed(4)}).
+              de <b className="text-[var(--color-success)]">{best.t.poids} kg</b> (IRE = {best.ire.toFixed(4)}).
               Ton <b>poids de forme</b> peut se situer à ce poids pour la discipline <b>{disc}</b>.
             </div>
           </div>
         );
       })()}
 
-      <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 items-start">
         <div className="card p-4">
           <div className="font-extrabold mb-3">Nouveau test</div>
           <div className="flex flex-col gap-2">
             <Field label="Date"><input type="date" className="input" value={tDraft.date} onChange={(e) => setTDraft({ ...tDraft, date: e.target.value })} /></Field>
+            <Field label="Discipline du test">
+              <div className="grid grid-cols-2 gap-1.5">
+                {(["cap", "trail", "cyc", "nat"] as DiscKey[]).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setTDraft({ ...tDraft, discipline: d })}
+                    className={tDraft.discipline === d ? "btn-primary btn-sm" : "btn-ghost btn-sm"}
+                  >
+                    {DISC_ICONS[d]} {DISC_LABELS[d]}
+                  </button>
+                ))}
+              </div>
+            </Field>
             <Field label="Poids (kg)"><input className="input" value={tDraft.poids} onChange={(e) => setTDraft({ ...tDraft, poids: e.target.value })} /></Field>
-            <Field label="Puissance (W)"><input className="input" value={tDraft.puissance} onChange={(e) => setTDraft({ ...tDraft, puissance: e.target.value })} /></Field>
-            <Field label="Vitesse (km/h)"><input className="input" value={tDraft.vitesse} onChange={(e) => setTDraft({ ...tDraft, vitesse: e.target.value })} /></Field>
+            {(tDraft.discipline === "cyc" || tDraft.discipline === "trail") && (
+              <Field label="Puissance (W)"><input className="input" value={tDraft.puissance} onChange={(e) => setTDraft({ ...tDraft, puissance: e.target.value })} /></Field>
+            )}
+            {(tDraft.discipline === "cap" || tDraft.discipline === "nat") && (
+              <Field label="Vitesse (km/h)"><input className="input" value={tDraft.vitesse} onChange={(e) => setTDraft({ ...tDraft, vitesse: e.target.value })} /></Field>
+            )}
             <Field label="FC moyenne (bpm)"><input className="input" value={tDraft.fc} onChange={(e) => setTDraft({ ...tDraft, fc: e.target.value })} /></Field>
+            <div className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+              💡 L&apos;IRE sera calculé uniquement pour la discipline sélectionnée.
+              Le composite <b>Triathlon</b> agrège automatiquement les derniers IRE des 3 disciplines (CAP, Cyc, Nat).
+            </div>
             <button onClick={addTest} className="btn-primary mt-1">Ajouter</button>
           </div>
         </div>
@@ -804,38 +950,58 @@ export default function CompositionPage() {
               <table className="table" style={{ minWidth: 620 }}>
                 <thead>
                   <tr>
-                    <th>Date</th><th>Poids</th><th>Puiss.</th><th>Vit.</th><th>FC</th>
-                    <th>IRE CAP</th><th>IRE Trail</th><th>IRE Cyc</th><th>IRE Tri</th><th></th>
+                    <th>Date</th><th>Discipline</th><th>Poids</th><th>Puiss.</th><th>Vit.</th><th>FC</th>
+                    <th>IRE</th><th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {(() => {
-                    const discK = discKey[disc] || "trail";
-                    const withIre = tests
-                      .map((t) => ({ id: t.id, ire: ireFor(t)[discK] }))
-                      .filter((x) => x.ire != null && x.ire > 0);
-                    const bestId = withIre.length > 0
-                      ? withIre.reduce((a, b) => ((b.ire as number) > (a.ire as number) ? b : a)).id
-                      : null;
+                    // Best IRE applies to the selected discipline (or overall best for tri view)
+                    let bestId: string | null = null;
+                    if (currentDiscKey !== "tri") {
+                      const withIre = tests
+                        .filter((t) => effectiveDiscipline(t) === currentDiscKey)
+                        .map((t) => ({ id: t.id, ire: ireForTest(t) }))
+                        .filter((x): x is { id: string; ire: number } => x.ire != null && x.ire > 0);
+                      if (withIre.length > 0) {
+                        bestId = withIre.reduce((a, b) => (b.ire > a.ire ? b : a)).id;
+                      }
+                    }
                     return [...tests].sort((a, b) => (a.date < b.date ? 1 : -1)).map((t) => {
-                      const i = ireFor(t);
-                      const fmt = (v: number | null) => (v == null ? "—" : v.toFixed(4));
-                      const highlight = (k: string) => discKey[disc] === k ? { background: "var(--color-accent)" } : {};
+                      const dKey = effectiveDiscipline(t);
+                      const ire = ireForTest(t);
                       const isBest = t.id === bestId;
+                      const isCurrent = currentDiscKey !== "tri" && dKey === currentDiscKey;
+                      const rowStyle = isBest
+                        ? { background: "rgba(95,140,10,0.10)", boxShadow: "inset 4px 0 0 var(--color-success)" }
+                        : isCurrent
+                          ? { background: "rgba(255,69,1,0.04)" }
+                          : { opacity: 0.55 };
                       return (
-                        <tr key={t.id} style={isBest ? { background: "rgba(95,140,10,0.10)", boxShadow: "inset 4px 0 0 var(--color-success)" } : {}}>
+                        <tr key={t.id} style={rowStyle}>
                           <td style={{ fontWeight: 700 }}>
                             {isBest && <span title="Meilleur IRE — poids de forme" style={{ color: "var(--color-success)", marginRight: 4 }}>★</span>}
                             {dateShort(t.date)}
+                          </td>
+                          <td>
+                            <span
+                              className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded"
+                              style={{
+                                background: isCurrent ? "var(--color-primary)" : "var(--color-surface-2)",
+                                color: isCurrent ? "#fff" : "var(--color-text)",
+                                letterSpacing: ".06em",
+                              }}
+                            >
+                              {DISC_ICONS[dKey]} {DISC_LABELS[dKey]}
+                            </span>
                           </td>
                           <td style={isBest ? { fontWeight: 700, color: "var(--color-success)" } : {}}>{t.poids}</td>
                           <td>{t.puissance || "—"}</td>
                           <td>{t.vitesse || "—"}</td>
                           <td>{t.fc}</td>
-                          <td style={highlight("cap")}>{fmt(i.cap)}</td>
-                          <td style={highlight("trail")}>{fmt(i.trail)}</td>
-                          <td style={highlight("cyc")}>{fmt(i.cyc)}</td>
-                          <td style={{ fontWeight: 700, ...highlight("tri") }}>{fmt(i.tri)}</td>
+                          <td style={{ fontWeight: 700, color: isCurrent ? "var(--color-primary)" : "var(--color-text)" }}>
+                            {ire != null ? ire.toFixed(4) : "—"}
+                          </td>
                           <td>
                             <button onClick={() => removeTest(t.id)} style={{ border: "none", background: "none", color: "var(--color-danger)", cursor: "pointer" }}>✕</button>
                           </td>

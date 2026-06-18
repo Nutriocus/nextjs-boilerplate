@@ -95,9 +95,11 @@ export async function saveData<T>(
  * Loads initial value, persists on every change (debounced).
  *
  * Automatically detects ?athleteId=... in URL (for coach-view-athlete flow).
+ * In demo mode (inside <DemoProvider>), reads from the snapshot and disables writes.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useDemoCtx } from "./demo-context";
 
 export function useAthleteData<T>(
   key: string,
@@ -107,6 +109,7 @@ export function useAthleteData<T>(
   const searchParams = useSearchParams();
   const urlAthleteId = searchParams?.get("athleteId") || undefined;
   const athleteId = explicitAthleteId || urlAthleteId;
+  const demo = useDemoCtx();
 
   const [value, setValue] = useState<T>(defaultValue);
   const [loaded, setLoaded] = useState(false);
@@ -114,6 +117,7 @@ export function useAthleteData<T>(
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (demo) return;
     let mounted = true;
     (async () => {
       const next = await loadData<T>(key, defaultValue, athleteId);
@@ -127,9 +131,10 @@ export function useAthleteData<T>(
       mounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, athleteId]);
+  }, [key, athleteId, demo]);
 
   useEffect(() => {
+    if (demo) return;
     if (!loaded) return;
     if (skipNextSave.current) {
       skipNextSave.current = false;
@@ -143,7 +148,20 @@ export function useAthleteData<T>(
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, loaded, key, athleteId]);
+  }, [value, loaded, key, athleteId, demo]);
+
+  const demoValue = useMemo<T>(() => {
+    if (!demo) return defaultValue;
+    if (!demo.snapshot) return defaultValue;
+    const v = demo.snapshot.athleteData[key];
+    return (v as T | undefined) ?? defaultValue;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demo, demo?.snapshot, key]);
+
+  if (demo) {
+    const noop = () => {};
+    return [demoValue, noop, demo.ready];
+  }
 
   return [value, setValue, loaded];
 }

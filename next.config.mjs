@@ -45,6 +45,32 @@ const nextConfig = {
   images: {
     remotePatterns: [{ protocol: "https", hostname: "*.supabase.co" }],
   },
+  async headers() {
+    // Allow embedding /demo/* in an iframe on nutriocus.com (marketing site).
+    // Default X-Frame-Options DENY remains on every other route for security.
+    return [
+      {
+        source: "/demo/:path*",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value:
+              "frame-ancestors 'self' https://nutriocus.com https://www.nutriocus.com",
+          },
+        ],
+      },
+      {
+        source: "/demo",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value:
+              "frame-ancestors 'self' https://nutriocus.com https://www.nutriocus.com",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default withPWA(nextConfig);

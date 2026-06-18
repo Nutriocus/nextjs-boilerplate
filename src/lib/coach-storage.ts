@@ -91,18 +91,21 @@ export async function saveCoachData<T>(key: string, value: T): Promise<boolean> 
 }
 
 // ============== React hook ==============
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useDemoCtx } from "./demo-context";
 
 export function useCoachData<T>(
   key: string,
   defaultValue: T,
 ): [T, (v: T | ((prev: T) => T)) => void, boolean] {
+  const demo = useDemoCtx();
   const [value, setValue] = useState<T>(defaultValue);
   const [loaded, setLoaded] = useState(false);
   const skipNextSave = useRef(true);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (demo) return;
     let mounted = true;
     (async () => {
       const next = await loadCoachData<T>(key, defaultValue);
@@ -116,9 +119,10 @@ export function useCoachData<T>(
       mounted = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, demo]);
 
   useEffect(() => {
+    if (demo) return;
     if (!loaded) return;
     if (skipNextSave.current) {
       skipNextSave.current = false;
@@ -132,7 +136,20 @@ export function useCoachData<T>(
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, loaded, key]);
+  }, [value, loaded, key, demo]);
+
+  const demoValue = useMemo<T>(() => {
+    if (!demo) return defaultValue;
+    if (!demo.snapshot) return defaultValue;
+    const v = demo.snapshot.coachData[key];
+    return (v as T | undefined) ?? defaultValue;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demo, demo?.snapshot, key]);
+
+  if (demo) {
+    const noop = () => {};
+    return [demoValue, noop, demo.ready];
+  }
 
   return [value, setValue, loaded];
 }

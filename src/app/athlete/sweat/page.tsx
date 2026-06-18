@@ -114,12 +114,26 @@ function predictSweat(
 // ===================== PAGE =====================
 export default function SweatPage() {
   const [tests, setTests, loaded] = useAthleteData<SweatTest[]>("sweat", []);
+  const [profile] = useAthleteData<{ poids?: number | string }>("profile", {});
   const [tab, setTab] = useState<"journal" | "analyse" | "anticipation">("journal");
   const [draft, setDraft] = useState<SweatTest>(blank());
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [viewingId, setViewingId] = useState<string | null>(null);
-  const [pred, setPred] = useState({ temp: "20", fc: "150", humidite: "60", duree: "60" });
+  const [pred, setPred] = useState({
+    temp: "20",
+    fc: "150",
+    humidite: "60",
+    duree: "60",
+    poids: profile.poids ? String(profile.poids) : "70",
+  });
+
+  // Sync prediction weight when profile loads / changes
+  useEffect(() => {
+    if (profile.poids != null && profile.poids !== "") {
+      setPred((p) => ({ ...p, poids: String(profile.poids) }));
+    }
+  }, [profile.poids]);
 
   const update = (k: keyof SweatTest, v: string) =>
     setDraft((d) => ({ ...d, [k]: v }));
@@ -410,6 +424,12 @@ export default function SweatPage() {
               <Field label="Durée estimée (min)">
                 <input className="input" value={pred.duree} onChange={(e) => setPred({ ...pred, duree: e.target.value })} />
               </Field>
+              <Field label="Poids athlète (kg)">
+                <input className="input" value={pred.poids} onChange={(e) => setPred({ ...pred, poids: e.target.value })} />
+              </Field>
+              <div className="text-[10px] text-[var(--color-text-muted)]">
+                Pré-rempli depuis ton profil. Modifie si besoin.
+              </div>
             </div>
           </div>
 
@@ -458,36 +478,126 @@ export default function SweatPage() {
                   </div>
                 </div>
 
-                <div className="card p-4">
-                  <div className="font-extrabold mb-3 text-sm">💧 Recommandations hydratation</div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-lg p-3" style={{ background: "var(--color-surface-2)", borderLeft: "3px solid var(--color-primary)" }}>
-                      <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]" style={{ letterSpacing: ".06em" }}>
-                        À ingérer pour compenser
+                {(() => {
+                  const dureeH = toNum(pred.duree) / 60;
+                  const poidsKg = toNum(pred.poids);
+                  // 2.5% rule: max tolerable water loss = 2.5% × body weight (in ml = 25 × kg)
+                  const maxLossMl = poidsKg * 25; // 0.025 × kg × 1000 ml/kg
+                  const totalSweatMl = prediction.predicted * dureeH;
+                  const toIngestTotalMl = Math.max(0, totalSweatMl - maxLossMl);
+                  const toIngestPerH = dureeH > 0 ? toIngestTotalMl / dureeH : 0;
+                  const lossPctIfZero = poidsKg > 0 ? (totalSweatMl / (poidsKg * 1000)) * 100 : 0;
+                  const willCompensate = toIngestPerH < prediction.predicted;
+                  return (
+                    <div className="card p-4">
+                      <div className="font-extrabold mb-1 text-sm">💧 Recommandations hydratation</div>
+                      <div className="text-xs text-[var(--color-text-muted)] mb-3">
+                        Objectif : <b>ne pas dépasser 2,5 % de déshydratation</b> par rapport à ton poids corporel
+                        ({poidsKg > 0 ? `soit max ${Math.round(maxLossMl)} ml pour ${poidsKg} kg` : "renseigne ton poids"}).
                       </div>
-                      <div className="font-extrabold text-base">
-                        {Math.round(prediction.predicted * 0.6)}-{Math.round(prediction.predicted * 0.8)} ml / h
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                        <div
+                          className="rounded-lg p-3"
+                          style={{ background: "var(--color-surface-2)", borderLeft: "3px solid var(--color-primary)" }}
+                        >
+                          <div
+                            className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]"
+                            style={{ letterSpacing: ".06em" }}
+                          >
+                            À ingérer / heure
+                          </div>
+                          <div className="font-extrabold text-2xl" style={{ color: "var(--color-primary)", fontFamily: "var(--font-display)" }}>
+                            {Math.round(toIngestPerH)} ml/h
+                          </div>
+                          <div className="text-xs text-[var(--color-text-muted)] mt-1">
+                            Pour rester sous la limite des 2,5 %
+                          </div>
+                        </div>
+                        <div
+                          className="rounded-lg p-3"
+                          style={{ background: "var(--color-surface-2)", borderLeft: "3px solid var(--color-dark)" }}
+                        >
+                          <div
+                            className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]"
+                            style={{ letterSpacing: ".06em" }}
+                          >
+                            Volume total sur la course
+                          </div>
+                          <div className="font-extrabold text-2xl" style={{ color: "var(--color-dark)", fontFamily: "var(--font-display)" }}>
+                            {Math.round(toIngestTotalMl)} ml
+                          </div>
+                          <div className="text-xs text-[var(--color-text-muted)] mt-1">
+                            Sur {pred.duree} min · pertes totales estimées : {Math.round(totalSweatMl)} ml
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-xs text-[var(--color-text-muted)] mt-1">
-                        60-80 % du taux de sudation (le reste = déshydratation tolérée)
+
+                      {/* Visual breakdown */}
+                      <div className="mt-4">
+                        <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)] mb-1" style={{ letterSpacing: ".06em" }}>
+                          Répartition des pertes
+                        </div>
+                        {poidsKg > 0 && totalSweatMl > 0 && (
+                          <div className="h-3 rounded-full overflow-hidden flex" style={{ background: "var(--color-surface-2)" }}>
+                            <div
+                              style={{
+                                width: `${(Math.min(toIngestTotalMl, totalSweatMl) / totalSweatMl) * 100}%`,
+                                background: "var(--color-primary)",
+                              }}
+                              title={`À ingérer : ${Math.round(toIngestTotalMl)} ml`}
+                            />
+                            <div
+                              style={{
+                                width: `${(Math.max(0, Math.min(maxLossMl, totalSweatMl - toIngestTotalMl)) / totalSweatMl) * 100}%`,
+                                background: "var(--color-success)",
+                              }}
+                              title={`Déshydratation tolérée (≤ 2,5%) : ${Math.round(Math.min(maxLossMl, totalSweatMl))} ml`}
+                            />
+                          </div>
+                        )}
+                        <div className="flex justify-between text-[10px] text-[var(--color-text-muted)] mt-1.5">
+                          <span>
+                            <span style={{ display: "inline-block", width: 8, height: 8, background: "var(--color-primary)", borderRadius: 2, marginRight: 4 }} />
+                            À ingérer pendant la course
+                          </span>
+                          <span>
+                            <span style={{ display: "inline-block", width: 8, height: 8, background: "var(--color-success)", borderRadius: 2, marginRight: 4 }} />
+                            Déshydratation tolérée (≤ 2,5 %)
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Warnings */}
+                      <div className="mt-4 space-y-1.5 text-xs">
+                        {!willCompensate && (
+                          <div
+                            className="p-2.5 rounded"
+                            style={{ background: "rgba(95,140,10,0.10)", color: "var(--color-success)" }}
+                          >
+                            ✓ Avec une durée de {pred.duree} min, tu peux rester sous 2,5 % de déshydratation <b>sans rien boire</b>
+                            (perte estimée : {lossPctIfZero.toFixed(1)} %). Bois quand même pour le confort.
+                          </div>
+                        )}
+                        {toIngestPerH > 1000 && (
+                          <div
+                            className="p-2.5 rounded"
+                            style={{ background: "rgba(207,46,46,0.10)", color: "var(--color-danger)" }}
+                          >
+                            ⚠ Plus de 1 000 ml/h à ingérer = au-delà de la tolérance digestive moyenne. Travaille en amont ta
+                            tolérance hydrique (voir le module &quot;Tests de tolérance&quot;).
+                          </div>
+                        )}
+                        {toIngestPerH >= 500 && toIngestPerH <= 1000 && (
+                          <div className="text-[var(--color-text-muted)]">
+                            ℹ Volume horaire dans la fourchette tolérable (500-1000 ml/h) — vérifie que tu as déjà tenu cette
+                            cadence en entraînement.
+                          </div>
+                        )}
                       </div>
                     </div>
-                    <div className="rounded-lg p-3" style={{ background: "var(--color-surface-2)", borderLeft: "3px solid var(--color-dark)" }}>
-                      <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]" style={{ letterSpacing: ".06em" }}>
-                        Volume total sur la course
-                      </div>
-                      <div className="font-extrabold text-base">
-                        ~ {Math.round((prediction.predicted * 0.7 * toNum(pred.duree)) / 60)} ml
-                      </div>
-                      <div className="text-xs text-[var(--color-text-muted)] mt-1">
-                        Estimation à 70 % de compensation sur {pred.duree} min
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-3 text-xs text-[var(--color-text-muted)]">
-                    ⚠ Limite ta consommation horaire à ce que tu tolères digestivement (généralement 500-1000 ml/h max).
-                  </div>
-                </div>
+                  );
+                })()}
 
                 {prediction.topMatches.length > 0 && (
                   <div className="card p-4 mt-4">

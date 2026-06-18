@@ -626,6 +626,114 @@ export default function CompositionPage() {
       {/* ============ IRE ============ */}
       <PageHeader kicker="Poids de forme" title="IRE — indice de rendement énergétique" />
 
+      {/* What is IRE? */}
+      <details className="card p-4 mb-3" style={{ borderLeft: "5px solid var(--color-primary)" }}>
+        <summary className="font-extrabold cursor-pointer text-sm" style={{ fontFamily: "var(--font-display)", letterSpacing: "-0.01em" }}>
+          ℹ️ Qu&apos;est-ce que l&apos;IRE ?
+        </summary>
+        <div className="text-sm leading-relaxed mt-3 space-y-2 text-[var(--color-text)]">
+          <p>
+            L&apos;<b>Indice de Rendement Énergétique</b> est un indicateur composite qui mesure ton efficacité énergétique globale,
+            en croisant <b>performance mécanique</b> (vitesse / puissance), <b>coût cardiaque</b> (FC moyenne) et <b>poids corporel</b>.
+          </p>
+          <p className="text-center text-base p-2 rounded" style={{ background: "var(--color-surface-2)", fontFamily: "var(--font-display)" }}>
+            <b>IRE = Performance ÷ (FC × Poids)</b>
+          </p>
+          <p>
+            Il repose sur 3 fondements scientifiques :
+          </p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li><b>Running Economy</b> — le coût énergétique pour maintenir une vitesse donnée (proxy via la FC)</li>
+            <li><b>Cardiac Cost Index</b> — le coût cardiaque pour une unité de travail mécanique</li>
+            <li><b>Charge mécanique relative</b> — normalisation par le poids corporel</li>
+          </ul>
+          <p className="mt-2">
+            <b>Plus l&apos;IRE est élevé, meilleur est ton rendement</b>. Le poids où ton IRE atteint son <b>pic</b> = ton <b>poids de forme</b>,
+            celui où tu es le plus efficient sans coût cardiaque excessif ni perte de puissance.
+          </p>
+          <p className="text-xs text-[var(--color-text-muted)] italic">
+            Références : Lucía et al. (1999), Saunders et al. (2004), Barnes & Kilding (2015), Seiler & Kjerland (2006).
+          </p>
+        </div>
+      </details>
+
+      {/* Protocol */}
+      <details className="card p-4 mb-3" style={{ borderLeft: "5px solid var(--color-dark)" }}>
+        <summary className="font-extrabold cursor-pointer text-sm" style={{ fontFamily: "var(--font-display)", letterSpacing: "-0.01em" }}>
+          📋 Protocole de détermination — comment réaliser le test
+        </summary>
+        <div className="mt-3 space-y-4 text-sm">
+          <div className="text-[var(--color-text-muted)] italic">
+            Choisis le protocole correspondant à ta discipline. Les conditions doivent être <b>strictement identiques entre 2 tests</b> pour que la comparaison soit valide.
+          </div>
+
+          <ProtocolBlock
+            sport="🏃 Coureur (route / piste)"
+            objective="Évaluer l'efficacité énergétique à une intensité sous-maximale stable."
+            test={[
+              "Footing continu de 45 minutes à 70-75 % de FCmax",
+              "Terrain plat ou léger faux-plat, sans vent marqué",
+              "Toujours le matin, 2-3 h après un petit-déjeuner standardisé",
+            ]}
+            measure={["Poids le matin du test, à jeun après miction", "FC moyenne", "Vitesse moyenne (km/h)", "RPE post-effort (0-10)"]}
+            avoid={[
+              "Aucun entraînement intense les 36 h précédentes",
+              "Pas de déficit énergétique ou de jeûne",
+              "Pas de caféine dans les 3 h précédentes",
+              "Pas d'alcool la veille",
+            ]}
+            freq="Toutes les 3-4 semaines · 1× toutes les 2 semaines en phase de recomposition"
+          />
+
+          <ProtocolBlock
+            sport="⛰ Traileur"
+            objective="Mesurer le rendement énergétique en terrain vallonné."
+            test={[
+              "Boucle trail continue 60 min avec profil fixe (250-400 m D+)",
+              "Intensité Zone 2 / bas Zone 3 (70-80 % FCmax)",
+              "Même parcours, sol sec, hydratation identique sur le test (ex. 500 ml)",
+            ]}
+            measure={["Distance (km)", "D+ total (m)", "FC moyenne", "RPE", "Poids du jour"]}
+            avoid={["Pas de séance de dénivelé ou force la veille", "Pas de déficit énergétique important (>90% besoins)", "Pas de supplémentation caféinée"]}
+            freq="Tous les 30-40 jours, hors phases de charge"
+          />
+
+          <ProtocolBlock
+            sport="🚴 Cycliste"
+            objective="Mesurer l'efficience cardiorespiratoire à une charge mécanique stable (W/kg)."
+            test={[
+              "40 minutes à 85-90 % FTP (zone sweet spot)",
+              "Sur home-trainer ou route plate sans arrêt",
+              "Même home-trainer, même calibration du capteur, température stable 18-22°C",
+            ]}
+            measure={["Puissance moyenne (W)", "FC moyenne", "Poids du jour", "RPE post-effort"]}
+            avoid={["Aucune séance intense les 24 h précédentes", "Pas de café/stimulant 3 h avant", "Hydratation standard, éviter les tests à jeun"]}
+            freq="Toutes les 3 semaines en suivi standard · 2 semaines en affûtage / recomposition"
+          />
+
+          <ProtocolBlock
+            sport="🏊 Triathlète"
+            objective="Suivre le rendement énergétique global via 3 tests complémentaires."
+            test={[
+              "Natation : 1000 m continus à allure endurance (75% intensité perçue)",
+              "Cyclisme : protocole Sweet Spot 40 min",
+              "Course : protocole 45 min EF",
+            ]}
+            measure={["Chrono / vitesse / FC moyenne pour chaque", "Poids du jour"]}
+            avoid={["Même bassin et même créneau horaire pour la natation", "Pas de séance la veille au soir", "Pas de pré-fatigue musculaire"]}
+            freq="Cycle complet tous les 6-8 semaines · Ou alterner 1 test/discipline toutes les 2-3 semaines"
+          />
+
+          <div className="text-xs p-3 rounded" style={{ background: "var(--color-surface-2)", borderLeft: "3px solid var(--color-success)" }}>
+            <b>📈 Interprétation rapide :</b>
+            <br />• IRE ↑ avec poids stable → meilleure adaptation métabolique
+            <br />• IRE ↑ avec poids ↓ → recomposition corporelle efficace
+            <br />• IRE ↓ avec poids stable → fatigue / déficit énergétique latent
+            <br />• IRE ↓ avec poids ↓ → poids trop bas / risque REDS
+          </div>
+        </div>
+      </details>
+
       <div className="flex gap-1.5 flex-wrap mb-3">
         {["Trail", "Course", "Cyclisme", "Natation", "Triathlon"].map((d) => (
           <button key={d} onClick={() => setDisc(d)} className={disc === d ? "btn-primary btn-sm" : "btn-ghost btn-sm"}>
@@ -637,6 +745,28 @@ export default function CompositionPage() {
       <div className="text-sm text-[var(--color-text-muted)] mb-3">
         Formule {disc} : <b className="text-[var(--color-text)]">{formula[disc]}</b> — plus la valeur est haute, meilleur est le rendement.
       </div>
+
+      {/* Best IRE analysis */}
+      {(() => {
+        const discK = discKey[disc] || "trail";
+        const withIre = tests
+          .map((t) => ({ t, ire: ireFor(t)[discK] }))
+          .filter((x) => x.ire != null && x.ire > 0);
+        if (withIre.length === 0) return null;
+        const best = withIre.reduce((a, b) => ((b.ire as number) > (a.ire as number) ? b : a));
+        return (
+          <div className="card p-4 mb-3" style={{ borderLeft: "5px solid var(--color-success)", background: "rgba(95,140,10,0.06)" }}>
+            <div className="text-[10px] uppercase font-bold text-[var(--color-success)] mb-1" style={{ letterSpacing: ".08em" }}>
+              🎯 Poids de forme estimé
+            </div>
+            <div className="text-sm leading-relaxed">
+              Ton indice de rendement énergétique a été <b className="text-[var(--color-success)]">le plus efficient le {dateLong(best.t.date)}</b> au poids
+              de <b className="text-[var(--color-success)]">{best.t.poids} kg</b> (IRE = {(best.ire as number).toFixed(4)}).
+              Ton <b>poids de forme</b> peut se situer à ce poids pour la discipline <b>{disc}</b>.
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4 items-start">
         <div className="card p-4">
@@ -679,31 +809,101 @@ export default function CompositionPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {[...tests].sort((a, b) => (a.date < b.date ? 1 : -1)).map((t) => {
-                    const i = ireFor(t);
-                    const fmt = (v: number | null) => (v == null ? "—" : v.toFixed(4));
-                    const highlight = (k: string) => discKey[disc] === k ? { background: "var(--color-accent)" } : {};
-                    return (
-                      <tr key={t.id}>
-                        <td style={{ fontWeight: 700 }}>{dateShort(t.date)}</td>
-                        <td>{t.poids}</td>
-                        <td>{t.puissance || "—"}</td>
-                        <td>{t.vitesse || "—"}</td>
-                        <td>{t.fc}</td>
-                        <td style={highlight("cap")}>{fmt(i.cap)}</td>
-                        <td style={highlight("trail")}>{fmt(i.trail)}</td>
-                        <td style={highlight("cyc")}>{fmt(i.cyc)}</td>
-                        <td style={{ fontWeight: 700, ...highlight("tri") }}>{fmt(i.tri)}</td>
-                        <td>
-                          <button onClick={() => removeTest(t.id)} style={{ border: "none", background: "none", color: "var(--color-danger)", cursor: "pointer" }}>✕</button>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {(() => {
+                    const discK = discKey[disc] || "trail";
+                    const withIre = tests
+                      .map((t) => ({ id: t.id, ire: ireFor(t)[discK] }))
+                      .filter((x) => x.ire != null && x.ire > 0);
+                    const bestId = withIre.length > 0
+                      ? withIre.reduce((a, b) => ((b.ire as number) > (a.ire as number) ? b : a)).id
+                      : null;
+                    return [...tests].sort((a, b) => (a.date < b.date ? 1 : -1)).map((t) => {
+                      const i = ireFor(t);
+                      const fmt = (v: number | null) => (v == null ? "—" : v.toFixed(4));
+                      const highlight = (k: string) => discKey[disc] === k ? { background: "var(--color-accent)" } : {};
+                      const isBest = t.id === bestId;
+                      return (
+                        <tr key={t.id} style={isBest ? { background: "rgba(95,140,10,0.10)", boxShadow: "inset 4px 0 0 var(--color-success)" } : {}}>
+                          <td style={{ fontWeight: 700 }}>
+                            {isBest && <span title="Meilleur IRE — poids de forme" style={{ color: "var(--color-success)", marginRight: 4 }}>★</span>}
+                            {dateShort(t.date)}
+                          </td>
+                          <td style={isBest ? { fontWeight: 700, color: "var(--color-success)" } : {}}>{t.poids}</td>
+                          <td>{t.puissance || "—"}</td>
+                          <td>{t.vitesse || "—"}</td>
+                          <td>{t.fc}</td>
+                          <td style={highlight("cap")}>{fmt(i.cap)}</td>
+                          <td style={highlight("trail")}>{fmt(i.trail)}</td>
+                          <td style={highlight("cyc")}>{fmt(i.cyc)}</td>
+                          <td style={{ fontWeight: 700, ...highlight("tri") }}>{fmt(i.tri)}</td>
+                          <td>
+                            <button onClick={() => removeTest(t.id)} style={{ border: "none", background: "none", color: "var(--color-danger)", cursor: "pointer" }}>✕</button>
+                          </td>
+                        </tr>
+                      );
+                    });
+                  })()}
                 </tbody>
               </table>
             </div>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProtocolBlock({
+  sport,
+  objective,
+  test,
+  measure,
+  avoid,
+  freq,
+}: {
+  sport: string;
+  objective: string;
+  test: string[];
+  measure: string[];
+  avoid: string[];
+  freq: string;
+}) {
+  return (
+    <div className="rounded-lg p-3" style={{ background: "var(--color-surface-2)" }}>
+      <div className="font-extrabold text-sm mb-1" style={{ fontFamily: "var(--font-display)" }}>
+        {sport}
+      </div>
+      <div className="text-xs italic text-[var(--color-text-muted)] mb-2">🎯 {objective}</div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+        <div>
+          <div className="text-[10px] uppercase font-bold text-[var(--color-primary)] mb-1" style={{ letterSpacing: ".06em" }}>
+            🧪 Test à réaliser
+          </div>
+          <ul className="list-disc pl-4 space-y-0.5">
+            {test.map((t, i) => <li key={i}>{t}</li>)}
+          </ul>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase font-bold text-[var(--color-dark)] mb-1" style={{ letterSpacing: ".06em" }}>
+            📊 Données à relever
+          </div>
+          <ul className="list-disc pl-4 space-y-0.5">
+            {measure.map((m, i) => <li key={i}>{m}</li>)}
+          </ul>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase font-bold text-[var(--color-danger)] mb-1" style={{ letterSpacing: ".06em" }}>
+            ❌ À éviter avant
+          </div>
+          <ul className="list-disc pl-4 space-y-0.5">
+            {avoid.map((a, i) => <li key={i}>{a}</li>)}
+          </ul>
+        </div>
+        <div>
+          <div className="text-[10px] uppercase font-bold text-[var(--color-success)] mb-1" style={{ letterSpacing: ".06em" }}>
+            🔁 Fréquence
+          </div>
+          <div>{freq}</div>
         </div>
       </div>
     </div>

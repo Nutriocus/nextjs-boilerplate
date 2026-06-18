@@ -508,6 +508,156 @@ export default function ProtocolsPage() {
         <button onClick={() => setTab("neuro")} className={tab === "neuro" ? "btn-primary btn-sm" : "btn-ghost btn-sm"}>🟣 Neuromusculaire</button>
         <button onClick={() => setTab("dura")} className={tab === "dura" ? "btn-primary btn-sm" : "btn-ghost btn-sm"}>🟢 Durabilité</button>
       </div>
+      {tab === "meca" && (
+        <HelpSection title="🔴 Protocole MÉCANIQUE — comment réaliser les tests ?">
+          <HelpBlock icon="🎯" title="Objectif">
+            <p>
+              Évaluer ta <b>tolérance musculaire</b> (force concentrique, élasticité,
+              endurance excentrique) pour anticiper le <b>mur mécanique</b> en course
+              et adapter ton travail de renfo.
+            </p>
+            <p className="text-xs italic mt-1">
+              💡 Tu peux utiliser l&apos;application <b>My Jump Lab</b> (essai gratuit 14j) pour
+              mesurer les hauteurs de saut précisément.
+            </p>
+          </HelpBlock>
+          <HelpBlock icon="1️⃣" title="Test 1 — Squat Jump (SJ) — force concentrique">
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Pieds largeur d&apos;épaules, mains sur les hanches</li>
+              <li>Descends à <b>90°</b>, <b>maintiens 1 sec</b>, puis saute le plus haut possible</li>
+              <li><b>3 essais</b>, garde la meilleure hauteur</li>
+              <li>Mesure : capteur, app My Jump Lab, ou règle de saut</li>
+            </ul>
+            <div className="mt-2 text-xs">
+              <b>Interprétation :</b> &lt;25 cm = déficit · 25-35 cm = correct · &gt;35 cm = bon
+            </div>
+          </HelpBlock>
+          <HelpBlock icon="2️⃣" title="Test 2 — Counter Movement Jump (CMJ) — élasticité">
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Debout, mains sur les hanches</li>
+              <li><b>Descente rapide puis saut immédiat</b> (utilise le rebond élastique)</li>
+              <li><b>3 essais</b>, garde la meilleure</li>
+            </ul>
+            <div className="mt-2 text-xs">
+              <b>Gain CMJ − SJ :</b> &lt;2 cm = raideur · 3-6 cm = bon équilibre · &gt;8 cm = excellente réactivité
+            </div>
+          </HelpBlock>
+          <HelpBlock icon="3️⃣" title="Test 3 — Step Down excentrique — résistance quadriceps">
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Monte sur une marche de <b>25-30 cm</b></li>
+              <li>Descends <b>lentement</b> (phase excentrique contrôlée de <b>3-4 sec</b>) sur une jambe</li>
+              <li>Remonte avec les <b>deux jambes</b></li>
+              <li>Répète <b>jusqu&apos;à fatigue</b> (max 30 reps)</li>
+            </ul>
+            <div className="mt-2 text-xs">
+              <b>Interprétation :</b> &lt;15 reps = risque mur précoce · 15-25 = bonne base · &gt;25 = très bonne tolérance
+            </div>
+          </HelpBlock>
+          <HelpBlock icon="📊" title="Ce que la plateforme calcule">
+            <ul className="list-disc pl-5 space-y-1">
+              <li><b>CMI</b> (Capacité Mécanique Initiale) : puissance + résistance intégrées</li>
+              <li><b>CAP</b> (Capacité utilisable) : charge mécanique absorbable avant rupture</li>
+              <li><b>ICM</b> (Indice de Contrainte Mécanique) — &lt;0,70 OK · 0,70-0,90 vigilance · &gt;0,90 risque mur</li>
+            </ul>
+          </HelpBlock>
+        </HelpSection>
+      )}
+
+      {tab === "neuro" && (
+        <HelpSection title="🟣 Protocole NEUROMUSCULAIRE LOCAL — comment réaliser les tests ?">
+          <HelpBlock icon="🎯" title="Objectif">
+            <p>
+              Évaluer la capacité de ton <b>système nerveux à coordonner les muscles
+              sous fatigue</b>. Une mauvaise synchronisation = crampes, perte de
+              cadence, désynchronisation locale.
+            </p>
+            <p className="text-xs italic mt-1">
+              Les 4 groupes clés analysés : <b>mollets, adducteurs, quadriceps, ischios</b> —
+              tests à faire <b>jambe gauche puis jambe droite</b>.
+            </p>
+          </HelpBlock>
+          <HelpBlock icon="1️⃣" title="Test 1 — Endurance isométrique (4 muscles, G + D)">
+            <ul className="list-disc pl-5 space-y-1">
+              <li><b>Mollets — Calf hold unilatéral</b> : sur une jambe, genou tendu, monte sur la pointe du pied, chrono jusqu&apos;à rupture. Seuil : &lt;45 s = faible</li>
+              <li><b>Adducteurs — Wall squeeze</b> : assis dos au mur, balle/coussin entre les genoux, serre au max, chrono. Seuil : &lt;45 s = déficit</li>
+              <li><b>Quadriceps — Wall sit unilatéral</b> : dos au mur, une jambe à 90°, chrono. Seuil : &lt;50 s = tolérance limitée</li>
+              <li><b>Ischios — Glute bridge unilatéral</b> : allongé, une jambe en pont, chrono. Seuil : &lt;50 s = résistance faible</li>
+            </ul>
+            <div className="mt-2 text-xs">
+              👉 Pour chaque test : note <b>temps G</b> et <b>temps D</b> → la plateforme calcule l&apos;<b>asymétrie %</b>.
+            </div>
+          </HelpBlock>
+          <HelpBlock icon="2️⃣" title="Test 2 — Rate of Force Development (RFD)">
+            <ul className="list-disc pl-5 space-y-1">
+              <li><b>CMJ initial H₁</b> : mesure la hauteur du saut au repos</li>
+              <li><b>Fatigue</b> : enchaîne <b>20 fentes sautées</b> alternées (RPE 9/10)</li>
+              <li><b>Pause 10 s</b></li>
+              <li><b>3 CMJ</b> → moyenne = H₂</li>
+              <li>Ratio = H₂ / H₁ × 100</li>
+            </ul>
+            <div className="mt-2 text-xs">
+              <b>Interprétation :</b> &gt;90% = excellente relance · 80-90% = fatigue modérée · &lt;80% = déficit nerveux (risque crampe)
+            </div>
+          </HelpBlock>
+          <HelpBlock icon="3️⃣" title="Test 3 — Équilibre unipodal yeux fermés">
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Tiens-toi sur <b>une jambe, yeux fermés</b>, pendant <b>60 sec</b></li>
+              <li>Compte le <b>nombre de fois où le pied opposé touche le sol</b></li>
+              <li>Refais sur l&apos;autre jambe</li>
+              <li>Chaque contact = −10% d&apos;efficacité proprioceptive</li>
+            </ul>
+          </HelpBlock>
+          <HelpBlock icon="📊" title="Ce que la plateforme calcule">
+            <ul className="list-disc pl-5 space-y-1">
+              <li><b>INML</b> par muscle (Indice Neuromusculaire Local)</li>
+              <li>&gt;0,90 = coordination excellente · 0,80-0,90 = modéré · &lt;0,80 = risque élevé</li>
+              <li><b>Moment probable de crampe</b> estimé en % de course par muscle</li>
+              <li>Plan de travail ciblé (renfo, proprio, pliométrie + apport <b>Na 600-800 mg/L</b>)</li>
+            </ul>
+          </HelpBlock>
+        </HelpSection>
+      )}
+
+      {tab === "dura" && (
+        <HelpSection title="🟢 Protocole DURABILITÉ — comment réaliser le test ?">
+          <HelpBlock icon="🎯" title="Objectif">
+            <p>
+              Évaluer ta capacité à <b>maintenir l&apos;intensité dans la durée</b> (fatigue
+              progressive). C&apos;est souvent le vrai facteur limitant en endurance —
+              au-delà des chiffres bruts de VO₂max ou de seuil.
+            </p>
+          </HelpBlock>
+          <HelpBlock icon="📅" title="Type et durée du test (selon ton objectif)">
+            <ul className="list-disc pl-5 space-y-1">
+              <li><b>Type :</b> sortie longue spécifique (terrain proche course)</li>
+              <li><b>10 km / semi</b> → 90 min · <b>marathon</b> → 2h · <b>trail long</b> → 2h30 · <b>ultra</b> → 3h+</li>
+              <li><b>Intensité cible :</b> endurance active / allure course longue (65-80% VO₂max, zone 2 haute / zone 3 basse)</li>
+              <li>Objectif : <b>reproduire les contraintes physio de la course</b></li>
+            </ul>
+          </HelpBlock>
+          <HelpBlock icon="📝" title="Comment faire">
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Réalise la sortie avec ta <b>montre GPS + cardio</b> (et capteur de puissance si dispo)</li>
+              <li>Note ton <b>RPE au début</b> et <b>RPE à la fin</b> (échelle 1-10)</li>
+              <li>Note les conditions : <b>température, dénivelé, terrain</b></li>
+              <li>Récupère les données sur <b>Strava / ta montre</b> : FC moyenne début (0-30%), milieu (30-70%), fin (70-100%) — allure moyenne par segment</li>
+              <li>Saisis les valeurs dans la plateforme</li>
+            </ul>
+          </HelpBlock>
+          <HelpBlock icon="📊" title="Ce que la plateforme calcule">
+            <ul className="list-disc pl-5 space-y-1">
+              <li><b>HR drift</b> = (FC fin − FC début) / FC début × 100 — &lt;5% = excellente · 5-8% = correcte · 8-12% = moyenne · &gt;12% = limitante</li>
+              <li><b>Dérive mécanique</b> (baisse d&apos;allure à FC stable) — &lt;2% = très stable · 2-4% = OK · &gt;6% = faible</li>
+              <li><b>Dérive perceptive</b> (Δ RPE) — +1 = très stable · +2 = normal · +4 = limite</li>
+              <li><b>Score global Durabilité</b> — &lt;5 excellente · 5-7 solide · 7-9 moyenne · &gt;9 facteur limitant</li>
+            </ul>
+            <div className="mt-2 text-xs italic">
+              À refaire toutes les <b>4-6 semaines</b> ou avant un objectif. Tiens compte de la fatigue de la semaine, chaleur, hydratation, état nutritionnel.
+            </div>
+          </HelpBlock>
+        </HelpSection>
+      )}
+
       {tab === "diag" && <Diagnostic />}
       {tab === "meca" && <Mecanique />}
       {tab === "neuro" && <Neuro />}

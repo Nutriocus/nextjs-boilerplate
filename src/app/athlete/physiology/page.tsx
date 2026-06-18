@@ -116,8 +116,8 @@ export default function PhysiologyPage() {
             <li>Va dans <b>Mon profil</b> → Données physiologiques</li>
             <li>Renseigne <b>FCmax, VO₂max, SV1, SV2, RER SV1, RER SV2, VO₂ SV1, VO₂ SV2</b></li>
             <li>Si tu n&apos;as pas fait de test labo, demande à ton coach des estimations
-              (ex. FCmax = 220 − âge, SV1 ≈ 80% FCmax, SV2 ≈ 90% FCmax — mais les valeurs labo
-              sont toujours plus précises)</li>
+              (SV1 ≈ 80% FCmax, SV2 ≈ 90% FCmax sont des repères grossiers — un vrai test
+              à l&apos;effort reste indispensable pour avoir des valeurs fiables)</li>
           </ul>
         </HelpBlock>
       </HelpSection>

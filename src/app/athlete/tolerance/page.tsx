@@ -6,7 +6,7 @@ import { PageHeader, Kpi, Empty, Field, Badge } from "@/components/ui/PageHeader
 import { PRODUCTS_CATALOG, Product } from "@/lib/products-catalog";
 
 type Discipline = "Course" | "Trail" | "Cyclisme" | "Triathlon";
-type Ressenti = "bien" | "limite" | "mal";
+type Ressenti = "planifie" | "bien" | "limite" | "mal";
 type TestType = "glucides" | "hydrique";
 
 type ConstructorLine = {
@@ -44,7 +44,8 @@ const dateShort = (d: string) =>
 const dateLong = (d: string) =>
   parseISO(d).toLocaleDateString("fr-FR", { weekday: "long", day: "2-digit", month: "long", year: "numeric" });
 
-const RESSENTI_INFO: Record<Ressenti, { label: string; variant: "green" | "orange" | "red" }> = {
+const RESSENTI_INFO: Record<Ressenti, { label: string; variant: "green" | "orange" | "red" | "dark" }> = {
+  planifie: { label: "Test planifié (à réaliser)", variant: "dark" },
   bien: { label: "Bien toléré", variant: "green" },
   limite: { label: "Limite", variant: "orange" },
   mal: { label: "Mal toléré", variant: "red" },
@@ -76,11 +77,15 @@ function ratioValueFromString(r: string | undefined): number {
   return isNaN(x) ? 0 : x;
 }
 
-// Recommended minimum glucose:fructose ratio based on target CHO/h
+// Recommended minimum glucose:fructose ratio per CHO/h target zone
 function recommendedRatio(targetGH: number): { minRatio: number; label: string; tone: "soft" | "medium" | "hard" } {
-  if (targetGH >= 100) return { minRatio: 0.7, label: "≥ 1:0,7", tone: "hard" };
-  if (targetGH >= 80) return { minRatio: 0.5, label: "≥ 1:0,5", tone: "medium" };
-  return { minRatio: 0, label: "1:0,3 — 1:0,8 selon tolérance", tone: "soft" };
+  if (targetGH >= 110) return { minRatio: 0.8, label: "≥ 1:0,8", tone: "hard" };
+  if (targetGH >= 100) return { minRatio: 0.65, label: "≥ 1:0,65", tone: "hard" };
+  if (targetGH >= 90)  return { minRatio: 0.5,  label: "≥ 1:0,5",  tone: "medium" };
+  if (targetGH >= 80)  return { minRatio: 0.4,  label: "≥ 1:0,4",  tone: "medium" };
+  if (targetGH >= 70)  return { minRatio: 0.35, label: "≥ 1:0,35", tone: "soft" };
+  if (targetGH >= 60)  return { minRatio: 0.2,  label: "≥ 1:0,2",  tone: "soft" };
+  return { minRatio: 0, label: "1:0 minimum", tone: "soft" };
 }
 
 export default function TolerancePage() {
@@ -200,13 +205,13 @@ export default function TolerancePage() {
   const ratioOk = conComputed.ratio >= reco.minRatio;
   const targetReached = conComputed.gH >= target * 0.95 && conComputed.gH <= target * 1.10;
 
-  // Save constructor as a test
+  // Save constructor as a planned test (athlete still has to execute it & report)
   const saveConstructorAsTest = () => {
     if (conLines.length === 0) return;
     const productsLabel = conLines
       .map((l) => productByKey.get(l.productKey))
       .filter(Boolean)
-      .map((p) => `${p!.m} · ${p!.n}`)
+      .map((p) => `[${p!.t}] ${p!.m} · ${p!.n}`)
       .join(" + ");
     const t: Test = {
       id: newId(),
@@ -215,7 +220,7 @@ export default function TolerancePage() {
       type: "glucides",
       valeur: Math.round(conComputed.gH),
       duree: conDuration + " min",
-      ressenti: "bien",
+      ressenti: "planifie", // ⏳ pas encore réalisé
       rpe: "",
       produits: productsLabel,
       notes: `Test construit · ratio ⌀ 1:${conComputed.ratio.toFixed(2)} · ${conComputed.totG.toFixed(0)} g CHO sur ${conDuration} min`,
@@ -308,9 +313,10 @@ export default function TolerancePage() {
                 <Field label="Durée d'effort"><input className="input" value={draft.duree} onChange={(e) => update("duree", e.target.value)} /></Field>
                 <Field label="Ressenti">
                   <select className="input" value={draft.ressenti} onChange={(e) => update("ressenti", e.target.value as Ressenti)}>
-                    <option value="bien">bien</option>
-                    <option value="limite">limite</option>
-                    <option value="mal">mal</option>
+                    <option value="planifie">⏳ planifié (à tester)</option>
+                    <option value="bien">✓ bien toléré</option>
+                    <option value="limite">⚠ limite</option>
+                    <option value="mal">✕ mal toléré</option>
                   </select>
                 </Field>
                 <Field label="RPE digestif /5"><input className="input" value={draft.rpe} onChange={(e) => update("rpe", e.target.value)} /></Field>
@@ -329,12 +335,21 @@ export default function TolerancePage() {
           <div className="flex flex-col gap-2.5">
             {tests.map((t) => {
               const info = RESSENTI_INFO[t.ressenti];
+              const borderColor =
+                info.variant === "green" ? "var(--color-success)" :
+                info.variant === "orange" ? "var(--color-primary)" :
+                info.variant === "red" ? "var(--color-danger)" :
+                "var(--color-text-muted)";
+              const isPlanned = t.ressenti === "planifie";
               return (
                 <div
                   key={t.id}
                   onClick={() => setViewingId(t.id)}
                   className="card flex items-center gap-3 px-4 py-3 flex-wrap cursor-pointer hover:-translate-y-0.5 transition"
-                  style={{ borderLeft: `5px solid ${info.variant === "green" ? "var(--color-success)" : info.variant === "orange" ? "var(--color-primary)" : "var(--color-danger)"}` }}
+                  style={{
+                    borderLeft: `5px ${isPlanned ? "dashed" : "solid"} ${borderColor}`,
+                    background: isPlanned ? "var(--color-surface-2)" : undefined,
+                  }}
                   title="Cliquer pour voir le détail"
                 >
                   <div style={{ minWidth: 80, fontWeight: 700, fontSize: 13 }}>{dateShort(t.date)}</div>
@@ -351,7 +366,9 @@ export default function TolerancePage() {
                     </span>
                   )}
                   {t.duree && <div className="text-xs text-[var(--color-text-muted)]">{t.duree}</div>}
-                  <Badge variant={info.variant}>{info.label}</Badge>
+                  <Badge variant={info.variant}>
+                    {isPlanned && "⏳ "}{info.label}
+                  </Badge>
                   {t.rpe && <div className="text-xs text-[var(--color-danger)]">RPE {t.rpe}/5</div>}
                   <div className="flex-1 text-xs text-[var(--color-text-muted)] italic" style={{ minWidth: 120 }}>
                     {t.produits} {t.notes}
@@ -431,7 +448,7 @@ export default function TolerancePage() {
                     <optgroup label="⭐ Mes favoris">
                       {favProducts.map((p, i) => (
                         <option key={"f-" + i} value={p.m + "|" + p.n}>
-                          {p.m} · {p.n} — {p.g} g CHO · ratio {p.r}
+                          [{p.t}] {p.m} · {p.n} — {p.g} g CHO · ratio {p.r}
                         </option>
                       ))}
                     </optgroup>
@@ -439,7 +456,7 @@ export default function TolerancePage() {
                   <optgroup label="Catalogue complet">
                     {allProducts.map((p, i) => (
                       <option key={"a-" + i} value={p.m + "|" + p.n}>
-                        {p.m} · {p.n} — {p.g} g CHO · ratio {p.r}
+                        [{p.t}] {p.m} · {p.n} — {p.g} g CHO · ratio {p.r}
                       </option>
                     ))}
                   </optgroup>
@@ -556,7 +573,7 @@ export default function TolerancePage() {
                     {targetReached && ratioOk && (
                       <div className="p-3 rounded-lg" style={{ background: "rgba(95,140,10,0.10)", color: "var(--color-success)" }}>
                         ✅ <b>Test équilibré</b> — cible atteinte ({Math.round(conComputed.gH)} g/h) avec un ratio conforme.
-                        Tu peux le valider et l&apos;enregistrer comme référence.
+                        Tu peux l&apos;enregistrer comme test à réaliser, puis renseigner le ressenti une fois testé en sortie.
                       </div>
                     )}
                     {!targetReached && conLines.length > 0 && (
@@ -571,7 +588,7 @@ export default function TolerancePage() {
                   <div className="flex justify-end gap-2 mt-3">
                     <button onClick={() => setConLines([])} className="btn-ghost btn-sm">Réinitialiser</button>
                     <button onClick={saveConstructorAsTest} className="btn-primary btn-sm" disabled={conLines.length === 0}>
-                      ✓ Enregistrer comme test
+                      ⏳ Enregistrer comme test planifié
                     </button>
                   </div>
                 </div>

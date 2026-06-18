@@ -95,13 +95,30 @@ export default function TolerancePage() {
   const [custom] = useAthleteData<Product[]>("custom", []);
 
   const allProducts = useMemo(() => [...PRODUCTS_CATALOG, ...custom], [custom]);
+  // Indexed both by full key (t|m|n — unique) and legacy key (m|n — backward compat)
   const productByKey = useMemo(() => {
     const m = new Map<string, Product>();
-    for (const p of allProducts) m.set(p.m + "|" + p.n, p);
+    for (const p of allProducts) {
+      m.set(p.t + "|" + p.m + "|" + p.n, p);
+      // Legacy fallback (last writer wins on collision)
+      if (!m.has(p.m + "|" + p.n)) m.set(p.m + "|" + p.n, p);
+    }
     return m;
   }, [allProducts]);
 
-  const favProducts = useMemo(() => favorites.map((k) => productByKey.get(k)).filter(Boolean) as Product[], [favorites, productByKey]);
+  const favProducts = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Product[] = [];
+    for (const k of favorites) {
+      const p = productByKey.get(k);
+      if (!p) continue;
+      const uniqK = p.t + "|" + p.m + "|" + p.n;
+      if (seen.has(uniqK)) continue;
+      seen.add(uniqK);
+      out.push(p);
+    }
+    return out;
+  }, [favorites, productByKey]);
 
   const [tab, setTab] = useState<"journal" | "constructor">("journal");
   const [draft, setDraft] = useState<Test>(blank());

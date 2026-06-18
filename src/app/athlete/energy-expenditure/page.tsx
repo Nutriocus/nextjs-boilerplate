@@ -33,7 +33,8 @@ type PacingPlan = {
   name: string;
   raceDate: string;
   carbLoading: CarbLoading;
-  rer: string;
+  rer: string;        // fallback / manual override (used when no physio data)
+  useProfile: boolean; // true = auto-compute RER per segment from athlete physio
   cibleCho: string;
   segments: Segment[];
 };
@@ -75,6 +76,41 @@ function choFractionFromRER(rer: number): number {
   if (!rer || rer < 0.7) return 0;
   if (rer >= 1.0) return 1;
   return (rer - 0.7) / 0.3;
+}
+
+// Linear interpolation of RER from segment FC (bpm) using the athlete's
+// physiological data: SV1 / SV2 in bpm + RER values at SV1 and SV2.
+// Outside the SV1-SV2 range, we extrapolate to baseline (0.80) at rest
+// and to 1.00 at FCmax.
+function rerFromPhysio(fc: number, physio: {
+  fcmax?: number; sv1?: number; sv2?: number; rerSV1?: number; rerSV2?: number;
+}): number | null {
+  const sv1 = Number(physio.sv1) || 0;
+  const sv2 = Number(physio.sv2) || 0;
+  const rer1 = Number(physio.rerSV1) || 0;
+  const rer2 = Number(physio.rerSV2) || 0;
+  const fcmax = Number(physio.fcmax) || 0;
+  if (!sv1 || !sv2 || !rer1 || !rer2 || sv1 >= sv2) return null;
+  if (fc <= 0) return null;
+
+  if (fc <= sv1) {
+    // Between baseline (~0.80 at very low intensity) and rerSV1
+    // Use SV1 / 2 as a rough "low endurance" reference
+    const lowFC = Math.max(1, sv1 * 0.65);
+    if (fc <= lowFC) return 0.80;
+    const t = (fc - lowFC) / (sv1 - lowFC);
+    return 0.80 + t * (rer1 - 0.80);
+  }
+  if (fc <= sv2) {
+    const t = (fc - sv1) / (sv2 - sv1);
+    return rer1 + t * (rer2 - rer1);
+  }
+  // Above SV2 → extrapolate to ~1.00 at FCmax (or cap if no FCmax)
+  if (fcmax && fcmax > sv2) {
+    const t = Math.min(1, (fc - sv2) / (fcmax - sv2));
+    return rer2 + t * (1.0 - rer2);
+  }
+  return Math.min(1.0, rer2 + 0.02); // safe cap
 }
 
 function durationFromString(s: string): number {
@@ -169,6 +205,12 @@ export default function EnergyExpenditurePage() {
     age?: number | string;
     poids?: number | string;
     tolGlucCAP?: number | string;
+    fcmax?: number | string;
+    sv1?: number | string;
+    sv2?: number | string;
+    rerSV1?: number | string;
+    rerSV2?: number | string;
+    vo2max?: number | string;
   }>("profile", {});
 
   const [plans, setPlans, loaded] = useAthleteData<PacingPlan[]>("pacing_plans", []);
@@ -196,12 +238,14 @@ export default function EnergyExpenditurePage() {
     updatePlan({ segments: current.segments.filter((s) => s.id !== sid) });
   };
   const newPlan = () => {
+    const hasPhysio = !!(toNum(profile.sv1) && toNum(profile.sv2) && toNum(profile.rerSV1) && toNum(profile.rerSV2));
     const p: PacingPlan = {
       id: newId(),
       name: "Nouvelle stratégie de pacing",
       raceDate: today(),
       carbLoading: "none",
       rer: "0.88",
+      useProfile: hasPhysio, // auto-enable if data available
       cibleCho: String(defaultTol),
       segments: [BLANK_SEGMENT()],
     };
@@ -232,8 +276,27 @@ export default function EnergyExpenditurePage() {
   const ageY = toNum(profile.age) || 30;
 
   const reserves = current ? glycogenReservesFor(profile.sexe, current.carbLoading) : 0;
-  const choFraction = current ? choFractionFromRER(toNum(current.rer)) : 0.6;
   const planCibleCho = current ? toNum(current.cibleCho) || defaultTol : defaultTol;
+
+  // Profile physio data for per-segment RER
+  const hasPhysio = !!(toNum(profile.sv1) && toNum(profile.sv2) && toNum(profile.rerSV1) && toNum(profile.rerSV2));
+  const useProfilePhysio = current?.useProfile && hasPhysio;
+  const fallbackRer = current ? toNum(current.rer) || 0.88 : 0.88;
+  const physio = {
+    fcmax: toNum(profile.fcmax),
+    sv1: toNum(profile.sv1),
+    sv2: toNum(profile.sv2),
+    rerSV1: toNum(profile.rerSV1),
+    rerSV2: toNum(profile.rerSV2),
+  };
+
+  function rerForSegment(fc: number): number {
+    if (useProfilePhysio) {
+      const r = rerFromPhysio(fc, physio);
+      if (r != null) return r;
+    }
+    return fallbackRer;
+  }
 
   const enriched = useMemo(() => {
     if (!current) return [];
@@ -242,7 +305,9 @@ export default function EnergyExpenditurePage() {
       const dur = toNum(s.dureeMin);
       const kcalPerMin = keytelKcalPerMin(fc, poidsKg, ageY, isWoman);
       const kcalTotal = Math.max(0, kcalPerMin * dur);
-      const kcalCho = kcalTotal * choFraction;
+      const rer = rerForSegment(fc);
+      const choFrac = choFractionFromRER(rer);
+      const kcalCho = kcalTotal * choFrac;
       const gChoOxidized = kcalCho / 4;
       const cibleChoHSeg = toNum(s.cibleChoH) || planCibleCho;
       const gChoIngested = (cibleChoHSeg * dur) / 60;
@@ -250,6 +315,13 @@ export default function EnergyExpenditurePage() {
       const pente = toNum(s.km) > 0
         ? ((toNum(s.dplus) - toNum(s.dmoins)) / (toNum(s.km) * 1000)) * 100
         : 0;
+      // FC zone label
+      let zone = "—";
+      if (hasPhysio && fc > 0) {
+        if (fc < physio.sv1) zone = "< SV1";
+        else if (fc < physio.sv2) zone = "SV1-SV2";
+        else zone = "> SV2";
+      }
       return {
         ...s,
         kcalPerMin: Math.round(kcalPerMin * 10) / 10,
@@ -260,10 +332,14 @@ export default function EnergyExpenditurePage() {
         netGlyco: Math.round(netGlyco * 10) / 10,
         cibleChoHSeg,
         pente: Math.round(pente * 10) / 10,
+        rer: Math.round(rer * 100) / 100,
+        choFracPct: Math.round(choFrac * 100),
+        zone,
         dur,
       };
     });
-  }, [current, poidsKg, ageY, isWoman, choFraction, planCibleCho]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current, poidsKg, ageY, isWoman, planCibleCho, useProfilePhysio, fallbackRer, physio.sv1, physio.sv2, physio.rerSV1, physio.rerSV2, physio.fcmax]);
 
   const depletionChart = useMemo(() => {
     if (!enriched.length || reserves === 0) return [];
@@ -429,20 +505,45 @@ export default function EnergyExpenditurePage() {
           <Field
             label={
               <InfoTooltip
-                label="RER moyen"
+                label={hasPhysio ? "Source du RER" : "RER moyen (manuel)"}
                 content={
                   <>
                     <b>Quotient respiratoire (RER)</b> détermine la part d&apos;énergie issue des glucides.
-                    <br />• <b>0,80</b> = 33 % glucides (endurance basse, &lt; SV1)
-                    <br />• <b>0,88</b> = 60 % glucides (endurance, autour SV1)
+                    <br />• <b>0,80</b> = 33 % glucides (endurance basse)
+                    <br />• <b>0,88</b> = 60 % glucides (endurance ≈ SV1)
                     <br />• <b>0,93</b> = 77 % glucides (tempo, SV1-SV2)
                     <br />• <b>0,97</b> = 90 % glucides (proche SV2)
+                    <br /><br />
+                    {hasPhysio
+                      ? "Avec ton profil physiologique renseigné, le RER est recalculé pour chaque segment en fonction de sa FC cible (zone < SV1, SV1-SV2, > SV2)."
+                      : "Renseigne SV1, SV2 et RER à SV1/SV2 dans Mon profil pour avoir un calcul personnalisé par segment."}
                   </>
                 }
               />
             }
           >
-            <input className="input" value={current.rer} onChange={(e) => updatePlan({ rer: e.target.value })} />
+            {hasPhysio ? (
+              <div>
+                <select
+                  className="input"
+                  value={current.useProfile ? "auto" : "manual"}
+                  onChange={(e) => updatePlan({ useProfile: e.target.value === "auto" })}
+                >
+                  <option value="auto">🎯 Auto (mon profil physiologique)</option>
+                  <option value="manual">✏ Manuel (RER unique)</option>
+                </select>
+                {!current.useProfile && (
+                  <input
+                    className="input mt-1"
+                    value={current.rer}
+                    onChange={(e) => updatePlan({ rer: e.target.value })}
+                    placeholder="0.88"
+                  />
+                )}
+              </div>
+            ) : (
+              <input className="input" value={current.rer} onChange={(e) => updatePlan({ rer: e.target.value })} />
+            )}
           </Field>
           <Field
             label={
@@ -461,8 +562,19 @@ export default function EnergyExpenditurePage() {
             </div>
           </div>
           <div className="text-xs text-[var(--color-text-muted)] flex flex-col justify-end pb-1">
-            <div>🔥 <b>{Math.round(choFraction * 100)} % glucides</b></div>
-            <div className="text-[10px]">à l&apos;intensité moyenne (RER {current.rer})</div>
+            {useProfilePhysio ? (
+              <>
+                <div>🎯 <b>RER auto par segment</b></div>
+                <div className="text-[10px]">
+                  Calculé via SV1 ({physio.sv1}), SV2 ({physio.sv2}), RER SV1/SV2 ({physio.rerSV1}/{physio.rerSV2})
+                </div>
+              </>
+            ) : (
+              <>
+                <div>🔥 <b>{Math.round(choFractionFromRER(fallbackRer) * 100)} % glucides</b></div>
+                <div className="text-[10px]">RER fixe {fallbackRer}{hasPhysio ? "" : " · ⚠ profil physio non renseigné"}</div>
+              </>
+            )}
           </div>
           <div className="text-xs text-[var(--color-text-muted)] flex flex-col justify-end pb-1">
             <div>🧱 <b>Mur à {WALL_THRESHOLD_G} g</b></div>
@@ -620,8 +732,9 @@ export default function EnergyExpenditurePage() {
               <th>Pente</th>
               <th>Durée</th>
               <th>FC</th>
+              <th title="RER calculé pour la FC du segment">RER</th>
               <th>kcal</th>
-              <th title="Glucides oxydés sur le segment">CHO oxydés</th>
+              <th title="Glucides oxydés sur le segment (= kcal × % CHO du RER)">CHO oxydés</th>
               <th>
                 Cible CHO/h
                 <br />
@@ -644,6 +757,18 @@ export default function EnergyExpenditurePage() {
                 </td>
                 <td><input className="input" style={{ width: 55 }} value={s.dureeMin} onChange={(e) => updateSeg(s.id, { dureeMin: e.target.value })} /></td>
                 <td><input className="input" style={{ width: 55 }} value={s.fcCible} onChange={(e) => updateSeg(s.id, { fcCible: e.target.value })} /></td>
+                <td
+                  style={{ fontWeight: 600, color: "var(--color-text-muted)" }}
+                  title={`${s.choFracPct}% CHO oxydés à RER ${s.rer}${s.zone !== "—" ? ` · ${s.zone}` : ""}`}
+                >
+                  {s.rer > 0 ? (
+                    <span>
+                      {s.rer.toFixed(2)}
+                      <br />
+                      <span className="text-[9px]">{s.choFracPct}% CHO{s.zone !== "—" ? ` · ${s.zone}` : ""}</span>
+                    </span>
+                  ) : "—"}
+                </td>
                 <td style={{ fontWeight: 800, color: "var(--color-primary)" }}>{s.kcalTotal > 0 ? s.kcalTotal : "—"}</td>
                 <td>{s.gChoOxidized > 0 ? `${s.gChoOxidized.toFixed(0)} g` : "—"}</td>
                 <td>
@@ -672,9 +797,12 @@ export default function EnergyExpenditurePage() {
                 <td colSpan={4}></td>
                 <td>{formatDuration(totals.totMin)}</td>
                 <td></td>
+                <td></td>
                 <td style={{ color: "var(--color-primary)" }}>{totals.totKcal.toLocaleString("fr-FR")}</td>
                 <td>{Math.round(totals.totGChoOxi)} g</td>
-                <td></td>
+                <td style={{ color: "var(--color-primary)", textAlign: "center" }} title="Cible CHO/h moyenne, pondérée par la durée des segments">
+                  ⌀ {totals.totH > 0 ? Math.round(totals.totGChoIng / totals.totH) : 0} g/h
+                </td>
                 <td style={{ color: "var(--color-success)" }}>{Math.round(totals.totGChoIng)} g</td>
                 <td style={{ color: totals.glycoEnd < WALL_THRESHOLD_G ? "var(--color-danger)" : "var(--color-success)" }}>
                   {Math.round(reserves - totals.glycoEnd)} g
@@ -691,9 +819,11 @@ export default function EnergyExpenditurePage() {
 
       {/* Context */}
       <div className="text-[10px] text-[var(--color-text-muted)] mt-2 px-1">
-        Calcul basé sur ton profil : {profile.sexe || "—"} · {poidsKg || "—"} kg · {ageY || "—"} ans.
+        Calcul basé sur ton profil : {profile.sexe || "—"} · {poidsKg || "—"} kg · {ageY || "—"} ans
+        {hasPhysio ? ` · FCmax ${physio.fcmax} · SV1 ${physio.sv1} · SV2 ${physio.sv2} · RER SV1/SV2 ${physio.rerSV1}/${physio.rerSV2}` : ""}.
         <br />
         ⓘ Formule Keytel (2005) pour les kcal · CHO = (RER−0,7) / 0,3 × kcal totales · réserves selon la stratégie de pré-charge glycogénique.
+        {useProfilePhysio && " · RER calculé par segment via interpolation FC ↔ SV1/SV2."}
       </div>
     </div>
   );

@@ -4,15 +4,18 @@ import { useState, useMemo } from "react";
 import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader, Kpi, Empty, Field } from "@/components/ui/PageHeader";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ReferenceLine,
+} from "recharts";
 
-// =====================================================================
-// Race energy expenditure — segment-by-segment, based on GPT pacing plan
-//
-// Formula:
-//   Keytel et al. (2005) — heart-rate-based energy expenditure
-//   Men:    kcal/min = (-55.0969 + 0.6309·FC + 0.1988·W + 0.2017·age) / 4.184
-//   Women:  kcal/min = (-20.4022 + 0.4472·FC - 0.1263·W + 0.074·age) / 4.184
-// =====================================================================
+type CarbLoading = "none" | "1day" | "4days";
 
 type Segment = {
   id: string;
@@ -22,17 +25,20 @@ type Segment = {
   dmoins: string;
   dureeMin: string;
   fcCible: string;
-  terrain?: string;
-  objectif?: string;
+  cibleChoH: string; // override per segment (g/h). Empty = use plan default.
 };
 
 type PacingPlan = {
   id: string;
   name: string;
   raceDate: string;
+  carbLoading: CarbLoading;
+  rer: string;
+  cibleCho: string;
   segments: Segment[];
-  cibleCho: string; // g/h target (overrides profile.tolGlucCAP if set)
 };
+
+const WALL_THRESHOLD_G = 300;
 
 function toNum(v: unknown): number {
   const n = parseFloat(String(v).replace(",", "."));
@@ -44,7 +50,19 @@ const today = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
-// Keytel formula
+function glycogenReservesFor(sex: string | undefined, loading: CarbLoading): number {
+  const isWoman = (sex || "").toLowerCase().includes("femme");
+  if (loading === "4days") return isWoman ? 700 : 800;
+  if (loading === "1day") return isWoman ? 550 : 600;
+  return isWoman ? 400 : 450;
+}
+
+const CARB_LOADING_LABELS: Record<CarbLoading, string> = {
+  none: "Aucune surcharge",
+  "1day": "Surcharge 1 jour",
+  "4days": "Surcharge 4 jours",
+};
+
 function keytelKcalPerMin(fc: number, weight: number, age: number, isWoman: boolean): number {
   if (fc <= 0 || weight <= 0 || age <= 0) return 0;
   if (isWoman) {
@@ -53,9 +71,14 @@ function keytelKcalPerMin(fc: number, weight: number, age: number, isWoman: bool
   return (-55.0969 + 0.6309 * fc + 0.1988 * weight + 0.2017 * age) / 4.184;
 }
 
+function choFractionFromRER(rer: number): number {
+  if (!rer || rer < 0.7) return 0;
+  if (rer >= 1.0) return 1;
+  return (rer - 0.7) / 0.3;
+}
+
 function durationFromString(s: string): number {
   if (!s) return 0;
-  // Accept "1h05" / "1:05" / "65" / "65 min"
   const m = s.match(/^(\d+)\s*[hH:]\s*(\d+)/);
   if (m) return parseInt(m[1]) * 60 + parseInt(m[2]);
   return toNum(s);
@@ -69,53 +92,33 @@ function formatDuration(minTotal: number): string {
   return `${h}h${String(m).padStart(2, "0")}`;
 }
 
-// Parser: tries to extract segments from a pasted GPT table (markdown or tabular)
 function parseGptTable(text: string): Segment[] {
   const lines = text.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
   const segments: Segment[] = [];
   for (const line of lines) {
-    // Markdown table row: starts with "|"
     if (!line.includes("|") && !line.includes("\t")) continue;
-    // Skip separator rows like |---|---|
     if (/^[\s|:-]+$/.test(line)) continue;
     const cells = line.includes("|")
       ? line.split("|").map((c) => c.trim()).filter((c) => c.length > 0)
       : line.split("\t").map((c) => c.trim());
     if (cells.length < 3) continue;
-    // Try to detect header row
     if (cells.some((c) => /segment|distance|d\+|durée|fc|km/i.test(c)) && !cells.some((c) => /^\d+([.,]\d+)?$/.test(c))) continue;
-
-    // Heuristic mapping: first cell = name, then look for numeric values
-    // We accept cells like: Name | distance | D+ | terrain | durée | FC | objectif
-    // Or shorter / different orders
     const nom = cells[0];
-    // Find first number-like cell after the name → distance km
     const numericCells = cells.slice(1).map((c) => {
       const n = c.match(/-?\d+([.,]\d+)?/);
       return n ? parseFloat(n[0].replace(",", ".")) : null;
     });
-    // Heuristic: first num = km, second num (often signed) = d+ (positive), third = duration (>20), FC (~100-200) detected by range
     const km = String(numericCells[0] ?? "");
-    // D+ : look for positive value <2000 right after km
     const dplus = numericCells[1] != null && numericCells[1] >= 0 ? String(Math.round(numericCells[1])) : "";
-    // Duration: any cell that looks like X-150 min or X h
     let dureeMin = "";
     let fcCible = "";
     for (let i = 1; i < cells.length; i++) {
       const cell = cells[i];
-      // Duration: "1h05", "65 min", "65"
-      if (!dureeMin && /\d+\s*h\s*\d{1,2}/i.test(cell)) {
-        dureeMin = String(durationFromString(cell));
-      } else if (!dureeMin && /\d+\s*min/i.test(cell)) {
-        dureeMin = String(durationFromString(cell));
-      }
-      // FC: look for 80-200 range
+      if (!dureeMin && /\d+\s*h\s*\d{1,2}/i.test(cell)) dureeMin = String(durationFromString(cell));
+      else if (!dureeMin && /\d+\s*min/i.test(cell)) dureeMin = String(durationFromString(cell));
       const fcMatch = cell.match(/\b(1[0-9]{2}|[8-9][0-9])\b/);
-      if (!fcCible && fcMatch && /fc|bpm|cible/i.test(cells.join(" "))) {
-        fcCible = fcMatch[1];
-      }
+      if (!fcCible && fcMatch && /fc|bpm|cible/i.test(cells.join(" "))) fcCible = fcMatch[1];
     }
-    // Fallback: if no FC found via context, take any 80-200 number that's not km/D+
     if (!fcCible) {
       for (const n of numericCells) {
         if (n != null && n >= 80 && n <= 200 && n !== toNum(km) && n !== toNum(dplus)) {
@@ -124,7 +127,6 @@ function parseGptTable(text: string): Segment[] {
         }
       }
     }
-    // Fallback duration: any number 20-600
     if (!dureeMin) {
       for (const n of numericCells) {
         if (n != null && n >= 15 && n <= 1200 && n !== toNum(km) && n !== toNum(dplus) && n !== toNum(fcCible)) {
@@ -134,7 +136,6 @@ function parseGptTable(text: string): Segment[] {
       }
     }
     if (toNum(km) === 0 && toNum(dureeMin) === 0) continue;
-
     segments.push({
       id: newId(),
       nom,
@@ -143,8 +144,7 @@ function parseGptTable(text: string): Segment[] {
       dmoins: "",
       dureeMin,
       fcCible,
-      terrain: "",
-      objectif: "",
+      cibleChoH: "",
     });
   }
   return segments;
@@ -158,25 +158,17 @@ const BLANK_SEGMENT = (): Segment => ({
   dmoins: "",
   dureeMin: "",
   fcCible: "",
-  terrain: "",
-  objectif: "",
+  cibleChoH: "",
 });
 
 const GPT_LINK = "https://chatgpt.com/g/g-trail-pacing-engine-nutriocus";
 
-// =====================================================================
-// PAGE
-// =====================================================================
-export default function RaceEnergyPage() {
+export default function EnergyExpenditurePage() {
   const [profile] = useAthleteData<{
     sexe?: string;
     age?: number | string;
     poids?: number | string;
-    masseMaigre?: number | string;
-    reservesGlucides?: number | string;
     tolGlucCAP?: number | string;
-    tolGlucCyc?: number | string;
-    tolHydrCAP?: number | string;
   }>("profile", {});
 
   const [plans, setPlans, loaded] = useAthleteData<PacingPlan[]>("pacing_plans", []);
@@ -185,54 +177,48 @@ export default function RaceEnergyPage() {
   const [pasteText, setPasteText] = useState("");
 
   const current = plans.find((p) => p.id === currentId);
-
-  // Default discipline tolerance — fallback if cibleCho not set
   const defaultTol = toNum(profile.tolGlucCAP) || 90;
 
   const updatePlan = (patch: Partial<PacingPlan>) => {
     if (!current) return;
     setPlans((prev) => prev.map((p) => (p.id === current.id ? { ...p, ...patch } : p)));
   };
-
   const updateSeg = (sid: string, patch: Partial<Segment>) => {
     if (!current) return;
     updatePlan({ segments: current.segments.map((s) => (s.id === sid ? { ...s, ...patch } : s)) });
   };
-
   const addSegment = () => {
     if (!current) return;
     updatePlan({ segments: [...current.segments, BLANK_SEGMENT()] });
   };
-
   const removeSegment = (sid: string) => {
     if (!current) return;
     updatePlan({ segments: current.segments.filter((s) => s.id !== sid) });
   };
-
   const newPlan = () => {
     const p: PacingPlan = {
       id: newId(),
       name: "Nouvelle stratégie de pacing",
       raceDate: today(),
-      segments: [BLANK_SEGMENT()],
+      carbLoading: "none",
+      rer: "0.88",
       cibleCho: String(defaultTol),
+      segments: [BLANK_SEGMENT()],
     };
     setPlans((prev) => [...prev, p]);
     setCurrentId(p.id);
   };
-
   const deletePlan = () => {
     if (!current) return;
     if (!confirm("Supprimer ce plan de pacing ?")) return;
     setPlans((prev) => prev.filter((p) => p.id !== current.id));
     setCurrentId(null);
   };
-
   const importFromPaste = () => {
     if (!current) return;
     const parsed = parseGptTable(pasteText);
     if (parsed.length === 0) {
-      alert("Aucun segment trouvé. Colle bien un tableau markdown ou tabulé (Segment | distance | D+ | durée | FC cible).");
+      alert("Aucun segment trouvé. Colle un tableau markdown ou tabulé (Segment | distance | D+ | durée | FC cible).");
       return;
     }
     updatePlan({ segments: parsed });
@@ -240,12 +226,14 @@ export default function RaceEnergyPage() {
     setPasteOpen(false);
   };
 
-  // ============== COMPUTATION ==============
+  // ============== COMPUTATIONS ==============
   const isWoman = (profile.sexe || "").toLowerCase().includes("femme");
   const poidsKg = toNum(profile.poids);
   const ageY = toNum(profile.age) || 30;
-  const reservesGlycogene = toNum(profile.reservesGlucides) || 500;
-  const cibleChoH = current ? toNum(current.cibleCho) || defaultTol : defaultTol;
+
+  const reserves = current ? glycogenReservesFor(profile.sexe, current.carbLoading) : 0;
+  const choFraction = current ? choFractionFromRER(toNum(current.rer)) : 0.6;
+  const planCibleCho = current ? toNum(current.cibleCho) || defaultTol : defaultTol;
 
   const enriched = useMemo(() => {
     if (!current) return [];
@@ -254,9 +242,11 @@ export default function RaceEnergyPage() {
       const dur = toNum(s.dureeMin);
       const kcalPerMin = keytelKcalPerMin(fc, poidsKg, ageY, isWoman);
       const kcalTotal = Math.max(0, kcalPerMin * dur);
-      const choIngerable = (cibleChoH * dur) / 60; // g
-      const choKcal = choIngerable * 4; // 1g CHO = 4 kcal
-      const deficit = kcalTotal - choKcal; // kcal puisés dans les réserves
+      const kcalCho = kcalTotal * choFraction;
+      const gChoOxidized = kcalCho / 4;
+      const cibleChoHSeg = toNum(s.cibleChoH) || planCibleCho;
+      const gChoIngested = (cibleChoHSeg * dur) / 60;
+      const netGlyco = gChoOxidized - gChoIngested;
       const pente = toNum(s.km) > 0
         ? ((toNum(s.dplus) - toNum(s.dmoins)) / (toNum(s.km) * 1000)) * 100
         : 0;
@@ -264,40 +254,60 @@ export default function RaceEnergyPage() {
         ...s,
         kcalPerMin: Math.round(kcalPerMin * 10) / 10,
         kcalTotal: Math.round(kcalTotal),
-        choIngerable: Math.round(choIngerable),
-        choKcal: Math.round(choKcal),
-        deficit: Math.round(deficit),
+        kcalCho: Math.round(kcalCho),
+        gChoOxidized: Math.round(gChoOxidized * 10) / 10,
+        gChoIngested: Math.round(gChoIngested * 10) / 10,
+        netGlyco: Math.round(netGlyco * 10) / 10,
+        cibleChoHSeg,
         pente: Math.round(pente * 10) / 10,
         dur,
       };
     });
-  }, [current, poidsKg, ageY, isWoman, cibleChoH]);
+  }, [current, poidsKg, ageY, isWoman, choFraction, planCibleCho]);
+
+  const depletionChart = useMemo(() => {
+    if (!enriched.length || reserves === 0) return [];
+    const out: { d: string; glyco: number; minutes: number }[] = [];
+    let cum = reserves;
+    let cumMin = 0;
+    out.push({ d: "Départ", glyco: cum, minutes: 0 });
+    for (const s of enriched) {
+      cum -= s.netGlyco;
+      cumMin += s.dur;
+      const label = s.nom && s.nom.length < 22 ? s.nom : formatDuration(cumMin);
+      out.push({ d: label, glyco: Math.round(cum * 10) / 10, minutes: cumMin });
+    }
+    return out;
+  }, [enriched, reserves]);
 
   const totals = useMemo(() => {
     if (!enriched.length) return null;
     const totKcal = enriched.reduce((s, e) => s + e.kcalTotal, 0);
+    const totKcalCho = enriched.reduce((s, e) => s + e.kcalCho, 0);
+    const totGChoOxi = enriched.reduce((s, e) => s + e.gChoOxidized, 0);
+    const totGChoIng = enriched.reduce((s, e) => s + e.gChoIngested, 0);
     const totMin = enriched.reduce((s, e) => s + e.dur, 0);
-    const totKm = enriched.reduce((s, e) => s + toNum(e.km), 0);
-    const totDplus = enriched.reduce((s, e) => s + toNum(e.dplus), 0);
-    const totCho = enriched.reduce((s, e) => s + e.choIngerable, 0);
-    const totChoKcal = totCho * 4;
-    const deficit = totKcal - totChoKcal;
-    const stockGlycoKcal = reservesGlycogene * 4;
-    const afterStock = Math.max(0, deficit - stockGlycoKcal);
+    const totH = totMin / 60;
+    const glycoEnd = reserves - enriched.reduce((s, e) => s + e.netGlyco, 0);
+    const reachesWall = depletionChart.some((p) => p.glyco < WALL_THRESHOLD_G);
+    const wallAt = depletionChart.find((p) => p.glyco < WALL_THRESHOLD_G);
+    const minGChoNeeded = Math.max(0, totGChoOxi - (reserves - WALL_THRESHOLD_G));
+    const minGChoPerH = totH > 0 ? minGChoNeeded / totH : 0;
+
     return {
       totKcal,
+      totKcalCho,
+      totGChoOxi,
+      totGChoIng,
       totMin,
-      totKm,
-      totDplus,
-      totCho,
-      totChoKcal,
-      deficit,
-      stockGlycoKcal,
-      afterStock,
-      kcalPerH: totMin > 0 ? Math.round((totKcal / totMin) * 60) : 0,
-      coveredPct: totKcal > 0 ? Math.round(((totChoKcal + stockGlycoKcal) / totKcal) * 100) : 0,
+      totH,
+      glycoEnd: Math.round(glycoEnd * 10) / 10,
+      reachesWall,
+      wallAt,
+      minGChoNeeded: Math.ceil(minGChoNeeded),
+      minGChoPerH: Math.ceil(minGChoPerH),
     };
-  }, [enriched, reservesGlycogene]);
+  }, [enriched, reserves, depletionChart]);
 
   if (!loaded) {
     return (
@@ -308,14 +318,14 @@ export default function RaceEnergyPage() {
     );
   }
 
-  // ============== PLAN LIST VIEW ==============
+  // ============== LIST VIEW ==============
   if (!current) {
     return (
       <div>
         <PageHeader
           kicker="Anticiper tes courses"
           title="Dépenses énergétiques en course"
-          desc="Estimation segment par segment de tes besoins énergétiques, basée sur ton plan de pacing (idéalement généré par ton GPT Trail Pacing Engine Nutriocus)."
+          desc="Estimation segment par segment, déplétion du glycogène en temps réel, et minimum d'apport CHO pour ne pas rencontrer le mur."
           action={
             <div className="flex gap-1.5 flex-wrap">
               <a href={GPT_LINK} target="_blank" rel="noopener noreferrer" className="btn-dark btn-sm">
@@ -334,7 +344,7 @@ export default function RaceEnergyPage() {
             </div>
             <div className="text-sm text-[var(--color-text-muted)] max-w-md mx-auto mb-4">
               Génère ton plan via le <b>GPT Trail Pacing Engine Nutriocus</b>, puis colle-le ici.
-              On calcule automatiquement la dépense énergétique par segment et le déficit à anticiper.
+              On calcule la dépense, la déplétion du glycogène et le minimum d&apos;apport CHO.
             </div>
             <button onClick={newPlan} className="btn-primary">+ Nouveau plan</button>
           </div>
@@ -351,7 +361,7 @@ export default function RaceEnergyPage() {
                   {p.name}
                 </div>
                 <div className="text-xs text-[var(--color-text-muted)]">
-                  {p.segments.length} segment{p.segments.length > 1 ? "s" : ""} · cible {p.cibleCho || defaultTol} g/h
+                  {p.segments.length} segment{p.segments.length > 1 ? "s" : ""} · cible {p.cibleCho || defaultTol} g/h · {CARB_LOADING_LABELS[p.carbLoading]}
                 </div>
               </button>
             ))}
@@ -361,7 +371,7 @@ export default function RaceEnergyPage() {
     );
   }
 
-  // ============== PLAN EDIT/VIEW ==============
+  // ============== PLAN VIEW ==============
   return (
     <div>
       <button onClick={() => setCurrentId(null)} className="btn-ghost btn-sm mb-3">
@@ -388,7 +398,7 @@ export default function RaceEnergyPage() {
 
       {/* Plan meta */}
       <div className="card p-4 mb-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
           <Field label="Nom du plan">
             <input className="input" value={current.name} onChange={(e) => updatePlan({ name: e.target.value })} />
           </Field>
@@ -398,21 +408,65 @@ export default function RaceEnergyPage() {
           <Field
             label={
               <InfoTooltip
-                label="Cible CHO (g/h)"
+                label="Surcharge en glucides"
                 content={
                   <>
-                    Tolérance glucidique testée à l&apos;effort.
-                    <br />Pré-rempli depuis ton profil ({defaultTol} g/h pour la CAP/Trail).
-                    <br />Module &laquo; Tests de tolérance &raquo; pour la mesurer.
+                    <b>Stratégie de pré-charge glycogénique</b> :
+                    <br />• <b>Aucune</b> = réserves de base (450g H / 400g F)
+                    <br />• <b>1 jour</b> = surcharge modérée (600g H / 550g F)
+                    <br />• <b>4 jours</b> = surcharge complète (800g H / 700g F)
                   </>
                 }
               />
             }
           >
+            <select className="input" value={current.carbLoading} onChange={(e) => updatePlan({ carbLoading: e.target.value as CarbLoading })}>
+              <option value="none">Aucune surcharge</option>
+              <option value="1day">Surcharge 1 jour</option>
+              <option value="4days">Surcharge 4 jours</option>
+            </select>
+          </Field>
+          <Field
+            label={
+              <InfoTooltip
+                label="RER moyen"
+                content={
+                  <>
+                    <b>Quotient respiratoire (RER)</b> détermine la part d&apos;énergie issue des glucides.
+                    <br />• <b>0,80</b> = 33 % glucides (endurance basse, &lt; SV1)
+                    <br />• <b>0,88</b> = 60 % glucides (endurance, autour SV1)
+                    <br />• <b>0,93</b> = 77 % glucides (tempo, SV1-SV2)
+                    <br />• <b>0,97</b> = 90 % glucides (proche SV2)
+                  </>
+                }
+              />
+            }
+          >
+            <input className="input" value={current.rer} onChange={(e) => updatePlan({ rer: e.target.value })} />
+          </Field>
+          <Field
+            label={
+              <InfoTooltip
+                label="Cible CHO par défaut (g/h)"
+                content={<>Tolérance moyenne (modifiable par segment dans le tableau). Pré-rempli depuis ton profil ({defaultTol} g/h).</>}
+              />
+            }
+          >
             <input className="input" value={current.cibleCho} onChange={(e) => updatePlan({ cibleCho: e.target.value })} />
           </Field>
-          <div className="text-xs text-[var(--color-text-muted)] self-end pb-2">
-            Calcul : <b>Keytel (2005)</b> = FC + poids + âge + sexe
+          <div className="text-xs text-[var(--color-text-muted)] flex flex-col justify-end pb-1">
+            <div>📦 <b>Réserves : {reserves} g</b></div>
+            <div className="text-[10px]">
+              ({CARB_LOADING_LABELS[current.carbLoading]} · {isWoman ? "Femme" : "Homme"})
+            </div>
+          </div>
+          <div className="text-xs text-[var(--color-text-muted)] flex flex-col justify-end pb-1">
+            <div>🔥 <b>{Math.round(choFraction * 100)} % glucides</b></div>
+            <div className="text-[10px]">à l&apos;intensité moyenne (RER {current.rer})</div>
+          </div>
+          <div className="text-xs text-[var(--color-text-muted)] flex flex-col justify-end pb-1">
+            <div>🧱 <b>Mur à {WALL_THRESHOLD_G} g</b></div>
+            <div className="text-[10px]">seuil critique de glycogène</div>
           </div>
         </div>
       </div>
@@ -422,7 +476,6 @@ export default function RaceEnergyPage() {
         <div className="card p-4 mb-4" style={{ border: "2px solid var(--color-dark)" }}>
           <div className="text-xs text-[var(--color-text-muted)] mb-2">
             Colle ici la sortie du GPT (tableau markdown ou tabulé) avec : <b>Segment | distance | D+ | durée | FC cible</b>.
-            Le parser détecte automatiquement les colonnes.
           </div>
           <textarea
             className="input"
@@ -430,38 +483,134 @@ export default function RaceEnergyPage() {
             value={pasteText}
             onChange={(e) => setPasteText(e.target.value)}
             placeholder={`| Segment | Distance (km) | D+ (m) | Durée | FC cible |
-|---------|---------------|--------|-------|----------|
-| Départ → Col 1 | 7.2 | 380 | 1h05 | 145 |
-| Col 1 → Plateau | 4.8 | 30 | 0h35 | 152 |`}
+| Départ → Col 1 | 7.2 | 380 | 1h05 | 145 |`}
           />
           <div className="flex justify-end gap-2 mt-2">
             <button onClick={() => setPasteOpen(false)} className="btn-ghost btn-sm">Annuler</button>
-            <button onClick={importFromPaste} className="btn-primary btn-sm">
-              Remplacer les segments
-            </button>
+            <button onClick={importFromPaste} className="btn-primary btn-sm">Remplacer les segments</button>
           </div>
         </div>
       )}
 
-      {/* Totals */}
+      {/* KPI top */}
       {totals && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
           <Kpi label="Dépense totale" value={totals.totKcal.toLocaleString("fr-FR")} unit="kcal" color="var(--color-primary)" />
-          <Kpi label="Dépense moyenne" value={totals.kcalPerH} unit="kcal/h" color="var(--color-dark)" />
-          <Kpi label="CHO ingérables" value={Math.round(totals.totCho)} unit="g" note={`${Math.round(totals.totChoKcal)} kcal`} color="var(--color-success)" />
           <Kpi
-            label="Couverture"
-            value={Math.min(100, totals.coveredPct)}
-            unit="%"
-            note={totals.afterStock > 0 ? `Déficit ${Math.round(totals.afterStock)} kcal` : "OK"}
-            color={totals.coveredPct >= 100 ? "var(--color-success)" : totals.coveredPct >= 75 ? "var(--color-primary)" : "var(--color-danger)"}
+            label="Min CHO total"
+            value={totals.minGChoNeeded}
+            unit="g"
+            note={totals.minGChoNeeded > 0 ? "pour ne pas toucher le mur" : "réserves suffisantes"}
+            color={totals.minGChoNeeded > 0 ? "var(--color-primary)" : "var(--color-success)"}
           />
+          <Kpi
+            label="Min CHO par heure"
+            value={totals.minGChoPerH}
+            unit="g/h"
+            note={`sur ${totals.totH.toFixed(1)} h`}
+            color={totals.minGChoPerH > defaultTol ? "var(--color-danger)" : "var(--color-primary)"}
+          />
+          <Kpi
+            label="Glycogène final"
+            value={Math.round(totals.glycoEnd)}
+            unit="g"
+            note={totals.glycoEnd < WALL_THRESHOLD_G ? "⚠ sous le mur" : "OK"}
+            color={totals.glycoEnd >= WALL_THRESHOLD_G ? "var(--color-success)" : "var(--color-danger)"}
+          />
+        </div>
+      )}
+
+      {/* Glycogen depletion chart */}
+      {depletionChart.length > 1 && (
+        <div className="card p-4 mb-4">
+          <div className="font-extrabold mb-2 text-sm" style={{ fontFamily: "var(--font-display)" }}>
+            📉 Déplétion du glycogène ({reserves} g réserves · mur {WALL_THRESHOLD_G} g)
+          </div>
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart data={depletionChart} margin={{ top: 10, right: 15, left: -10, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+              <XAxis dataKey="d" tick={{ fontSize: 10, fill: "var(--color-text-muted)" }} interval={0} angle={-20} textAnchor="end" height={70} />
+              <YAxis tick={{ fontSize: 10, fill: "var(--color-text-muted)" }} domain={[0, Math.ceil(reserves / 100) * 100]} />
+              <Tooltip
+                formatter={(v: number) => [`${v} g`, "Glycogène restant"]}
+                labelFormatter={(label) => `Après ${label}`}
+              />
+              <ReferenceLine
+                y={WALL_THRESHOLD_G}
+                stroke="var(--color-danger)"
+                strokeDasharray="4 4"
+                label={{ value: `Mur ${WALL_THRESHOLD_G} g`, fill: "var(--color-danger)", fontSize: 10, position: "insideTopRight" }}
+              />
+              <Line type="monotone" dataKey="glyco" stroke="var(--color-primary)" strokeWidth={3} dot={{ r: 4, fill: "var(--color-primary)" }} />
+            </LineChart>
+          </ResponsiveContainer>
+          {totals?.reachesWall && totals.wallAt && (
+            <div className="mt-3 p-3 rounded-lg text-sm" style={{ background: "rgba(207,46,46,0.10)", color: "var(--color-danger)" }}>
+              🚨 <b>Mur atteint à : {totals.wallAt.d}</b> ({totals.wallAt.glyco} g de glycogène restant).
+              Augmente l&apos;apport CHO sur les segments précédents (colonne &laquo; Cible CHO/h &raquo; du tableau).
+            </div>
+          )}
+          {!totals?.reachesWall && totals && totals.glycoEnd >= WALL_THRESHOLD_G && (
+            <div className="mt-3 p-3 rounded-lg text-sm" style={{ background: "rgba(95,140,10,0.10)", color: "var(--color-success)" }}>
+              ✅ <b>Stratégie viable</b> : glycogène final {Math.round(totals.glycoEnd)} g (au-dessus du mur). Tu peux exécuter cette stratégie sans risque énergétique.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Min CHO analysis */}
+      {totals && totals.minGChoNeeded > 0 && (
+        <div className="card p-4 mb-4" style={{ borderLeft: "5px solid var(--color-primary)" }}>
+          <div className="font-extrabold mb-2" style={{ fontFamily: "var(--font-display)" }}>
+            🎯 Apport CHO minimum pour ne pas toucher le mur
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+            <div className="rounded-lg p-3" style={{ background: "var(--color-surface-2)", borderLeft: "3px solid var(--color-primary)" }}>
+              <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]" style={{ letterSpacing: ".06em" }}>
+                Minimum par heure
+              </div>
+              <div className="font-extrabold text-2xl" style={{ color: "var(--color-primary)", fontFamily: "var(--font-display)" }}>
+                {totals.minGChoPerH} g/h
+              </div>
+            </div>
+            <div className="rounded-lg p-3" style={{ background: "var(--color-surface-2)", borderLeft: "3px solid var(--color-dark)" }}>
+              <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]" style={{ letterSpacing: ".06em" }}>
+                Minimum total sur la course
+              </div>
+              <div className="font-extrabold text-2xl" style={{ color: "var(--color-dark)", fontFamily: "var(--font-display)" }}>
+                {totals.minGChoNeeded} g
+              </div>
+            </div>
+            <div className="rounded-lg p-3" style={{ background: "var(--color-surface-2)" }}>
+              <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]" style={{ letterSpacing: ".06em" }}>
+                Marge vs ta tolérance
+              </div>
+              <div
+                className="font-extrabold text-2xl"
+                style={{
+                  color: totals.minGChoPerH > defaultTol ? "var(--color-danger)" : "var(--color-success)",
+                  fontFamily: "var(--font-display)",
+                }}
+              >
+                {totals.minGChoPerH > defaultTol ? "+" : "−"}{Math.abs(totals.minGChoPerH - defaultTol)} g/h
+              </div>
+              <div className="text-[10px] text-[var(--color-text-muted)] mt-1">
+                Ta tolérance : {defaultTol} g/h
+              </div>
+            </div>
+          </div>
+          {totals.minGChoPerH > defaultTol && (
+            <div className="mt-3 p-3 rounded-lg text-sm" style={{ background: "rgba(207,46,46,0.10)", color: "var(--color-danger)" }}>
+              🚨 <b>Minimum requis ({totals.minGChoPerH} g/h) supérieur à ta tolérance actuelle ({defaultTol} g/h)</b>.
+              Options : travailler la tolérance glucidique en amont, faire une surcharge plus complète, ou réduire l&apos;intensité cible.
+            </div>
+          )}
         </div>
       )}
 
       {/* Segments table */}
       <div className="card overflow-auto mb-4">
-        <table className="table" style={{ minWidth: 900 }}>
+        <table className="table" style={{ minWidth: 1050 }}>
           <thead>
             <tr>
               <th>Segment</th>
@@ -470,11 +619,16 @@ export default function RaceEnergyPage() {
               <th>D−</th>
               <th>Pente</th>
               <th>Durée</th>
-              <th>FC cible</th>
-              <th>kcal/min</th>
-              <th>kcal total</th>
-              <th>CHO ingérable</th>
-              <th>Déficit kcal</th>
+              <th>FC</th>
+              <th>kcal</th>
+              <th title="Glucides oxydés sur le segment">CHO oxydés</th>
+              <th>
+                Cible CHO/h
+                <br />
+                <span className="text-[9px] font-normal text-[var(--color-text-muted)]">vide = {planCibleCho}</span>
+              </th>
+              <th title="Glucides ingérés au taux cible">CHO ingérés</th>
+              <th title="Glycogène consommé net = oxydé − ingéré">Net glyco</th>
               <th></th>
             </tr>
           </thead>
@@ -482,19 +636,28 @@ export default function RaceEnergyPage() {
             {enriched.map((s) => (
               <tr key={s.id}>
                 <td><input className="input" style={{ minWidth: 130 }} value={s.nom} onChange={(e) => updateSeg(s.id, { nom: e.target.value })} placeholder="Départ → Col 1" /></td>
-                <td><input className="input" style={{ width: 60 }} value={s.km} onChange={(e) => updateSeg(s.id, { km: e.target.value })} /></td>
-                <td><input className="input" style={{ width: 60 }} value={s.dplus} onChange={(e) => updateSeg(s.id, { dplus: e.target.value })} /></td>
-                <td><input className="input" style={{ width: 60 }} value={s.dmoins} onChange={(e) => updateSeg(s.id, { dmoins: e.target.value })} /></td>
+                <td><input className="input" style={{ width: 55 }} value={s.km} onChange={(e) => updateSeg(s.id, { km: e.target.value })} /></td>
+                <td><input className="input" style={{ width: 55 }} value={s.dplus} onChange={(e) => updateSeg(s.id, { dplus: e.target.value })} /></td>
+                <td><input className="input" style={{ width: 55 }} value={s.dmoins} onChange={(e) => updateSeg(s.id, { dmoins: e.target.value })} /></td>
                 <td style={{ color: s.pente > 5 ? "var(--color-danger)" : s.pente < -5 ? "var(--color-success)" : "var(--color-text-muted)", fontWeight: 600 }}>
                   {s.pente !== 0 ? (s.pente > 0 ? "+" : "") + s.pente + " %" : "—"}
                 </td>
-                <td><input className="input" style={{ width: 60 }} value={s.dureeMin} onChange={(e) => updateSeg(s.id, { dureeMin: e.target.value })} title="Minutes" /></td>
-                <td><input className="input" style={{ width: 60 }} value={s.fcCible} onChange={(e) => updateSeg(s.id, { fcCible: e.target.value })} /></td>
-                <td style={{ fontWeight: 700, color: "var(--color-primary)" }}>{s.kcalPerMin > 0 ? s.kcalPerMin : "—"}</td>
+                <td><input className="input" style={{ width: 55 }} value={s.dureeMin} onChange={(e) => updateSeg(s.id, { dureeMin: e.target.value })} /></td>
+                <td><input className="input" style={{ width: 55 }} value={s.fcCible} onChange={(e) => updateSeg(s.id, { fcCible: e.target.value })} /></td>
                 <td style={{ fontWeight: 800, color: "var(--color-primary)" }}>{s.kcalTotal > 0 ? s.kcalTotal : "—"}</td>
-                <td style={{ color: "var(--color-success)", fontWeight: 600 }}>{s.choIngerable > 0 ? `${s.choIngerable} g` : "—"}</td>
-                <td style={{ fontWeight: 700, color: s.deficit > 0 ? "var(--color-danger)" : "var(--color-success)" }}>
-                  {s.deficit !== 0 ? (s.deficit > 0 ? "−" : "+") + Math.abs(s.deficit) : "0"}
+                <td>{s.gChoOxidized > 0 ? `${s.gChoOxidized.toFixed(0)} g` : "—"}</td>
+                <td>
+                  <input
+                    className="input"
+                    style={{ width: 70 }}
+                    value={s.cibleChoH}
+                    onChange={(e) => updateSeg(s.id, { cibleChoH: e.target.value })}
+                    placeholder={String(planCibleCho)}
+                  />
+                </td>
+                <td style={{ color: "var(--color-success)", fontWeight: 600 }}>{s.gChoIngested > 0 ? `${s.gChoIngested.toFixed(0)} g` : "—"}</td>
+                <td style={{ fontWeight: 700, color: s.netGlyco > 0 ? "var(--color-danger)" : "var(--color-success)" }}>
+                  {s.netGlyco !== 0 ? (s.netGlyco > 0 ? "−" : "+") + Math.abs(s.netGlyco).toFixed(0) + " g" : "0"}
                 </td>
                 <td>
                   <button onClick={() => removeSegment(s.id)} style={{ border: "none", background: "none", color: "var(--color-danger)", cursor: "pointer" }}>✕</button>
@@ -502,98 +665,36 @@ export default function RaceEnergyPage() {
               </tr>
             ))}
           </tbody>
+          {totals && (
+            <tfoot>
+              <tr style={{ background: "var(--color-surface-2)", fontWeight: 800 }}>
+                <td>TOTAL</td>
+                <td colSpan={4}></td>
+                <td>{formatDuration(totals.totMin)}</td>
+                <td></td>
+                <td style={{ color: "var(--color-primary)" }}>{totals.totKcal.toLocaleString("fr-FR")}</td>
+                <td>{Math.round(totals.totGChoOxi)} g</td>
+                <td></td>
+                <td style={{ color: "var(--color-success)" }}>{Math.round(totals.totGChoIng)} g</td>
+                <td style={{ color: totals.glycoEnd < WALL_THRESHOLD_G ? "var(--color-danger)" : "var(--color-success)" }}>
+                  {Math.round(reserves - totals.glycoEnd)} g
+                </td>
+                <td></td>
+              </tr>
+            </tfoot>
+          )}
         </table>
         <div className="p-3 border-t border-[var(--color-border)]">
           <button onClick={addSegment} className="btn-ghost btn-sm">+ Ajouter un segment</button>
         </div>
       </div>
 
-      {/* Analysis / recommendations */}
-      {totals && totals.totKcal > 0 && (
-        <div className="card p-4">
-          <div className="font-extrabold mb-3" style={{ fontFamily: "var(--font-display)" }}>
-            📊 Analyse énergétique
-          </div>
-
-          {/* Visual bar */}
-          <div className="mb-4">
-            <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)] mb-1.5" style={{ letterSpacing: ".06em" }}>
-              Couverture des {totals.totKcal.toLocaleString("fr-FR")} kcal totales
-            </div>
-            <div className="h-4 rounded-full overflow-hidden flex" style={{ background: "var(--color-surface-2)" }}>
-              <div
-                style={{
-                  width: `${Math.min(100, (totals.totChoKcal / totals.totKcal) * 100)}%`,
-                  background: "var(--color-success)",
-                }}
-                title={`CHO ingérés en course : ${Math.round(totals.totChoKcal)} kcal`}
-              />
-              <div
-                style={{
-                  width: `${Math.min(100 - (totals.totChoKcal / totals.totKcal) * 100, (totals.stockGlycoKcal / totals.totKcal) * 100)}%`,
-                  background: "var(--color-primary)",
-                }}
-                title={`Réserves glycogène : ${Math.round(totals.stockGlycoKcal)} kcal`}
-              />
-              {totals.afterStock > 0 && (
-                <div
-                  style={{
-                    width: `${(totals.afterStock / totals.totKcal) * 100}%`,
-                    background: "var(--color-danger)",
-                  }}
-                  title={`Déficit après stock : ${Math.round(totals.afterStock)} kcal`}
-                />
-              )}
-            </div>
-            <div className="flex flex-wrap gap-3 text-[10px] text-[var(--color-text-muted)] mt-1.5">
-              <span><span style={{ display: "inline-block", width: 8, height: 8, background: "var(--color-success)", borderRadius: 2, marginRight: 4 }} />CHO en course ({Math.round(totals.totChoKcal)} kcal)</span>
-              <span><span style={{ display: "inline-block", width: 8, height: 8, background: "var(--color-primary)", borderRadius: 2, marginRight: 4 }} />Réserves glycogène ({Math.round(totals.stockGlycoKcal)} kcal)</span>
-              {totals.afterStock > 0 && (
-                <span><span style={{ display: "inline-block", width: 8, height: 8, background: "var(--color-danger)", borderRadius: 2, marginRight: 4 }} />Déficit ({Math.round(totals.afterStock)} kcal)</span>
-              )}
-            </div>
-          </div>
-
-          {/* Messages */}
-          <div className="space-y-2 text-sm">
-            {totals.coveredPct >= 100 && (
-              <div className="p-3 rounded-lg" style={{ background: "rgba(95,140,10,0.10)", color: "var(--color-success)" }}>
-                ✅ <b>Stratégie viable</b> : tes apports glucidiques en course + tes réserves de glycogène couvrent {totals.coveredPct >= 110 ? "largement" : ""} les besoins ({totals.coveredPct}%). Concentre-toi sur l&apos;exécution.
-              </div>
-            )}
-            {totals.coveredPct >= 75 && totals.coveredPct < 100 && (
-              <div className="p-3 rounded-lg" style={{ background: "rgba(255,69,1,0.10)", color: "var(--color-primary)" }}>
-                ⚠ <b>Couverture à {totals.coveredPct} %</b> — déficit de {Math.round(totals.afterStock)} kcal. Acceptable sur du long si tu es bien adapté à oxyder les lipides, mais surveille la fatigue tardive.
-              </div>
-            )}
-            {totals.coveredPct < 75 && (
-              <div className="p-3 rounded-lg" style={{ background: "rgba(207,46,46,0.10)", color: "var(--color-danger)" }}>
-                🚨 <b>Couverture insuffisante ({totals.coveredPct} %)</b> — déficit de {Math.round(totals.afterStock)} kcal. Risque de coup de pompe. Options :
-                <ul className="list-disc pl-5 mt-1 text-xs">
-                  <li>Augmenter ta tolérance glucidique en amont (module &laquo; Tests de tolérance &raquo;)</li>
-                  <li>Réduire l&apos;intensité cible (FC plus basse)</li>
-                  <li>Mieux pré-charger les réserves (J-4 → J-1 plus glucidiques)</li>
-                </ul>
-              </div>
-            )}
-            {enriched.some((s) => s.deficit > 200) && (
-              <div className="p-3 rounded-lg" style={{ background: "rgba(207,46,46,0.06)", color: "var(--color-text)" }}>
-                🚩 <b>Segments à risque énergétique</b> :{" "}
-                {enriched.filter((s) => s.deficit > 200).map((s) => s.nom || "?").join(" · ")}
-                <br />
-                <span className="text-xs text-[var(--color-text-muted)]">Déficit &gt; 200 kcal sur ce segment isolé — anticipe avec un gel ou une boisson plus concentrée juste avant.</span>
-              </div>
-            )}
-          </div>
-
-          {/* Profile context */}
-          <div className="text-[10px] text-[var(--color-text-muted)] mt-4 pt-3 border-t border-[var(--color-border)]">
-            Calcul basé sur ton profil : {profile.sexe || "—"} · {poidsKg || "—"} kg · {ageY || "—"} ans · réserves glycogène {reservesGlycogene} g · cible CHO {cibleChoH} g/h.
-            <br />
-            ⓘ Formule Keytel et al. (2005) — précision ±10 %. Ne tient pas compte des variations terrain/température au-delà de l&apos;impact sur la FC.
-          </div>
-        </div>
-      )}
+      {/* Context */}
+      <div className="text-[10px] text-[var(--color-text-muted)] mt-2 px-1">
+        Calcul basé sur ton profil : {profile.sexe || "—"} · {poidsKg || "—"} kg · {ageY || "—"} ans.
+        <br />
+        ⓘ Formule Keytel (2005) pour les kcal · CHO = (RER−0,7) / 0,3 × kcal totales · réserves selon la stratégie de pré-charge glycogénique.
+      </div>
     </div>
   );
 }

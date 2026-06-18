@@ -764,7 +764,35 @@ function ScatterCard({
               domain={["auto", "auto"]}
             />
             <ZAxis range={[60, 60]} />
-            <Tooltip formatter={(v: number, name) => [v, name === "x" ? xLabel : "Sudation (ml/h)"]} cursor={{ strokeDasharray: "3 3" }} />
+            <Tooltip
+              cursor={{ strokeDasharray: "3 3" }}
+              content={({ active, payload }) => {
+                if (!active || !payload || !payload.length) return null;
+                const p = payload[0]?.payload as { x: number; y: number } | undefined;
+                if (!p) return null;
+                return (
+                  <div
+                    style={{
+                      background: "var(--color-surface)",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: 8,
+                      padding: "8px 10px",
+                      fontSize: 12,
+                      boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
+                    }}
+                  >
+                    <div>
+                      <span style={{ color: "var(--color-text-muted)" }}>{xLabel} : </span>
+                      <b>{p.x}</b>
+                    </div>
+                    <div>
+                      <span style={{ color: "var(--color-text-muted)" }}>Sudation : </span>
+                      <b style={{ color }}>{p.y} ml/h</b>
+                    </div>
+                  </div>
+                );
+              }}
+            />
             <Scatter data={data} fill={color} />
             {trend && (
               <Scatter

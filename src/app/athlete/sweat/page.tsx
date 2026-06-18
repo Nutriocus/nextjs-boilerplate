@@ -533,6 +533,54 @@ export default function SweatPage() {
                         </div>
                       </div>
 
+                      {/* Sodium recommendations */}
+                      {(() => {
+                        const totalLiters = toIngestTotalMl / 1000;
+                        const litersPerH = toIngestPerH / 1000;
+                        const naMinTotal = Math.round(totalLiters * 500);
+                        const naMaxTotal = Math.round(totalLiters * 1300);
+                        const naMinPerH = Math.round(litersPerH * 500);
+                        const naMaxPerH = Math.round(litersPerH * 1300);
+                        return (
+                          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                            <div
+                              className="rounded-lg p-3"
+                              style={{ background: "var(--color-surface-2)", borderLeft: "3px solid #2196f3" }}
+                            >
+                              <div
+                                className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]"
+                                style={{ letterSpacing: ".06em" }}
+                              >
+                                🧂 Sodium / heure
+                              </div>
+                              <div className="font-extrabold text-2xl" style={{ color: "#2196f3", fontFamily: "var(--font-display)" }}>
+                                {naMinPerH}–{naMaxPerH} mg/h
+                              </div>
+                              <div className="text-xs text-[var(--color-text-muted)] mt-1">
+                                500 à 1300 mg / L ingéré
+                              </div>
+                            </div>
+                            <div
+                              className="rounded-lg p-3"
+                              style={{ background: "var(--color-surface-2)", borderLeft: "3px solid #2196f3" }}
+                            >
+                              <div
+                                className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]"
+                                style={{ letterSpacing: ".06em" }}
+                              >
+                                🧂 Sodium total sur la course
+                              </div>
+                              <div className="font-extrabold text-2xl" style={{ color: "#2196f3", fontFamily: "var(--font-display)" }}>
+                                {naMinTotal}–{naMaxTotal} mg
+                              </div>
+                              <div className="text-xs text-[var(--color-text-muted)] mt-1">
+                                Pour {totalLiters.toFixed(2)} L sur {pred.duree} min
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
                       {/* Visual breakdown */}
                       <div className="mt-4">
                         <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)] mb-1" style={{ letterSpacing: ".06em" }}>
@@ -566,6 +614,20 @@ export default function SweatPage() {
                             Déshydratation tolérée (≤ 2,5 %)
                           </span>
                         </div>
+                      </div>
+
+                      {/* Sodium / hyponatremia explainer */}
+                      <div
+                        className="mt-3 p-3 rounded-lg text-xs"
+                        style={{ background: "rgba(33,150,243,0.08)", color: "var(--color-text)", borderLeft: "3px solid #2196f3" }}
+                      >
+                        <b style={{ color: "#2196f3" }}>⚠ Risque d&apos;hyponatrémie</b> — si tu bois sans apporter de sodium,
+                        ton sang se dilue et le taux de sodium plasmatique chute. Symptômes : nausées, maux de tête, confusion,
+                        perte d&apos;équilibre, voire coma dans les cas sévères.
+                        <br />
+                        <b>Règle d&apos;or :</b> apporter <b>500 à 1300 mg de sodium par litre d&apos;eau ingéré</b>. Le bas de la fourchette
+                        suffit pour les efforts courts/tempérés ; vise le haut quand il fait chaud, que tu transpires beaucoup ou
+                        que la course dure plus de 4 h.
                       </div>
 
                       {/* Warnings */}

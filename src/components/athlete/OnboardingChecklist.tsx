@@ -15,9 +15,13 @@ import { useAthleteData } from "@/lib/athlete-storage";
 // =====================================================================
 
 type ChecklistState = {
+  // `dismissed` is now only used for the FINAL dismiss when everything is done.
+  // For "Plus tard" we use sessionStorage so the checklist reappears next session.
   dismissed?: boolean;
   pwaInstalled?: boolean;
 };
+
+const SESSION_HIDE_KEY = "nutriocus_onboarding_hidden_this_session";
 
 export function OnboardingChecklist() {
   const searchParams = useSearchParams();
@@ -33,12 +37,18 @@ export function OnboardingChecklist() {
   const [isStandalone, setIsStandalone] = useState(false);
   const [installHelpOpen, setInstallHelpOpen] = useState(false);
   const [helpOs, setHelpOs] = useState<"ios" | "android">("ios");
+  const [hiddenThisSession, setHiddenThisSession] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     const ua = window.navigator.userAgent;
     if (/Android/i.test(ua)) setHelpOs("android");
     else setHelpOs("ios");
+    try {
+      if (sessionStorage.getItem(SESSION_HIDE_KEY) === "1") {
+        setHiddenThisSession(true);
+      }
+    } catch { /* ignore */ }
   }, []);
 
   useEffect(() => {
@@ -52,6 +62,7 @@ export function OnboardingChecklist() {
   if (isCoachView) return null;
   if (!loaded) return null;
   if (state.dismissed) return null;
+  if (hiddenThisSession) return null;
 
   const steps = [
     {
@@ -117,10 +128,21 @@ export function OnboardingChecklist() {
           </div>
         </div>
         <button
-          onClick={() => setState({ ...state, dismissed: true })}
+          onClick={() => {
+            if (allDone) {
+              // Permanent dismiss (athlete is done with onboarding)
+              setState({ ...state, dismissed: true });
+            } else {
+              // Session-only dismiss: hide for this session, will reappear next session
+              try {
+                sessionStorage.setItem(SESSION_HIDE_KEY, "1");
+              } catch { /* ignore */ }
+              setHiddenThisSession(true);
+            }
+          }}
           className="text-xs"
           style={{ background: "transparent", border: "1px solid rgba(255,255,255,0.3)", color: "#fff", borderRadius: 6, padding: "4px 9px", cursor: "pointer" }}
-          title="Masquer cette checklist"
+          title={allDone ? "Masquer définitivement" : "Masquer pour cette session (réapparaîtra à la prochaine connexion)"}
         >
           {allDone ? "Fermer" : "Plus tard"}
         </button>

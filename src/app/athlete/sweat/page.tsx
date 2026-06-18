@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader, Kpi, Empty, Field } from "@/components/ui/PageHeader";
+import { HelpSection, HelpBlock } from "@/components/ui/HelpSection";
 import {
   ResponsiveContainer,
   ScatterChart,
@@ -255,6 +256,37 @@ export default function SweatPage() {
         }
         desc="Taux de sudation (ml/min) = ((poids avant − poids après)×1000 + eau ingérée − urine) / durée. ml/h = ml/min × 60."
       />
+
+      <HelpSection title="ℹ️ Test de sudation — pourquoi, comment, à quoi ça sert ?">
+        <HelpBlock icon="🎯" title="Pourquoi">
+          <p>
+            Tu transpires entre <b>0,3 et 2 L/h</b> selon ton physiologie, la température,
+            l&apos;intensité, le vêtement, l&apos;acclimatation… Ne pas connaître ton taux,
+            c&apos;est risquer la <b>déshydratation</b> (perte &gt; 2,5% poids = chute de
+            performance) ou l&apos;<b>hyponatrémie</b> (boire trop sans sodium). Le test
+            individualise ta stratégie hydrique.
+          </p>
+        </HelpBlock>
+        <HelpBlock icon="📝" title="Comment faire le test">
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Choisis une séance représentative (durée 1h+ idéalement, intensité proche course)</li>
+            <li><b>Pèse-toi nu</b> juste avant (vidé vessie / intestin)</li>
+            <li>Note l&apos;<b>eau ingérée</b> pendant l&apos;effort (peser bidons avant/après)</li>
+            <li>Si tu urines pendant, estime le volume (à soustraire)</li>
+            <li><b>Pèse-toi à nouveau nu</b> juste après (essuie la sueur)</li>
+            <li>Saisis tout dans <b>+ Test</b> : la plateforme calcule le ml/min et ml/h</li>
+            <li>Refais le test par <b>condition</b> (chaud / froid / humide / altitude…)</li>
+          </ul>
+        </HelpBlock>
+        <HelpBlock icon="🔬" title="Comment c'est utilisé ensuite">
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Définit ton <b>besoin hydrique en course</b> (objectif : compenser ~60-80% du taux)</li>
+            <li>Calcule l&apos;<b>apport sodium</b> requis : 500-1300 mg / L d&apos;eau ingérée (anti-hyponatrémie)</li>
+            <li>Alimente la stratégie de course (volume de boisson par ravito)</li>
+            <li>Identifie les conditions où tu dois <b>boire plus</b> (canicule, altitude)</li>
+          </ul>
+        </HelpBlock>
+      </HelpSection>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
         <Kpi label="Taux de sudation moyen" value={avg != null ? Math.round(avg) : "—"} unit="ml/h" color="var(--color-primary)" />

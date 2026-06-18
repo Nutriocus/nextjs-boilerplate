@@ -2,6 +2,7 @@
 
 import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { HelpSection, HelpBlock } from "@/components/ui/HelpSection";
 import {
   PrintReport,
   PrintH,
@@ -89,6 +90,37 @@ export default function PhysiologyPage() {
         action={<PrintButton />}
         desc={`Zones calculées depuis ton profil (VO₂max ${profile.vo2max ?? "—"}, poids ${profile.poids ?? "—"} kg). %CHO = (RER−0,7)/0,3 · VO₂ = VO₂max×poids/1000×%VO₂max · kcal/min = 5×VO₂.`}
       />
+
+      <HelpSection title="ℹ️ Profil physiologique — c'est quoi et à quoi ça sert ?">
+        <HelpBlock icon="🎯" title="Pourquoi">
+          <p>
+            Ton profil physiologique est la <b>carte d&apos;identité énergétique de ton corps</b> :
+            VO₂max, FCmax, seuils ventilatoires (SV1 / SV2), RER associés. Ces données viennent
+            d&apos;un <b>test à l&apos;effort en laboratoire</b> (avec masque + analyseur de gaz).
+          </p>
+          <p>
+            Elles permettent de connaître précisément <b>tes zones d&apos;intensité</b> et la
+            répartition <b>glucides / lipides</b> consommés à chaque allure.
+          </p>
+        </HelpBlock>
+        <HelpBlock icon="🔬" title="Comment c'est utilisé dans la plateforme">
+          <ul className="list-disc pl-5 space-y-1">
+            <li><b>Dépenses en course</b> : calcule le % CHO oxydés par segment selon la FC cible (interpolation SV1/SV2)</li>
+            <li><b>Stratégie de course</b> : valide la cohérence de la zone d&apos;effort prévue</li>
+            <li><b>IRE</b> : intervient dans le calcul du poids de forme</li>
+            <li><b>Analyses post-course</b> : on compare la FC moyenne réalisée vs les seuils théoriques</li>
+          </ul>
+        </HelpBlock>
+        <HelpBlock icon="📝" title="Comment renseigner tes données">
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Va dans <b>Mon profil</b> → Données physiologiques</li>
+            <li>Renseigne <b>FCmax, VO₂max, SV1, SV2, RER SV1, RER SV2, VO₂ SV1, VO₂ SV2</b></li>
+            <li>Si tu n&apos;as pas fait de test labo, demande à ton coach des estimations
+              (ex. FCmax = 220 − âge, SV1 ≈ 80% FCmax, SV2 ≈ 90% FCmax — mais les valeurs labo
+              sont toujours plus précises)</li>
+          </ul>
+        </HelpBlock>
+      </HelpSection>
 
       <div className="card mb-5 overflow-x-auto">
         <table className="table" style={{ minWidth: 840 }}>

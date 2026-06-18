@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { PageHeader, Kpi, Field } from "@/components/ui/PageHeader";
+import { HelpSection, HelpBlock } from "@/components/ui/HelpSection";
 import {
   PrintReport,
   PrintH,
@@ -470,6 +471,37 @@ export default function ProtocolsPage() {
         title="Protocoles d'évaluation"
         desc="Les 3 piliers Nutriocus : mécanique, neuromusculaire local, durabilité. Réalise les tests, saisis les valeurs, obtiens tes scores — et le GPT associé pour le rapport complet."
       />
+
+      <HelpSection title="ℹ️ Protocoles d'évaluation — à quoi ça sert et comment les utiliser ?">
+        <HelpBlock icon="🎯" title="Pourquoi">
+          <p>
+            Les protocoles permettent de <b>diagnostiquer objectivement</b> tes points
+            forts/faibles avant de bâtir une stratégie. Ils couvrent les 3 piliers
+            de la performance d&apos;endurance :
+          </p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li><b>🔴 Mécanique</b> : économie de course, foulée, posture (efficacité du geste)</li>
+            <li><b>🟣 Neuromusculaire</b> : force locale des chaînes (mollets, quadris, fessiers…)</li>
+            <li><b>🟢 Durabilité</b> : capacité à maintenir l&apos;intensité dans le temps (résistance à la fatigue)</li>
+          </ul>
+        </HelpBlock>
+        <HelpBlock icon="📝" title="Comment faire">
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Choisis un pilier (onglet 🔴 / 🟣 / 🟢)</li>
+            <li>Réalise les tests proposés (souvent autonomes — terrain ou salle)</li>
+            <li>Saisis les valeurs brutes mesurées (temps, répétitions, charges, FC…)</li>
+            <li>La plateforme calcule un <b>score</b> par catégorie + un score global</li>
+            <li>Ouvre le <b>GPT associé</b> (bouton en haut) pour un rapport détaillé</li>
+          </ul>
+        </HelpBlock>
+        <HelpBlock icon="🔬" title="Comment c'est utilisé ensuite">
+          <ul className="list-disc pl-5 space-y-1">
+            <li>L&apos;onglet <b>🎯 Synthèse 360°</b> agrège tes 3 piliers en une vue radar</li>
+            <li>Tes scores guident les <b>séances de travail prioritaires</b> avec ton coach</li>
+            <li>Tu refais les tests <b>tous les 2-3 mois</b> pour suivre tes progrès</li>
+          </ul>
+        </HelpBlock>
+      </HelpSection>
       <div className="flex gap-1.5 mb-4 flex-wrap">
         <button onClick={() => setTab("diag")} className={tab === "diag" ? "btn-primary btn-sm" : "btn-ghost btn-sm"}>🎯 Synthèse 360°</button>
         <button onClick={() => setTab("meca")} className={tab === "meca" ? "btn-primary btn-sm" : "btn-ghost btn-sm"}>🔴 Mécanique</button>

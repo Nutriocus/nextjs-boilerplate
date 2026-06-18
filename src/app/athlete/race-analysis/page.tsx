@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader, Empty, Field, Badge } from "@/components/ui/PageHeader";
+import { HelpSection, HelpBlock } from "@/components/ui/HelpSection";
 import { PrintReport, PrintH, PrintButton, PrintKpi } from "@/components/ui/PrintReport";
 import { CommentThread } from "@/components/ui/CommentThread";
 
@@ -356,6 +357,34 @@ export default function RaceAnalysisPage() {
         action={<button onClick={() => setEditing(blankRace())} className="btn-primary">+ Nouveau bilan</button>}
         desc="Le sportif fait son débrief avec le GPT « Analyse de ta course », puis reporte ici le bilan pour le garder course après course."
       />
+
+      <HelpSection title="ℹ️ Analyse post-course — pourquoi et comment ?">
+        <HelpBlock icon="🎯" title="Pourquoi">
+          <p>
+            Chaque course est une <b>mine d&apos;informations</b> : ce qui a fonctionné,
+            ce qui a lâché, l&apos;écart entre la stratégie prévue et le réel. Sans
+            analyse structurée, on perd ces enseignements et on refait les mêmes
+            erreurs. L&apos;analyse post-course transforme l&apos;expérience en
+            <b> progression</b> pour les prochains objectifs.
+          </p>
+        </HelpBlock>
+        <HelpBlock icon="📝" title="Comment faire">
+          <ul className="list-disc pl-5 space-y-1">
+            <li><b>Étape 1</b> — Ouvre le GPT « Nutriocus Analyse de ta course » (bouton ci-dessous)</li>
+            <li><b>Étape 2</b> — Réponds à ses questions (allure, sensations, nutrition, hydratation, points clés)</li>
+            <li><b>Étape 3</b> — Copie son rapport puis crée <b>+ Nouveau bilan</b> ici</li>
+            <li><b>Étape 4</b> — Renseigne nom de course, date, distance, D+, temps, points forts/faibles, RPE digestif</li>
+            <li><b>Idéalement</b> : fais-le dans les <b>24-48h</b> qui suivent la course (sensations encore fraîches)</li>
+          </ul>
+        </HelpBlock>
+        <HelpBlock icon="🔬" title="Comment c'est utilisé ensuite">
+          <ul className="list-disc pl-5 space-y-1">
+            <li>L&apos;historique te permet de comparer <b>course par course</b></li>
+            <li>Ton coach voit la progression et ajuste les <b>plans suivants</b></li>
+            <li>Sert de base à la consultation post-objectif</li>
+          </ul>
+        </HelpBlock>
+      </HelpSection>
 
       <div className="mb-3.5">
         <a

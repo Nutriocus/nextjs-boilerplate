@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader, Kpi, Empty, Field } from "@/components/ui/PageHeader";
+import { HelpSection, HelpBlock } from "@/components/ui/HelpSection";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import {
   ResponsiveContainer,
@@ -59,7 +60,7 @@ const moMap = { Elevée: 3, Moyenne: 2, Faible: 1 };
 
 // External tool — "Diététicien Nutriocus de poche" GPT
 const DIETETICIEN_GPT_URL =
-  "https://chatgpt.com/g/g-67e9b2cd8b908191bf3b1a7b3a73c3a4-ton-dieteticien-nutriocus-de-poche";
+  "https://chatgpt.com/g/g-693fd73e063081919c01bef7714c6099-ton-dieteticien-nutriocus-de-poche";
 
 function toNum(v: unknown): number {
   const n = parseFloat(String(v).replace(",", "."));
@@ -391,6 +392,42 @@ export default function EnergyPage() {
         }
         desc="Score de disponibilité énergétique = (apports − dépense de la sortie) / masse maigre. Sous 30 kcal/kg, l'organisme entre en déficit chronique."
       />
+
+      <HelpSection title="ℹ️ Carnet de bord de l'énergie — pourquoi, cible, comment ?">
+        <HelpBlock icon="🎯" title="Pourquoi">
+          <p>
+            Le <b>déficit énergétique chronique</b> (RED-S) est la 1ère cause de
+            blessures, fatigue, troubles hormonaux et baisse de performance chez
+            les sportifs d&apos;endurance. Mesurer ta <b>disponibilité énergétique</b>
+            (DE) jour après jour permet de la détecter et la corriger avant la casse.
+          </p>
+        </HelpBlock>
+        <HelpBlock icon="🎚️" title="Ce que l'on vise">
+          <ul className="list-disc pl-5 space-y-1">
+            <li><b>≥ 45 kcal/kg de masse maigre/jour</b> : zone optimale (santé + performance)</li>
+            <li><b>30-45 kcal/kg/j</b> : zone à surveiller</li>
+            <li><b>&lt; 30 kcal/kg/j</b> : zone de déficit chronique (RED-S) → risque blessure / hormonal</li>
+            <li>Côté macros : viser <b>1,6-2,2 g/kg protéines</b>, <b>5-8 g/kg glucides</b> (selon volume d&apos;entraînement)</li>
+          </ul>
+        </HelpBlock>
+        <HelpBlock icon="📝" title="Comment remplir une journée">
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Clique <b>+ Journée</b> → choisis la date</li>
+            <li>Renseigne la <b>dépense de la sortie</b> (kcal estimées depuis ta montre ou la page « Dépenses en course »)</li>
+            <li>Saisis tes <b>apports</b> : kcal, protéines (g), lipides (g), glucides (g)</li>
+            <li>Si tu ne sais pas estimer un repas → bouton <b>🤖 Ton diététicien Nutriocus de poche</b> : décris ton repas, il te donne les macros</li>
+            <li>Note l&apos;<b>énergie ressentie</b> (1-10), <b>sommeil</b>, <b>humeur</b>, <b>libido</b> — marqueurs précoces de fatigue centrale</li>
+          </ul>
+        </HelpBlock>
+        <HelpBlock icon="📊" title="Comment analyser">
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Onglet <b>Synthèse & scores</b> : moyennes 7j / 14j / 28j, courbes d&apos;évolution</li>
+            <li>Une <b>DE moyenne sous 30 sur 7-14 jours</b> = alerte → augmente les apports ou réduis la charge</li>
+            <li>Croise <b>énergie ressentie ↓ + DE basse</b> = signal fort de surrégime</li>
+            <li>Partage avec ton coach pour ajuster <b>charge / récupération / nutrition</b></li>
+          </ul>
+        </HelpBlock>
+      </HelpSection>
 
       <div className="flex gap-2 mb-4">
         <button

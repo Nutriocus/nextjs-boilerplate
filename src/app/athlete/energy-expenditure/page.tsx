@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader, Kpi, Empty, Field } from "@/components/ui/PageHeader";
+import { HelpSection, HelpBlock } from "@/components/ui/HelpSection";
 import { InfoTooltip } from "@/components/ui/InfoTooltip";
 import {
   ResponsiveContainer,
@@ -229,7 +230,7 @@ function powerKcalPerMin(powerW: number): number {
   return (powerW * 60 * 0.239) / (1000 * 0.24);
 }
 
-const GPT_LINK = "https://chatgpt.com/g/g-trail-pacing-engine-nutriocus";
+const GPT_LINK = "https://chatgpt.com/g/g-69b52fc02f54819192145abea341ee0e-nutriocus-strategie-de-pacing-course-trail";
 
 export default function EnergyExpenditurePage() {
   const [profile] = useAthleteData<{
@@ -447,6 +448,43 @@ export default function EnergyExpenditurePage() {
             </a>
           }
         />
+
+        <HelpSection title="ℹ️ Dépenses en course — pourquoi et comment remplir un nouveau plan ?">
+          <HelpBlock icon="🎯" title="Pourquoi déterminer cela">
+            <p>
+              Connaître ta <b>dépense énergétique segment par segment</b> permet de :
+            </p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Anticiper le <b>moment du « mur »</b> (épuisement du glycogène ≈ 300 g restants)</li>
+              <li>Définir l&apos;<b>apport CHO minimum</b> pour tenir l&apos;objectif</li>
+              <li>Calibrer la <b>stratégie ravitaillement</b> (combien manger, où, quand)</li>
+              <li>Éviter le <b>surdosage</b> (et l&apos;inconfort GI) ou le <b>sous-dosage</b> (et la défaillance)</li>
+            </ul>
+          </HelpBlock>
+          <HelpBlock icon="📝" title="Comment créer un nouveau plan">
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Clique <b>+ Nouveau plan</b> et renseigne nom + date de course</li>
+              <li>Choisis ta <b>discipline</b> (trail / route / vélo / triathlon)</li>
+              <li>Renseigne les <b>réserves de glycogène</b> selon ta préparation :
+                <ul className="list-disc pl-5 mt-1">
+                  <li>Pas de surcharge : 450/400 g (H/F)</li>
+                  <li>Surcharge 1 jour : 600/550 g</li>
+                  <li>Surcharge 4 jours (recharge classique) : 800/700 g</li>
+                </ul>
+              </li>
+              <li><b>Découpe la course en segments</b> (montées, descentes, ravitos, plats) — chaque segment a sa propre distance, D+, allure cible, FC cible</li>
+              <li>La plateforme calcule pour chaque segment : kcal dépensés, CHO oxydés, % du glycogène restant, et signale le « mur » si tu passes sous 300 g</li>
+              <li>Ajoute tes <b>apports prévus</b> (gels, boissons) → vérification que le bilan CHO tient</li>
+            </ul>
+          </HelpBlock>
+          <HelpBlock icon="🔬" title="Comment c'est utilisé ensuite">
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Le plan alimente la <b>stratégie de course</b> (frise chronologique Mont Ventoux-style)</li>
+              <li>Il est <b>imprimable en PDF</b> pour ton sac de course</li>
+              <li>Comparé après course à l&apos;<b>analyse post-course</b> pour ajuster les prochains plans</li>
+            </ul>
+          </HelpBlock>
+        </HelpSection>
 
         <div className="card p-4 mb-4">
           <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)] mb-2" style={{ letterSpacing: ".06em" }}>

@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader, Kpi, Empty, Field, Badge } from "@/components/ui/PageHeader";
+import { HelpSection, HelpBlock } from "@/components/ui/HelpSection";
 import { PRODUCTS_CATALOG, Product } from "@/lib/products-catalog";
 
 type Discipline = "Course" | "Trail" | "Cyclisme" | "Triathlon";
@@ -272,6 +273,35 @@ export default function TolerancePage() {
           )
         }
       />
+
+      <HelpSection title="ℹ️ Tests de tolérance — pourquoi et comment ?">
+        <HelpBlock icon="🎯" title="Pourquoi">
+          <p>
+            La performance en endurance dépend de la <b>quantité de glucides absorbables
+            à l&apos;heure</b> sans inconfort digestif. Ton intestin se <b>entraîne</b> :
+            commencer à 40 g/h sans tester puis viser 100 g/h en course = trouble GI
+            assuré. Les tests permettent d&apos;identifier <b>ton plafond actuel</b> et
+            de le repousser progressivement.
+          </p>
+        </HelpBlock>
+        <HelpBlock icon="📝" title="Comment faire un test">
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Clique sur <b>+ Test</b> et choisis ta discipline (trail / route / vélo / triathlon)</li>
+            <li>Définis la <b>cible</b> (g de glucides / h) et la durée (mini 1h, idéal 2h)</li>
+            <li>Construis ton <b>test produit par produit</b> (gels, boissons, barres…) — la plateforme calcule le ratio glucose:fructose en temps réel</li>
+            <li>Respecte les <b>ratios cibles</b> selon la zone : ≥1:0,4 entre 80-90 g/h, ≥1:0,5 entre 90-100, ≥1:0,8 au-dessus de 110</li>
+            <li>Réalise le test à l&apos;entraînement (jamais en course), puis reviens noter
+              le <b>RPE digestif</b> (0=parfait, 10=cata) et coche <b>bien toléré</b> ou non</li>
+          </ul>
+        </HelpBlock>
+        <HelpBlock icon="🔬" title="Comment c'est utilisé ensuite">
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Ton <b>niveau actuel</b> = la meilleure valeur bien tolérée par discipline</li>
+            <li>Sert de <b>plafond</b> dans les plans de stratégie de course (on ne te prescrit pas plus que ce que tu tolères)</li>
+            <li>Permet de planifier la <b>progression</b> (palier +10 g/h toutes les 2-3 semaines)</li>
+          </ul>
+        </HelpBlock>
+      </HelpSection>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <Kpi

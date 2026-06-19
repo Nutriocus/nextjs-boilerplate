@@ -228,17 +228,165 @@ function exportRacePlanText(plan: RacePlan): string {
 // ============================================================
 // RACE PLAN TIMELINE COMPONENT
 // ============================================================
+// ============================================================
+// REUSABLE: PDF print for a RacePlan (premium, no UI noise)
+// ============================================================
+function PlanPrintReport({ plan }: { plan: RacePlan }) {
+  const discipline: Discipline = plan.discipline ?? "trail";
+  const isTri = discipline === "triathlon";
+  const totals = sumPhases(plan);
+  const totalKm = toNum(plan.km) || (isTri ? totals.km : 0);
+  const totalDplus = toNum(plan.dplus) || (isTri ? totals.dplus : 0);
+
+  const subtitleParts: string[] = [];
+  if (totalKm > 0) subtitleParts.push(`${totalKm} km`);
+  if (totalDplus > 0) subtitleParts.push(`${totalDplus} m D+`);
+  if (plan.objectif?.trim()) subtitleParts.push(`objectif ${plan.objectif}`);
+  const subtitle = subtitleParts.join(" · ");
+
+  return (
+    <PrintReport
+      kicker={`Anticiper tes courses · ${DISCIPLINE_LABEL[discipline]}`}
+      title={plan.name}
+      subtitle={subtitle}
+    >
+      {!isTri && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 9 }}>
+          <PrintKpi label="Glucides" value={plan.choPerH || "—"} unit="g/h" />
+          <PrintKpi label="Hydratation" value={plan.hydratationPerH || "—"} unit="ml/h" accent="#0a0a0a" />
+          <PrintKpi label="Distance" value={totalKm || "—"} unit="km" accent="#5f8c0a" />
+          <PrintKpi label="Dénivelé +" value={totalDplus || "—"} unit="m" accent="#cf2e2e" />
+        </div>
+      )}
+      {isTri && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 9 }}>
+          <PrintKpi label="Distance totale" value={totalKm || "—"} unit="km" accent="#5f8c0a" />
+          <PrintKpi label="Dénivelé +" value={totalDplus || "—"} unit="m" accent="#cf2e2e" />
+          <PrintKpi label="Phases" value={(plan.phases ?? []).length} unit="" accent="#FF4501" />
+        </div>
+      )}
+      {plan.avantCourse.filter((l) => l.trim()).length > 0 && (
+        <>
+          <PrintH>Avant la course</PrintH>
+          <div style={{ background: "#fafaf8", borderRadius: 10, padding: "12px 14px", borderLeft: "4px solid #FF4501" }}>
+            {plan.avantCourse.filter((l) => l.trim()).map((l, i) => (
+              <div key={i} style={{ fontSize: 12, padding: "2px 0" }}>• {l}</div>
+            ))}
+          </div>
+        </>
+      )}
+      <PrintH>{isTri ? "Stratégie par phase" : "Déroulé par ravitaillement"}</PrintH>
+      <div style={{ position: "relative", paddingLeft: 20 }}>
+        <div style={{ position: "absolute", left: 5, top: 4, bottom: 4, width: 2, background: "#FF450155" }} />
+
+        {!isTri && plan.segments.map((s, i) => (
+          <div key={i} className="no-break" style={{ position: "relative", marginBottom: 13 }}>
+            <div style={{ position: "absolute", left: -19, top: 3, width: 11, height: 11, borderRadius: "50%", background: "#FF4501", border: "2px solid #fff" }} />
+            <div style={{ display: "flex", justifyContent: "space-between" }}>
+              <b style={{ fontSize: 12.5 }}>
+                {s.nom}
+                {s.km !== "" ? <span style={{ color: "#787876", fontWeight: 600 }}> · KM {s.km}</span> : ""}
+              </b>
+              <span style={{ fontSize: 11, color: "#787876" }}>
+                {s.heure}
+                {s.temps ? ` · ${s.temps}` : ""}
+              </span>
+            </div>
+            {s.contenu.filter((c) => c.trim()).length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 5 }}>
+                {s.contenu.filter((c) => c.trim()).map((c, ci) => (
+                  <span key={ci} style={{ fontSize: 11, background: "#fff", border: "1px solid #e6e6e3", borderRadius: 7, padding: "4px 9px" }}>
+                    {c}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+
+        {isTri && (plan.phases ?? []).map((ph, i) => {
+          const meta = TRI_PHASE_META[ph.type];
+          const isTransition = ph.type === "T1" || ph.type === "T2";
+          return (
+            <div key={i} className="no-break" style={{ position: "relative", marginBottom: 13 }}>
+              <div
+                style={{
+                  position: "absolute",
+                  left: -19,
+                  top: 3,
+                  width: 11,
+                  height: 11,
+                  borderRadius: "50%",
+                  background: isTransition ? "#787876" : "#FF4501",
+                  border: "2px solid #fff",
+                }}
+              />
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                <b style={{ fontSize: 12.5 }}>
+                  {meta.icon} Phase {i + 1} — {meta.label}
+                  {meta.hasDistance && ph.km !== "" && <span style={{ color: "#787876", fontWeight: 600 }}> · {ph.km} km</span>}
+                  {meta.hasDplus && ph.dplus !== "" && <span style={{ color: "#787876", fontWeight: 600 }}> · {ph.dplus} m D+</span>}
+                </b>
+                <span style={{ fontSize: 11, color: "#787876" }}>{ph.temps && `⏱ ${ph.temps}`}</span>
+              </div>
+              {!isTransition && (
+                <div style={{ fontSize: 11, color: "#FF4501", fontWeight: 700, marginTop: 3 }}>
+                  {ph.choPerH} g/h · {ph.hydratationPerH} ml/h · {ph.sodiumPerH} mg/h Na
+                </div>
+              )}
+              {ph.contenu && ph.contenu.some((c) => c.trim()) && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 5 }}>
+                  {ph.contenu.filter((c) => c.trim()).map((c, ci) => (
+                    <span key={ci} style={{ fontSize: 11, background: "#fff", border: "1px solid #e6e6e3", borderRadius: 7, padding: "4px 9px" }}>
+                      {c}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </PrintReport>
+  );
+}
+
+function sumPhases(rp: RacePlan): { km: number; dplus: number } {
+  const ph = rp.phases ?? [];
+  let km = 0, dplus = 0;
+  for (const p of ph) {
+    km += toNum(p.km);
+    dplus += toNum(p.dplus);
+  }
+  return { km, dplus };
+}
+
+function planSubtitle(rp: RacePlan): string {
+  const discipline: Discipline = rp.discipline ?? "trail";
+  const isTri = discipline === "triathlon";
+  const totalKm = toNum(rp.km) || (isTri ? sumPhases(rp).km : 0);
+  const totalDplus = toNum(rp.dplus) || (isTri ? sumPhases(rp).dplus : 0);
+  const parts: string[] = [];
+  if (totalKm > 0) parts.push(`${totalKm} km`);
+  if (totalDplus > 0) parts.push(`${totalDplus} m D+`);
+  if (rp.objectif && rp.objectif.trim()) parts.push(`objectif ${rp.objectif}`);
+  return parts.join(" · ");
+}
+
 function RacePlanCard({
   rp,
   onDelete,
   onEdit,
+  onPrint,
 }: {
   rp: RacePlan;
   onDelete?: (id: string) => void;
   onEdit?: (rp: RacePlan) => void;
+  onPrint?: (rp: RacePlan) => void;
 }) {
   const discipline: Discipline = rp.discipline ?? "trail";
   const isTri = discipline === "triathlon";
+  const subtitle = planSubtitle(rp);
 
   return (
     <div className="card overflow-hidden mb-3.5">
@@ -264,9 +412,9 @@ function RacePlanCard({
           <div className="font-display font-extrabold text-xl mt-1" style={{ letterSpacing: "-0.01em" }}>
             {rp.name}
           </div>
-          <div className="text-xs text-[#bbb]">
-            {rp.km} km · {rp.dplus} m D+ · objectif {rp.objectif}
-          </div>
+          {subtitle && (
+            <div className="text-xs text-[#bbb]">{subtitle}</div>
+          )}
         </div>
         <div className="flex gap-4 items-center">
           {!isTri && (
@@ -286,6 +434,11 @@ function RacePlanCard({
               <div className="text-[10px] text-[#bbb]">CIBLES</div>
               <div className="text-[var(--color-accent)] font-extrabold text-sm">par phase</div>
             </div>
+          )}
+          {onPrint && (
+            <button onClick={() => onPrint(rp)} className="btn-ghost btn-xs" style={{ color: "#fff", border: "1px solid #fff4" }} title="Exporter en PDF">
+              📄 PDF
+            </button>
           )}
           {onEdit && (
             <button onClick={() => onEdit(rp)} className="btn-ghost btn-xs" style={{ color: "#fff", border: "1px solid #fff4" }}>
@@ -743,6 +896,7 @@ export default function RaceStrategyPage() {
 
     return (
       <div>
+        <div className="screen-only">
         <PageHeader kicker="Anticiper tes courses" title="Plan de course" />
 
         <div className="card p-4 mb-3.5" style={{ borderLeft: "5px solid var(--color-primary)" }}>
@@ -898,114 +1052,9 @@ export default function RaceStrategyPage() {
             <button onClick={() => savePlan(planEdit)} className="btn-primary">Enregistrer</button>
           </div>
         </div>
+        </div>{/* /screen-only */}
 
-        {printPlan && (() => {
-          const printDiscipline: Discipline = printPlan.discipline ?? "trail";
-          const printIsTri = printDiscipline === "triathlon";
-          return (
-            <PrintReport
-              kicker={`Anticiper tes courses · ${DISCIPLINE_LABEL[printDiscipline]}`}
-              title={printPlan.name}
-              subtitle={`${printPlan.km} km · ${printPlan.dplus} m D+ · objectif ${printPlan.objectif}`}
-            >
-              {!printIsTri && (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 9 }}>
-                  <PrintKpi label="Glucides" value={printPlan.choPerH} unit="g/h" />
-                  <PrintKpi label="Hydratation" value={printPlan.hydratationPerH} unit="ml/h" accent="#0a0a0a" />
-                  <PrintKpi label="Distance" value={printPlan.km} unit="km" accent="#5f8c0a" />
-                  <PrintKpi label="Dénivelé +" value={printPlan.dplus} unit="m" accent="#cf2e2e" />
-                </div>
-              )}
-              {printIsTri && (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 9 }}>
-                  <PrintKpi label="Distance" value={printPlan.km} unit="km" accent="#5f8c0a" />
-                  <PrintKpi label="Dénivelé +" value={printPlan.dplus} unit="m" accent="#cf2e2e" />
-                  <PrintKpi label="Phases" value={(printPlan.phases ?? []).length} unit="" accent="#FF4501" />
-                </div>
-              )}
-              {printPlan.avantCourse.length > 0 && (
-                <>
-                  <PrintH>Avant la course</PrintH>
-                  <div style={{ background: "#fafaf8", borderRadius: 10, padding: "12px 14px", borderLeft: "4px solid #FF4501" }}>
-                    {printPlan.avantCourse.map((l, i) => (
-                      <div key={i} style={{ fontSize: 12, padding: "2px 0" }}>• {l}</div>
-                    ))}
-                  </div>
-                </>
-              )}
-              <PrintH>{printIsTri ? "Stratégie par phase" : "Déroulé par ravitaillement"}</PrintH>
-              <div style={{ position: "relative", paddingLeft: 20 }}>
-                <div style={{ position: "absolute", left: 5, top: 4, bottom: 4, width: 2, background: "#FF450155" }} />
-
-                {!printIsTri && printPlan.segments.map((s, i) => (
-                  <div key={i} className="no-break" style={{ position: "relative", marginBottom: 13 }}>
-                    <div style={{ position: "absolute", left: -19, top: 3, width: 11, height: 11, borderRadius: "50%", background: "#FF4501", border: "2px solid #fff" }} />
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <b style={{ fontSize: 12.5 }}>
-                        {s.nom}
-                        {s.km !== "" ? <span style={{ color: "#787876", fontWeight: 600 }}> · KM {s.km}</span> : ""}
-                      </b>
-                      <span style={{ fontSize: 11, color: "#787876" }}>
-                        {s.heure}
-                        {s.temps ? ` · ${s.temps}` : ""}
-                      </span>
-                    </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 5 }}>
-                      {s.contenu.map((c, ci) => (
-                        <span key={ci} style={{ fontSize: 11, background: "#fff", border: "1px solid #e6e6e3", borderRadius: 7, padding: "4px 9px" }}>
-                          {c}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-
-                {printIsTri && (printPlan.phases ?? []).map((ph, i) => {
-                  const meta = TRI_PHASE_META[ph.type];
-                  const isTransition = ph.type === "T1" || ph.type === "T2";
-                  return (
-                    <div key={i} className="no-break" style={{ position: "relative", marginBottom: 13 }}>
-                      <div
-                        style={{
-                          position: "absolute",
-                          left: -19,
-                          top: 3,
-                          width: 11,
-                          height: 11,
-                          borderRadius: "50%",
-                          background: isTransition ? "#787876" : "#FF4501",
-                          border: "2px solid #fff",
-                        }}
-                      />
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                        <b style={{ fontSize: 12.5 }}>
-                          {meta.icon} Phase {i + 1} — {meta.label}
-                          {meta.hasDistance && ph.km !== "" && <span style={{ color: "#787876", fontWeight: 600 }}> · {ph.km} km</span>}
-                          {meta.hasDplus && ph.dplus !== "" && <span style={{ color: "#787876", fontWeight: 600 }}> · {ph.dplus} m D+</span>}
-                        </b>
-                        <span style={{ fontSize: 11, color: "#787876" }}>{ph.temps && `⏱ ${ph.temps}`}</span>
-                      </div>
-                      {!isTransition && (
-                        <div style={{ fontSize: 11, color: "#FF4501", fontWeight: 700, marginTop: 3 }}>
-                          {ph.choPerH} g/h · {ph.hydratationPerH} ml/h · {ph.sodiumPerH} mg/h Na
-                        </div>
-                      )}
-                      {ph.contenu && ph.contenu.some((c) => c.trim()) && (
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 5 }}>
-                          {ph.contenu.filter((c) => c.trim()).map((c, ci) => (
-                            <span key={ci} style={{ fontSize: 11, background: "#fff", border: "1px solid #e6e6e3", borderRadius: 7, padding: "4px 9px" }}>
-                              {c}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </PrintReport>
-          );
-        })()}
+        {printPlan && <PlanPrintReport plan={printPlan} />}
       </div>
     );
   }
@@ -1015,6 +1064,7 @@ export default function RaceStrategyPage() {
   // ============================================================
   return (
     <div>
+      <div className="screen-only">
       <PageHeader
         kicker="Anticiper tes courses"
         title="Stratégie de course"
@@ -1099,6 +1149,7 @@ export default function RaceStrategyPage() {
               rp={rp}
               onDelete={delPlan}
               onEdit={(p) => setPlanEdit(p)}
+              onPrint={(p) => { setPrintPlan(p); setTimeout(() => window.print(), 200); }}
             />
           ))}
           {racePlans.length === 0 && <Empty>Aucun plan de course.</Empty>}
@@ -1134,6 +1185,9 @@ export default function RaceStrategyPage() {
           </div>
         </>
       )}
+      </div>{/* /screen-only */}
+
+      {printPlan && <PlanPrintReport plan={printPlan} />}
     </div>
   );
 }

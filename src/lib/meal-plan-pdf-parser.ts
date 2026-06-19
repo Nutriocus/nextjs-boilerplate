@@ -22,14 +22,30 @@ interface PositionedItem {
   width: number;
 }
 
+// Section detection — ORDER MATTERS: more specific patterns must come first
+// (e.g. PETIT DEJEUNER before DEJEUNER; POST ENTRAINEMENT before ENTRAINEMENT).
 const SECTION_KEYWORDS: { regex: RegExp; title: string }[] = [
-  { regex: /^PETIT[\s-]*D[EÉ]J/i,            title: "Petit déjeuner" },
-  { regex: /^D[EÉ]JEUNER/i,                  title: "Déjeuner" },
-  { regex: /^COLLATION/i,                     title: "Collation" },
-  { regex: /^ENTRA[ÎI]NEMENT/i,               title: "Entraînement" },
-  { regex: /^D[IÎ]NER/i,                      title: "Dîner" },
-  { regex: /^SOUPER/i,                        title: "Souper" },
-  { regex: /^SUPPL[ÉE]MENT|^COMPL[EÉ]MENT/i,  title: "Compléments" },
+  // Repas / phases d'effort spécifiques — à matcher AVANT les versions courtes
+  { regex: /^PETIT[\s\-_]*D[EÉÈ]J/i,                                                  title: "Petit déjeuner" },
+  { regex: /^POST[\s\-_]*ENTRA[ÎI]NEMENT/i,                                            title: "Post-entraînement" },
+  { regex: /^S[EÉÈ]ANCE\s*(?:D['’\s])?\s*ENTRA[ÎI]NEMENT/i,                       title: "Séance d'entraînement" },
+  { regex: /^SORTIE\s*LONGUE/i,                                                        title: "Sortie longue" },
+
+  // Variantes de collation, du + spécifique au + générique
+  { regex: /^COLLATION\s*APR[EÈ]S[\s\-_]*MIDI\s*(?:OU\s*)?POST\s*S[EÉÈ]ANCE/i,         title: "Collation après-midi / post-séance" },
+  { regex: /^COLLATION\s*MATIN\s*(?:OU\s*)?APR[EÈ]S[\s\-_]*MIDI/i,                     title: "Collation matin / après-midi" },
+  { regex: /^COLLATION\s*MATIN/i,                                                      title: "Collation matin" },
+  { regex: /^COLLATION\s*APR[EÈ]S[\s\-_]*MIDI/i,                                       title: "Collation après-midi" },
+  { regex: /^COLLATION/i,                                                              title: "Collation" },
+
+  // Génériques — placés APRÈS les variantes spécifiques pour ne pas les masquer
+  { regex: /^D[EÉÈ]JEUNER/i,                                                           title: "Déjeuner" },
+  { regex: /^D[IÎ]NER/i,                                                               title: "Dîner" },
+  { regex: /^ENTRA[ÎI]NEMENT/i,                                                        title: "Entraînement" },
+
+  // Existants
+  { regex: /^SOUPER/i,                                                                 title: "Souper" },
+  { regex: /^SUPPL[ÉE]MENT|^COMPL[EÉ]MENT/i,                                           title: "Compléments" },
 ];
 
 const ENERGY_REGEX = /^VALEURS\s*ENERG|^VALEURS\s*[ÉE]NERG/i;

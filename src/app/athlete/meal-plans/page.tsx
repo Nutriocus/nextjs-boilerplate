@@ -35,14 +35,30 @@ const newId = () => Math.random().toString(36).slice(2, 9);
 // (layout 2 colonnes Karim/Nutriocus). Détecte titre, sections, items
 // pairés, et les valeurs énergétiques finales.
 // =====================================================================
+// ORDER MATTERS: specific variants must come before generic ones
+// (PETIT DEJEUNER before DEJEUNER, POST ENTRAINEMENT before ENTRAINEMENT, etc.).
 const SECTION_KEYWORDS: { regex: RegExp; title: string }[] = [
-  { regex: /^PETIT[\s-]*DEJ/i,            title: "Petit déjeuner" },
-  { regex: /^DEJEUNER|^DÉJEUNER/i,        title: "Déjeuner" },
-  { regex: /^COLLATION/i,                  title: "Collation" },
-  { regex: /^ENTRA[ÎI]NEMENT/i,            title: "Entraînement" },
-  { regex: /^DINER|^DÎNER/i,               title: "Dîner" },
-  { regex: /^SOUPER/i,                     title: "Souper" },
-  { regex: /^SUPPL[EÉ]MENT|^COMPL[EÉ]MENT/i, title: "Compléments" },
+  // Repas / phases d'effort spécifiques
+  { regex: /^PETIT[\s\-_]*D[EÉÈ]J/i,                                                  title: "Petit déjeuner" },
+  { regex: /^POST[\s\-_]*ENTRA[ÎI]NEMENT/i,                                            title: "Post-entraînement" },
+  { regex: /^S[EÉÈ]ANCE\s*(?:D['’\s])?\s*ENTRA[ÎI]NEMENT/i,                       title: "Séance d'entraînement" },
+  { regex: /^SORTIE\s*LONGUE/i,                                                        title: "Sortie longue" },
+
+  // Variantes de collation
+  { regex: /^COLLATION\s*APR[EÈ]S[\s\-_]*MIDI\s*(?:OU\s*)?POST\s*S[EÉÈ]ANCE/i,         title: "Collation après-midi / post-séance" },
+  { regex: /^COLLATION\s*MATIN\s*(?:OU\s*)?APR[EÈ]S[\s\-_]*MIDI/i,                     title: "Collation matin / après-midi" },
+  { regex: /^COLLATION\s*MATIN/i,                                                      title: "Collation matin" },
+  { regex: /^COLLATION\s*APR[EÈ]S[\s\-_]*MIDI/i,                                       title: "Collation après-midi" },
+  { regex: /^COLLATION/i,                                                              title: "Collation" },
+
+  // Génériques (en dernier)
+  { regex: /^D[EÉÈ]JEUNER/i,                                                           title: "Déjeuner" },
+  { regex: /^D[IÎ]NER/i,                                                               title: "Dîner" },
+  { regex: /^ENTRA[ÎI]NEMENT/i,                                                        title: "Entraînement" },
+
+  // Existants
+  { regex: /^SOUPER/i,                                                                 title: "Souper" },
+  { regex: /^SUPPL[EÉ]MENT|^COMPL[EÉ]MENT/i,                                           title: "Compléments" },
 ];
 
 const QTY_REGEX = /(\d+(?:[.,]\d+)?)(?:\s*(?:g\b|grammes?\b|ml\b|cl\b|kg\b|unit[ée]s?\b|tranches?\b|portions?\b|c\.\s*à\s*s\.))/gi;

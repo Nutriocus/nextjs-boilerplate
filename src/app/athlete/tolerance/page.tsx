@@ -91,7 +91,13 @@ function recommendedRatio(targetGH: number): { minRatio: number; label: string; 
 
 export default function TolerancePage() {
   const [tests, setTests, loaded] = useAthleteData<Test[]>("tol", []);
-  const [profile] = useAthleteData<{ cafeineValidee?: boolean; tolGlucCAP?: number | string; tolHydrCAP?: number | string }>("profile", {});
+  const [profile] = useAthleteData<{
+    cafeineValidee?: boolean;
+    tolGlucCAP?: number | string;
+    tolHydrCAP?: number | string;
+    tolGlucCyc?: number | string;
+    tolHydrCyc?: number | string;
+  }>("profile", {});
   const [favorites] = useAthleteData<string[]>("fav", []);
   const [custom] = useAthleteData<Product[]>("custom", []);
 
@@ -318,13 +324,13 @@ export default function TolerancePage() {
         />
         <Kpi
           label="Tol. glucides — Cyclisme"
-          value={maxFor("glucides", "Cyclisme") ?? "—"}
+          value={maxFor("glucides", "Cyclisme") ?? profile.tolGlucCyc ?? "—"}
           unit="g/h"
           color="var(--color-success)"
         />
         <Kpi
           label="Tol. hydrique — Cyclisme"
-          value={maxFor("hydrique", "Cyclisme") ?? "—"}
+          value={maxFor("hydrique", "Cyclisme") ?? profile.tolHydrCyc ?? "—"}
           unit="ml/h"
           color="var(--color-success)"
         />

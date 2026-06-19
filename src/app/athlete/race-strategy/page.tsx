@@ -632,20 +632,48 @@ export default function RaceStrategyPage() {
   const [strategies, setStrategies, loadedS] = useAthleteData<Strategy[]>("strat", []);
   const [racePlans, setRacePlans, loadedR] = useAthleteData<RacePlan[]>("raceplans", []);
   const [custom] = useAthleteData<Product[]>("custom", []);
-  const [profile] = useAthleteData<{ poids?: number | string; tolGlucCAP?: number | string; tolHydrCAP?: number | string }>("profile", {});
+  const [profile] = useAthleteData<{
+    poids?: number | string;
+    tolGlucCAP?: number | string;
+    tolHydrCAP?: number | string;
+    tolGlucCyc?: number | string;
+    tolHydrCyc?: number | string;
+  }>("profile", {});
   const [tolTests] = useAthleteData<ToleranceTest[]>("tests", []);
   const allProducts = useMemo(() => [...PRODUCTS_CATALOG, ...custom], [custom]);
 
-  const profileTolGluc = toNum(profile.tolGlucCAP) || null;
-  const profileTolHydr = toNum(profile.tolHydrCAP) || null;
+  const profileTolGlucCAP = toNum(profile.tolGlucCAP) || null;
+  const profileTolHydrCAP = toNum(profile.tolHydrCAP) || null;
+  const profileTolGlucCyc = toNum(profile.tolGlucCyc) || null;
+  const profileTolHydrCyc = toNum(profile.tolHydrCyc) || null;
 
-  // Resolve tolerance for a given discipline: prefer real "bien toléré" test maxima,
-  // fall back to the global CAP from the profile.
+  // Resolve tolerance for a given discipline:
+  // 1) best "bien toléré" test for that discipline
+  // 2) profile fallback specific to the discipline (CAP for Course/Trail, Cyc for Cyclisme,
+  //    most-restrictive of both for Triathlon since it combines disciplines)
   const tolFor = (discipline: TolDiscipline | undefined) => {
     const d = discipline ?? "Course";
-    const g = maxToleranceFor(tolTests, "glucides", d) ?? profileTolGluc;
-    const h = maxToleranceFor(tolTests, "hydrique", d) ?? profileTolHydr;
-    return { tolGluc: g, tolHydr: h };
+    const testG = maxToleranceFor(tolTests, "glucides", d);
+    const testH = maxToleranceFor(tolTests, "hydrique", d);
+
+    let fallbackG: number | null = null;
+    let fallbackH: number | null = null;
+    if (d === "Cyclisme") {
+      fallbackG = profileTolGlucCyc;
+      fallbackH = profileTolHydrCyc;
+    } else if (d === "Triathlon") {
+      // Most restrictive of CAP and Cyc, ignoring nulls.
+      const gs = [profileTolGlucCAP, profileTolGlucCyc].filter((x): x is number => x != null);
+      const hs = [profileTolHydrCAP, profileTolHydrCyc].filter((x): x is number => x != null);
+      fallbackG = gs.length ? Math.min(...gs) : null;
+      fallbackH = hs.length ? Math.min(...hs) : null;
+    } else {
+      // Course / Trail
+      fallbackG = profileTolGlucCAP;
+      fallbackH = profileTolHydrCAP;
+    }
+
+    return { tolGluc: testG ?? fallbackG, tolHydr: testH ?? fallbackH };
   };
 
   const [tab, setTab] = useState<"plans" | "calc">("plans");

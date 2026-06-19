@@ -332,6 +332,138 @@ function fmtDate(s: string) {
   }
 }
 
+function PlanCardCompact({
+  plan,
+  onClick,
+}: {
+  plan: MealPlan;
+  onClick: () => void;
+}) {
+  const delta = computeDelta(plan);
+  const isArchive = plan.status === "archive";
+  const nbItems = plan.sections.reduce((acc, s) => acc + s.items.length, 0);
+
+  return (
+    <div
+      className="card overflow-hidden cursor-pointer"
+      style={{
+        opacity: isArchive ? 0.78 : 1,
+        transition: "transform .12s ease, box-shadow .12s ease",
+      }}
+      onClick={onClick}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = "translateY(-2px)";
+        e.currentTarget.style.boxShadow = "0 6px 18px rgba(0,0,0,0.08)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = "";
+        e.currentTarget.style.boxShadow = "";
+      }}
+    >
+      {/* Header type-coloured */}
+      <div
+        className="px-4 py-3 flex items-center justify-between gap-2 text-white"
+        style={{ background: TYPE_COLORS[plan.type] || "var(--color-dark)" }}
+      >
+        <div
+          className="font-extrabold uppercase text-base truncate"
+          style={{ fontFamily: "var(--font-display)", letterSpacing: "-0.01em" }}
+        >
+          {plan.name}
+        </div>
+        <div className="flex gap-1.5 flex-wrap">
+          <span
+            className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded"
+            style={{ background: "rgba(255,255,255,0.18)", letterSpacing: ".08em" }}
+          >
+            {TYPE_LABELS[plan.type]}
+          </span>
+          {isArchive && (
+            <span
+              className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded"
+              style={{ background: "rgba(0,0,0,0.35)", letterSpacing: ".08em" }}
+            >
+              📦
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Métadonnées légères */}
+      <div
+        className="px-4 py-2 text-xs flex flex-wrap gap-x-3 gap-y-1 items-center"
+        style={{ background: "var(--color-surface-2)", borderBottom: "1px solid var(--color-border)" }}
+      >
+        {plan.objectif && (
+          <span className="text-[var(--color-text-muted)]">
+            <b className="text-[var(--color-text)]">Objectif:</b> {OBJECTIF_LABELS[plan.objectif]}
+          </span>
+        )}
+        {delta != null && (
+          <span
+            className="font-bold px-2 py-0.5 rounded text-[11px]"
+            style={{
+              background: delta < 0 ? "rgba(207,46,46,0.12)" : delta > 0 ? "rgba(95,140,10,0.14)" : "var(--color-surface)",
+              color: delta < 0 ? "var(--color-danger)" : delta > 0 ? "var(--color-success)" : "var(--color-text-muted)",
+            }}
+          >
+            {delta > 0 ? "+" : ""}{Math.round(delta)} kcal/j
+          </span>
+        )}
+        {(plan.dateDebut || plan.dateFin) && (
+          <span className="text-[var(--color-text-muted)] text-[11px]">
+            {fmtDate(plan.dateDebut) || "—"} → {fmtDate(plan.dateFin) || "en cours"}
+          </span>
+        )}
+      </div>
+
+      {/* Valeurs énergétiques en KPIs */}
+      <div className="px-4 py-4 grid grid-cols-4 gap-2 text-center">
+        <div>
+          <div className="text-[9px] uppercase font-bold tracking-wider text-[var(--color-text-muted)]">Kcal</div>
+          <div className="font-extrabold text-xl mt-0.5" style={{ color: "var(--color-primary)", fontFamily: "var(--font-display)" }}>
+            {plan.kcal || "—"}
+          </div>
+        </div>
+        <div>
+          <div className="text-[9px] uppercase font-bold tracking-wider text-[var(--color-text-muted)]">Prot.</div>
+          <div className="font-extrabold text-xl mt-0.5" style={{ fontFamily: "var(--font-display)" }}>
+            {plan.prot || "—"}
+            {plan.prot && <span className="text-[10px] text-[var(--color-text-muted)] font-bold"> g</span>}
+          </div>
+        </div>
+        <div>
+          <div className="text-[9px] uppercase font-bold tracking-wider text-[var(--color-text-muted)]">Lip.</div>
+          <div className="font-extrabold text-xl mt-0.5" style={{ fontFamily: "var(--font-display)" }}>
+            {plan.lip || "—"}
+            {plan.lip && <span className="text-[10px] text-[var(--color-text-muted)] font-bold"> g</span>}
+          </div>
+        </div>
+        <div>
+          <div className="text-[9px] uppercase font-bold tracking-wider text-[var(--color-text-muted)]">Gluc.</div>
+          <div className="font-extrabold text-xl mt-0.5" style={{ color: "var(--color-primary)", fontFamily: "var(--font-display)" }}>
+            {plan.gluc || "—"}
+            {plan.gluc && <span className="text-[10px] text-[var(--color-text-muted)] font-bold"> g</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* Footer click affordance */}
+      <div
+        className="px-4 py-2 text-[11px] flex justify-between items-center border-t"
+        style={{ borderColor: "var(--color-border)" }}
+      >
+        <span className="text-[var(--color-text-muted)]">
+          {plan.sections.length} {plan.sections.length > 1 ? "sections" : "section"} · {nbItems} aliments
+        </span>
+        <span style={{ color: "var(--color-primary)", fontWeight: 700 }}>
+          Voir le détail →
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function PlanCard({
   plan,
   onEdit,
@@ -609,6 +741,7 @@ export default function MealPlansPage() {
   const [editing, setEditing] = useState<MealPlan | null>(null);
   const [printPlan, setPrintPlan] = useState<MealPlan | null>(null);
   const [filter, setFilter] = useState<"actifs" | "archives" | "tous">("actifs");
+  const [viewingId, setViewingId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
@@ -896,29 +1029,50 @@ export default function MealPlansPage() {
 
         {editing && <PlanEditor plan={editing} onSave={save} onCancel={() => setEditing(null)} />}
 
-        <div className="flex flex-col gap-4">
-          {visible.map((p) => (
-            <PlanCard
-              key={p.id}
-              plan={p}
-              onEdit={setEditing}
-              onDuplicate={duplicate}
-              onDelete={del}
-              onPrint={print}
-              onArchive={archive}
-              onActivate={activate}
-            />
-          ))}
-          {visible.length === 0 && (
-            <Empty>
-              {filter === "actifs"
-                ? "Aucun plan actif. Crée-en un nouveau ou réactive une archive."
-                : filter === "archives"
-                  ? "Aucun plan archivé pour le moment."
-                  : "Aucun plan."}
-            </Empty>
-          )}
-        </div>
+        {!editing && viewingId && (() => {
+          const focused = plans.find((p) => p.id === viewingId);
+          if (!focused) {
+            setViewingId(null);
+            return null;
+          }
+          return (
+            <div>
+              <div className="flex justify-between items-center mb-3 flex-wrap gap-2">
+                <button onClick={() => setViewingId(null)} className="btn-ghost btn-sm">
+                  ← Tous les plans
+                </button>
+              </div>
+              <PlanCard
+                plan={focused}
+                onEdit={setEditing}
+                onDuplicate={duplicate}
+                onDelete={(p) => { del(p); setViewingId(null); }}
+                onPrint={print}
+                onArchive={archive}
+                onActivate={activate}
+              />
+            </div>
+          );
+        })()}
+
+        {!editing && !viewingId && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {visible.map((p) => (
+              <PlanCardCompact key={p.id} plan={p} onClick={() => setViewingId(p.id)} />
+            ))}
+            {visible.length === 0 && (
+              <div className="lg:col-span-2">
+                <Empty>
+                  {filter === "actifs"
+                    ? "Aucun plan actif. Crée-en un nouveau ou réactive une archive."
+                    : filter === "archives"
+                      ? "Aucun plan archivé pour le moment."
+                      : "Aucun plan."}
+                </Empty>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {printPlan && (

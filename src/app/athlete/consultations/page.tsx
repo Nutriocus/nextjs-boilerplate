@@ -43,20 +43,47 @@ export default function ConsultationsPage() {
   const [consultations, setConsultations, loaded] = useAthleteData<Consultation[]>("consultations", []);
   const [draft, setDraft] = useState<Consultation>(blank());
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [view, setView] = useState<string | null>(null);
 
   const update = (k: keyof Consultation, v: string) => setDraft((d) => ({ ...d, [k]: v }));
 
-  const add = () => {
-    if (!draft.date) return;
-    setConsultations((p) =>
-      [...p, { ...draft, id: newId() }].sort((a, b) => (a.date < b.date ? 1 : -1)),
-    );
+  const startCreate = () => {
     setDraft(blank());
-    setOpen(false);
+    setEditingId(null);
+    setOpen(true);
   };
 
-  const remove = (id: string) => setConsultations((p) => p.filter((c) => c.id !== id));
+  const startEdit = (c: Consultation) => {
+    setDraft({ ...c });
+    setEditingId(c.id);
+    setOpen(true);
+    setView(null);
+  };
+
+  const cancelForm = () => {
+    setOpen(false);
+    setEditingId(null);
+    setDraft(blank());
+  };
+
+  const save = () => {
+    if (!draft.date) return;
+    setConsultations((p) => {
+      if (editingId) {
+        return p
+          .map((c) => (c.id === editingId ? { ...draft, id: editingId } : c))
+          .sort((a, b) => (a.date < b.date ? 1 : -1));
+      }
+      return [...p, { ...draft, id: newId() }].sort((a, b) => (a.date < b.date ? 1 : -1));
+    });
+    cancelForm();
+  };
+
+  const remove = (id: string) => {
+    if (!confirm("Supprimer cette consultation ?")) return;
+    setConsultations((p) => p.filter((c) => c.id !== id));
+  };
 
   const sorted = [...consultations].sort((a, b) => (a.date < b.date ? 1 : -1));
   const cur = consultations.find((c) => c.id === view);
@@ -78,7 +105,12 @@ export default function ConsultationsPage() {
             <button onClick={() => setView(null)} className="btn-ghost btn-sm">
               ← Toutes les consultations
             </button>
-            <PrintButton label="Exporter le compte rendu en PDF" />
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={() => startEdit(cur)} className="btn-dark btn-sm">
+                ✏️ Modifier
+              </button>
+              <PrintButton label="Exporter le compte rendu en PDF" />
+            </div>
           </div>
           <h1
             className="font-extrabold uppercase mt-3 mb-1 text-2xl sm:text-3xl"
@@ -154,12 +186,19 @@ export default function ConsultationsPage() {
       <PageHeader
         kicker="Mon accompagnement"
         title="Mes consultations"
-        action={<button onClick={() => setOpen((o) => !o)} className="btn-primary">{open ? "Fermer" : "+ Consultation"}</button>}
+        action={
+          <button onClick={open ? cancelForm : startCreate} className="btn-primary">
+            {open ? "Fermer" : "+ Consultation"}
+          </button>
+        }
         desc="Comptes rendus et replays de tes consultations."
       />
 
       {open && (
         <div className="card p-4 mb-4" style={{ border: `2px solid var(--color-primary)` }}>
+          <div className="text-[10px] uppercase font-bold mb-2" style={{ letterSpacing: ".08em", color: "var(--color-primary)" }}>
+            {editingId ? "✏️ Modification d'une consultation" : "+ Nouvelle consultation"}
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
             <Field label="Date"><input type="date" className="input" value={draft.date} onChange={(e) => update("date", e.target.value)} /></Field>
             <Field label="Type"><input className="input" value={draft.type} onChange={(e) => update("type", e.target.value)} /></Field>
@@ -181,8 +220,10 @@ export default function ConsultationsPage() {
             </Field>
           </div>
           <div className="flex justify-end gap-2 mt-3">
-            <button onClick={() => setOpen(false)} className="btn-ghost">Annuler</button>
-            <button onClick={add} className="btn-primary">Enregistrer</button>
+            <button onClick={cancelForm} className="btn-ghost">Annuler</button>
+            <button onClick={save} className="btn-primary">
+              {editingId ? "Enregistrer les modifications" : "Enregistrer"}
+            </button>
           </div>
         </div>
       )}
@@ -213,8 +254,16 @@ export default function ConsultationsPage() {
             </div>
             <button onClick={() => setView(c.id)} className="btn-dark btn-xs">Ouvrir</button>
             <button
+              onClick={() => startEdit(c)}
+              className="btn-ghost btn-xs"
+              title="Modifier"
+            >
+              ✏️
+            </button>
+            <button
               onClick={() => remove(c.id)}
               style={{ border: "none", background: "none", color: "var(--color-danger)", cursor: "pointer", fontSize: 15 }}
+              title="Supprimer"
             >
               ✕
             </button>

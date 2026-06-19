@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader, Empty, Field, Kpi } from "@/components/ui/PageHeader";
 import { PrintReport } from "@/components/ui/PrintReport";
+import { parseMealPlanPdf } from "@/lib/meal-plan-pdf-parser";
 
 type MealItem = { name: string; qty: string; tip: string };
 type MealSection = { title: string; items: MealItem[] };
@@ -595,17 +596,58 @@ export default function MealPlansPage() {
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleImport = () => {
+  const openImportEditor = (parsed: MealPlan) => {
+    setImportOpen(false);
+    setImportText("");
+    setImportError(null);
+    setEditing(parsed);
+  };
+
+  const handleImportText = () => {
     const parsed = parseMealPlanText(importText);
     if (!parsed) {
       setImportError("Impossible de parser ce texte. Vérifie que tu as bien copié l'intégralité du PDF (avec les sections PETIT DEJEUNER, DEJEUNER… et VALEURS ENERGETIQUES).");
       return;
     }
-    setImportOpen(false);
-    setImportText("");
+    openImportEditor(parsed);
+  };
+
+  const handleImportPdf = async (file: File) => {
     setImportError(null);
-    setEditing(parsed); // open editor for review/adjustments
+    setImportLoading(true);
+    try {
+      const parsed = await parseMealPlanPdf(file);
+      if (!parsed || parsed.sections.length === 0) {
+        setImportError("Le PDF a été lu mais aucune section reconnue (PETIT DEJEUNER, DEJEUNER…). Essaie le mode 'coller le texte' à la place.");
+        return;
+      }
+      const today = new Date().toISOString().slice(0, 10);
+      openImportEditor({
+        id: newId(),
+        type: "perso",
+        name: parsed.name,
+        status: "actif",
+        dateDebut: today,
+        dateFin: "",
+        objectif: "maintien",
+        maintenanceKcal: "",
+        kcal: parsed.kcal,
+        prot: parsed.prot,
+        lip: parsed.lip,
+        gluc: parsed.gluc,
+        supplements: [],
+        sections: parsed.sections,
+      });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "erreur inconnue";
+      setImportError("Échec de lecture du PDF : " + msg);
+    } finally {
+      setImportLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   // Migration: backfill missing fields on legacy data
@@ -715,37 +757,87 @@ export default function MealPlansPage() {
         {importOpen && (
           <div className="card p-4 mb-4" style={{ border: "2px solid var(--color-primary)" }}>
             <div className="font-display font-extrabold text-lg mb-1" style={{ letterSpacing: "-0.01em" }}>
-              Importer un plan depuis un PDF
+              Importer un plan alimentaire
             </div>
-            <div className="text-xs text-[var(--color-text-muted)] mb-3 leading-relaxed">
-              Ouvre ton PDF (Aperçu macOS, Adobe Reader, navigateur…) → <b>Cmd+A</b> puis <b>Cmd+C</b> →
-              colle ici. Le parseur reconnaît automatiquement les sections (PETIT DEJEUNER, DEJEUNER, COLLATION,
-              ENTRAINEMENT, DINER) et la dernière ligne <code>VALEURS ENERGETIQUES</code>.
-              <br />
-              Le plan sera importé en brouillon — tu pourras ajuster les noms / quantités / conseils dans
-              l&apos;éditeur avant d&apos;enregistrer.
+            <div className="text-xs text-[var(--color-text-muted)] mb-4 leading-relaxed">
+              Le parseur reconnaît automatiquement les sections (PETIT DEJEUNER, DEJEUNER, COLLATION,
+              ENTRAINEMENT, DINER) et la <b>mise en page 2 colonnes</b>.
+              Le plan importé s&apos;ouvre dans l&apos;éditeur pour ajustement avant enregistrement.
             </div>
-            <textarea
-              className="input"
-              style={{ minHeight: 260, resize: "vertical", fontFamily: "ui-monospace, monospace", fontSize: 12 }}
-              value={importText}
-              onChange={(e) => { setImportText(e.target.value); setImportError(null); }}
-              placeholder={`PLAN ALIMENTAIRE 1H30 TRAINING\nPETIT DEJEUNE\nFROMAGE BLANC FRUIT\n150 grammes 1 unité = 150 grammes\nPrivilégier le fromage blanc 3% MG Privilégier les produits de saison...\n...\nVALEURS ENERGETIQUES\nKcal = 3785Protéines = 111-125 grammesLipides = 89-111 grammesGlucides = 571-635 grammes`}
-            />
+
+            {/* Option A — Upload PDF (positional parsing) */}
+            <div
+              className="card p-4 mb-3"
+              style={{
+                background: "var(--color-surface-2)",
+                borderLeft: "4px solid var(--color-primary)",
+              }}
+            >
+              <div className="text-[10px] uppercase font-bold mb-2" style={{ letterSpacing: ".08em", color: "var(--color-primary)" }}>
+                📄 Option A — Upload du PDF (recommandé)
+              </div>
+              <div className="text-xs text-[var(--color-text-muted)] mb-2 leading-relaxed">
+                Sélectionne directement le fichier PDF. Le parseur lit les positions X/Y des éléments pour
+                identifier les <b>2 colonnes</b> proprement.
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/pdf,.pdf"
+                disabled={importLoading}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleImportPdf(f);
+                }}
+                style={{ fontSize: 13 }}
+              />
+              {importLoading && (
+                <div className="text-xs mt-2" style={{ color: "var(--color-primary)" }}>
+                  ⏳ Lecture du PDF en cours…
+                </div>
+              )}
+            </div>
+
+            {/* Option B — Paste text (fallback) */}
+            <details className="mt-3">
+              <summary
+                className="text-[10px] uppercase font-bold cursor-pointer mb-2"
+                style={{ letterSpacing: ".08em", color: "var(--color-text-muted)" }}
+              >
+                ✍️ Option B — Coller le texte (fallback)
+              </summary>
+              <div className="text-xs text-[var(--color-text-muted)] mb-2 leading-relaxed mt-2">
+                Si le PDF n&apos;est pas lisible (PDF scanné, format non standard…), ouvre-le, fais <b>Cmd+A</b>
+                puis <b>Cmd+C</b> et colle ici.
+              </div>
+              <textarea
+                className="input"
+                style={{ minHeight: 200, resize: "vertical", fontFamily: "ui-monospace, monospace", fontSize: 12 }}
+                value={importText}
+                onChange={(e) => { setImportText(e.target.value); setImportError(null); }}
+                placeholder={`PLAN ALIMENTAIRE 1H30 TRAINING\nPETIT DEJEUNE\nFROMAGE BLANC FRUIT\n...\nVALEURS ENERGETIQUES\nKcal = 3785...`}
+              />
+              <div className="flex justify-end mt-2">
+                <button onClick={handleImportText} className="btn-dark btn-sm" disabled={!importText.trim()}>
+                  Parser le texte
+                </button>
+              </div>
+            </details>
+
             {importError && (
               <div
-                className="mt-2 text-xs"
+                className="mt-3 text-xs"
                 style={{ color: "var(--color-danger)", background: "#fcebe8", border: "1px solid rgba(207,46,46,0.4)", borderRadius: 6, padding: "8px 10px" }}
               >
                 ⚠ {importError}
               </div>
             )}
             <div className="flex justify-end gap-2 mt-3">
-              <button onClick={() => { setImportOpen(false); setImportText(""); setImportError(null); }} className="btn-ghost">
-                Annuler
-              </button>
-              <button onClick={handleImport} className="btn-primary" disabled={!importText.trim()}>
-                Parser & ouvrir l&apos;éditeur
+              <button
+                onClick={() => { setImportOpen(false); setImportText(""); setImportError(null); }}
+                className="btn-ghost"
+              >
+                Fermer
               </button>
             </div>
           </div>

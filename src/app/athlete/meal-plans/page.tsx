@@ -29,6 +29,138 @@ type MealPlan = {
 
 const newId = () => Math.random().toString(36).slice(2, 9);
 
+// =====================================================================
+// IMPORT PARSER — texte copié-collé depuis un PDF de plan alimentaire
+// (layout 2 colonnes Karim/Nutriocus). Détecte titre, sections, items
+// pairés, et les valeurs énergétiques finales.
+// =====================================================================
+const SECTION_KEYWORDS: { regex: RegExp; title: string }[] = [
+  { regex: /^PETIT[\s-]*DEJ/i,            title: "Petit déjeuner" },
+  { regex: /^DEJEUNER|^DÉJEUNER/i,        title: "Déjeuner" },
+  { regex: /^COLLATION/i,                  title: "Collation" },
+  { regex: /^ENTRA[ÎI]NEMENT/i,            title: "Entraînement" },
+  { regex: /^DINER|^DÎNER/i,               title: "Dîner" },
+  { regex: /^SOUPER/i,                     title: "Souper" },
+  { regex: /^SUPPL[EÉ]MENT|^COMPL[EÉ]MENT/i, title: "Compléments" },
+];
+
+const QTY_REGEX = /(\d+(?:[.,]\d+)?)(?:\s*(?:g\b|grammes?\b|ml\b|cl\b|kg\b|unit[ée]s?\b|tranches?\b|portions?\b|c\.\s*à\s*s\.))/gi;
+const ENERGY_REGEX = /^VALEURS\s*ENERG/i;
+
+function splitTwoCols(line: string): [string, string] {
+  const s = line.trim();
+  if (!s) return ["", ""];
+  const mid = Math.floor(s.length / 2);
+  // find the nearest space to the midpoint
+  let bestIdx = -1;
+  let bestDist = Infinity;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === " " || s[i] === "\t") {
+      const d = Math.abs(i - mid);
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = i;
+      }
+    }
+  }
+  if (bestIdx === -1) return [s, ""];
+  return [s.slice(0, bestIdx).trim(), s.slice(bestIdx + 1).trim()];
+}
+
+function parseMealPlanText(text: string): MealPlan | null {
+  if (!text || !text.trim()) return null;
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.replace(/ /g, " ").trim())
+    .filter((l) => l.length > 0);
+  if (lines.length < 3) return null;
+
+  const planName = lines[0].trim();
+  const sections: MealSection[] = [];
+  let currentSection: MealSection | null = null;
+  let energy = { kcal: "" as string | number, prot: "" as string | number, lip: "" as string | number, gluc: "" as string | number };
+  let i = 1;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Energy values block — single multi-field line
+    if (ENERGY_REGEX.test(line)) {
+      const remainder = lines.slice(i + 1).join(" ");
+      const mK = remainder.match(/Kcal\s*=\s*(\d+)/i);
+      const mP = remainder.match(/Prot[ée]ines?\s*=\s*([\d-]+)/i);
+      const mL = remainder.match(/Lipides?\s*=\s*([\d-]+)/i);
+      const mG = remainder.match(/Glucides?\s*=\s*([\d-]+)/i);
+      if (mK) energy.kcal = parseInt(mK[1], 10);
+      if (mP) energy.prot = mP[1];
+      if (mL) energy.lip = mL[1];
+      if (mG) energy.gluc = mG[1];
+      break;
+    }
+
+    // Section header
+    const sec = SECTION_KEYWORDS.find((s) => s.regex.test(line));
+    if (sec) {
+      currentSection = { title: sec.title, items: [] };
+      sections.push(currentSection);
+      i += 1;
+      continue;
+    }
+
+    if (!currentSection) {
+      i += 1;
+      continue;
+    }
+
+    // Item triplet: names | qtys | tips
+    const namesLine = line;
+    const qtyLine = lines[i + 1] ?? "";
+    const tipLine = lines[i + 2] ?? "";
+
+    const qtyMatches = Array.from(qtyLine.matchAll(QTY_REGEX));
+    const itemCount = qtyMatches.length >= 2 ? 2 : 1;
+
+    if (itemCount === 2) {
+      const [nameA, nameB] = splitTwoCols(namesLine);
+      // Split qty line at the start of the 2nd qty match
+      const splitIdx = qtyMatches[1].index ?? Math.floor(qtyLine.length / 2);
+      const qtyA = qtyLine.slice(0, splitIdx).trim();
+      const qtyB = qtyLine.slice(splitIdx).trim();
+      const [tipA, tipB] = splitTwoCols(tipLine);
+      currentSection.items.push({ name: nameA, qty: qtyA, tip: tipA });
+      currentSection.items.push({ name: nameB, qty: qtyB, tip: tipB });
+    } else {
+      currentSection.items.push({
+        name: namesLine,
+        qty: qtyLine,
+        tip: tipLine,
+      });
+    }
+
+    i += 3;
+  }
+
+  if (sections.length === 0) return null;
+
+  const today = new Date().toISOString().slice(0, 10);
+  return {
+    id: newId(),
+    type: "perso",
+    name: planName || "Plan importé",
+    status: "actif",
+    dateDebut: today,
+    dateFin: "",
+    objectif: "maintien",
+    maintenanceKcal: "",
+    kcal: energy.kcal,
+    prot: energy.prot,
+    lip: energy.lip,
+    gluc: energy.gluc,
+    supplements: [],
+    sections,
+  };
+}
+
 const DEFAULT_PLAN_BASE: Pick<MealPlan, "status" | "dateDebut" | "dateFin" | "objectif" | "maintenanceKcal"> = {
   status: "actif",
   dateDebut: "",
@@ -460,6 +592,21 @@ export default function MealPlansPage() {
   const [editing, setEditing] = useState<MealPlan | null>(null);
   const [printPlan, setPrintPlan] = useState<MealPlan | null>(null);
   const [filter, setFilter] = useState<"actifs" | "archives" | "tous">("actifs");
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importError, setImportError] = useState<string | null>(null);
+
+  const handleImport = () => {
+    const parsed = parseMealPlanText(importText);
+    if (!parsed) {
+      setImportError("Impossible de parser ce texte. Vérifie que tu as bien copié l'intégralité du PDF (avec les sections PETIT DEJEUNER, DEJEUNER… et VALEURS ENERGETIQUES).");
+      return;
+    }
+    setImportOpen(false);
+    setImportText("");
+    setImportError(null);
+    setEditing(parsed); // open editor for review/adjustments
+  };
 
   // Migration: backfill missing fields on legacy data
   const plans = useMemo<MealPlan[]>(
@@ -554,9 +701,55 @@ export default function MealPlansPage() {
         <PageHeader
           kicker="Structurer ton quotidien"
           title="Plans alimentaires"
-          action={<button onClick={create} className="btn-primary">+ Nouveau plan</button>}
+          action={
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={() => { setImportOpen((o) => !o); setImportError(null); }} className="btn-ghost">
+                📥 Importer un plan
+              </button>
+              <button onClick={create} className="btn-primary">+ Nouveau plan</button>
+            </div>
+          }
           desc="Tes plans actifs avec leur période et leur écart calorique vs. maintenance. Les plans terminés sont archivés pour historique."
         />
+
+        {importOpen && (
+          <div className="card p-4 mb-4" style={{ border: "2px solid var(--color-primary)" }}>
+            <div className="font-display font-extrabold text-lg mb-1" style={{ letterSpacing: "-0.01em" }}>
+              Importer un plan depuis un PDF
+            </div>
+            <div className="text-xs text-[var(--color-text-muted)] mb-3 leading-relaxed">
+              Ouvre ton PDF (Aperçu macOS, Adobe Reader, navigateur…) → <b>Cmd+A</b> puis <b>Cmd+C</b> →
+              colle ici. Le parseur reconnaît automatiquement les sections (PETIT DEJEUNER, DEJEUNER, COLLATION,
+              ENTRAINEMENT, DINER) et la dernière ligne <code>VALEURS ENERGETIQUES</code>.
+              <br />
+              Le plan sera importé en brouillon — tu pourras ajuster les noms / quantités / conseils dans
+              l&apos;éditeur avant d&apos;enregistrer.
+            </div>
+            <textarea
+              className="input"
+              style={{ minHeight: 260, resize: "vertical", fontFamily: "ui-monospace, monospace", fontSize: 12 }}
+              value={importText}
+              onChange={(e) => { setImportText(e.target.value); setImportError(null); }}
+              placeholder={`PLAN ALIMENTAIRE 1H30 TRAINING\nPETIT DEJEUNE\nFROMAGE BLANC FRUIT\n150 grammes 1 unité = 150 grammes\nPrivilégier le fromage blanc 3% MG Privilégier les produits de saison...\n...\nVALEURS ENERGETIQUES\nKcal = 3785Protéines = 111-125 grammesLipides = 89-111 grammesGlucides = 571-635 grammes`}
+            />
+            {importError && (
+              <div
+                className="mt-2 text-xs"
+                style={{ color: "var(--color-danger)", background: "#fcebe8", border: "1px solid rgba(207,46,46,0.4)", borderRadius: 6, padding: "8px 10px" }}
+              >
+                ⚠ {importError}
+              </div>
+            )}
+            <div className="flex justify-end gap-2 mt-3">
+              <button onClick={() => { setImportOpen(false); setImportText(""); setImportError(null); }} className="btn-ghost">
+                Annuler
+              </button>
+              <button onClick={handleImport} className="btn-primary" disabled={!importText.trim()}>
+                Parser & ouvrir l&apos;éditeur
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* KPI synthèse */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">

@@ -7,7 +7,12 @@ import { supabase } from "@/lib/supabase";
 import { PageHeader, Field } from "@/components/ui/PageHeader";
 
 const SPORTS = ["trail", "course", "cyclisme", "triathlon", "natation"] as const;
-const LEVELS = ["débutant", "loisir", "amateur confirmé", "élite"];
+const LEVELS = [
+  { value: "loisir", label: "Loisir" },
+  { value: "amateur_confirme", label: "Amateur confirmé" },
+  { value: "semi_elite", label: "Semi-élite" },
+  { value: "elite", label: "Élite" },
+];
 
 export default function NewAthletePage() {
   const router = useRouter();
@@ -156,7 +161,7 @@ export default function NewAthletePage() {
             >
               <option value="">—</option>
               {LEVELS.map((l) => (
-                <option key={l} value={l}>{l}</option>
+                <option key={l.value} value={l.value}>{l.label}</option>
               ))}
             </select>
           </Field>

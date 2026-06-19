@@ -5,7 +5,9 @@ import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader, Empty, Field, Badge } from "@/components/ui/PageHeader";
 import { PRODUCTS_CATALOG, Product } from "@/lib/products-catalog";
 
-const TYPES = ["Tous", "Boisson", "Gel", "Barre", "Compote", "Gommes", "Gaufre"];
+const TYPES = ["Tous", "Boisson", "Gel", "Barre", "Compote", "Gommes", "Gaufre", "Autre"];
+// Used to render the favorite groups in a consistent order, regardless of insertion order.
+const TYPE_ORDER: Product["t"][] = ["Boisson", "Gel", "Barre", "Compote", "Gommes", "Gaufre", "Autre"];
 const TYPE_COLORS: Record<string, string> = {
   Boisson: "var(--color-dark)",
   Gel: "var(--color-primary)",
@@ -13,6 +15,7 @@ const TYPE_COLORS: Record<string, string> = {
   Compote: "#787876",
   Gommes: "#b36b00",
   Gaufre: "var(--color-danger)",
+  Autre: "#8a8a88",
 };
 
 function toNum(v: unknown): number {
@@ -74,6 +77,16 @@ export default function ProductsPage() {
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [all, favorites]);
+
+  // Group favorites by category (Boisson, Gel, Barre…) for the highlight section.
+  const favByType = useMemo(() => {
+    const groups = {} as Record<Product["t"], Product[]>;
+    for (const p of favProducts) {
+      if (!groups[p.t]) groups[p.t] = [];
+      groups[p.t].push(p);
+    }
+    return groups;
+  }, [favProducts]);
 
   const addCustom = () => {
     if (!draft.n || !draft.m) return;
@@ -153,22 +166,39 @@ export default function ProductsPage() {
               Disponibles en priorité dans le constructeur de tests et le calculateur de stratégie.
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {favProducts.map((p, i) => (
-              <button
-                key={p.t + "-" + p.m + "-" + p.n + "-" + i}
-                onClick={() => toggleFav(p)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white hover:shadow-sm transition"
-                style={{ border: `1px solid var(--color-border)`, borderLeft: `3px solid ${TYPE_COLORS[p.t] || "var(--color-dark)"}` }}
-                title="Retirer des favoris"
-              >
-                <span className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]" style={{ letterSpacing: ".06em" }}>
-                  {p.t}
-                </span>
-                <span className="text-sm font-bold">{p.m} · {p.n}</span>
-                <span className="text-[10px] text-[var(--color-text-muted)]">{p.g}g · {p.r}</span>
-                <span className="text-[var(--color-primary)] ml-1">★</span>
-              </button>
+          <div className="flex flex-col gap-3">
+            {TYPE_ORDER.filter((t) => favByType[t]?.length).map((t) => (
+              <div key={t}>
+                <div
+                  className="flex items-baseline gap-2 mb-1.5"
+                  style={{ borderLeft: `3px solid ${TYPE_COLORS[t]}`, paddingLeft: 8 }}
+                >
+                  <span
+                    className="text-[10px] uppercase font-extrabold"
+                    style={{ letterSpacing: ".1em", color: TYPE_COLORS[t] }}
+                  >
+                    {t}
+                  </span>
+                  <span className="text-[10px] text-[var(--color-text-muted)]">
+                    {favByType[t].length} {favByType[t].length > 1 ? "produits" : "produit"}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {favByType[t].map((p, i) => (
+                    <button
+                      key={p.t + "-" + p.m + "-" + p.n + "-" + i}
+                      onClick={() => toggleFav(p)}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white hover:shadow-sm transition"
+                      style={{ border: `1px solid var(--color-border)`, borderLeft: `3px solid ${TYPE_COLORS[p.t] || "var(--color-dark)"}` }}
+                      title="Retirer des favoris"
+                    >
+                      <span className="text-sm font-bold">{p.m} · {p.n}</span>
+                      <span className="text-[10px] text-[var(--color-text-muted)]">{p.g}g · {p.r}</span>
+                      <span className="text-[var(--color-primary)] ml-1">★</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </div>

@@ -1,6 +1,6 @@
 // Catalogue NUTRIOCUS — 94 produits de l'effort
 export type Product = {
-  t: "Boisson" | "Gel" | "Barre" | "Compote" | "Gommes" | "Gaufre";
+  t: "Boisson" | "Gel" | "Barre" | "Compote" | "Gommes" | "Gaufre" | "Autre";
   m: string;
   n: string;
   g: number;

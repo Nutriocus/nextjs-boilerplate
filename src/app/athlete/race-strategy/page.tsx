@@ -38,6 +38,21 @@ type RacePlanSegment = {
   contenu: string[];
 };
 
+type Discipline = "course" | "trail" | "cyclisme" | "triathlon";
+
+type TriPhaseType = "natation" | "T1" | "cyclisme" | "T2" | "course";
+
+type TriPhase = {
+  type: TriPhaseType;
+  km: number | string;
+  dplus: number | string;
+  temps: string;
+  choPerH: number | string;
+  hydratationPerH: number | string;
+  sodiumPerH: number | string;
+  contenu: string[];
+};
+
 type RacePlan = {
   id: string;
   name: string;
@@ -48,7 +63,46 @@ type RacePlan = {
   hydratationPerH: number | string;
   avantCourse: string[];
   segments: RacePlanSegment[];
+  discipline?: Discipline;
+  phases?: TriPhase[];
 };
+
+const DISCIPLINE_LABEL: Record<Discipline, string> = {
+  course: "Course à pied",
+  trail: "Trail",
+  cyclisme: "Cyclisme",
+  triathlon: "Triathlon",
+};
+
+const DISCIPLINE_ICON: Record<Discipline, string> = {
+  course: "🏃",
+  trail: "⛰️",
+  cyclisme: "🚴",
+  triathlon: "🏊🚴🏃",
+};
+
+const TRI_PHASE_META: Record<TriPhaseType, {
+  label: string;
+  icon: string;
+  hasDistance: boolean;
+  hasDplus: boolean;
+}> = {
+  natation: { label: "Natation", icon: "🏊", hasDistance: true, hasDplus: false },
+  T1:       { label: "Transition 1 (T1)", icon: "🔄", hasDistance: false, hasDplus: false },
+  cyclisme: { label: "Cyclisme", icon: "🚴", hasDistance: true, hasDplus: true },
+  T2:       { label: "Transition 2 (T2)", icon: "🔄", hasDistance: false, hasDplus: false },
+  course:   { label: "Course à pied", icon: "🏃", hasDistance: true, hasDplus: true },
+};
+
+function defaultTriPhases(): TriPhase[] {
+  return [
+    { type: "natation", km: "", dplus: "", temps: "", choPerH: 0,  hydratationPerH: 0,   sodiumPerH: 0,   contenu: ["Gel ~5 min avant la sortie d'eau (optionnel longue distance)"] },
+    { type: "T1",       km: "", dplus: "", temps: "", choPerH: 0,  hydratationPerH: 0,   sodiumPerH: 0,   contenu: ["Gorgée boisson en sortant de la combinaison"] },
+    { type: "cyclisme", km: "", dplus: "", temps: "", choPerH: 80, hydratationPerH: 600, sodiumPerH: 500, contenu: ["Bidon iso 90g CHO / 750ml", "1 gel toutes les 30 min"] },
+    { type: "T2",       km: "", dplus: "", temps: "", choPerH: 0,  hydratationPerH: 0,   sodiumPerH: 0,   contenu: ["Gorgée d'eau + gel posé sur la table"] },
+    { type: "course",   km: "", dplus: "", temps: "", choPerH: 60, hydratationPerH: 500, sodiumPerH: 500, contenu: ["1 gel tous les 4-5 km", "Eau + cola au ravito"] },
+  ];
+}
 
 const newId = () => Math.random().toString(36).slice(2, 9);
 function toNum(v: unknown): number {
@@ -183,11 +237,31 @@ function RacePlanCard({
   onDelete?: (id: string) => void;
   onEdit?: (rp: RacePlan) => void;
 }) {
+  const discipline: Discipline = rp.discipline ?? "trail";
+  const isTri = discipline === "triathlon";
+
   return (
     <div className="card overflow-hidden mb-3.5">
       <div className="bg-[var(--color-dark)] px-4 py-3.5 text-white flex justify-between items-center flex-wrap gap-2">
         <div>
-          <div className="font-display font-extrabold text-xl" style={{ letterSpacing: "-0.01em" }}>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span style={{ fontSize: 18 }}>{DISCIPLINE_ICON[discipline]}</span>
+            <span
+              style={{
+                fontSize: 9,
+                background: "var(--color-primary)",
+                color: "#fff",
+                padding: "2px 7px",
+                borderRadius: 3,
+                fontWeight: 800,
+                letterSpacing: ".06em",
+                textTransform: "uppercase",
+              }}
+            >
+              {DISCIPLINE_LABEL[discipline]}
+            </span>
+          </div>
+          <div className="font-display font-extrabold text-xl mt-1" style={{ letterSpacing: "-0.01em" }}>
             {rp.name}
           </div>
           <div className="text-xs text-[#bbb]">
@@ -195,14 +269,24 @@ function RacePlanCard({
           </div>
         </div>
         <div className="flex gap-4 items-center">
-          <div className="text-right">
-            <div className="text-[10px] text-[#bbb]">GLUCIDES</div>
-            <div className="text-[var(--color-accent)] font-extrabold text-lg">{rp.choPerH} g/h</div>
-          </div>
-          <div className="text-right">
-            <div className="text-[10px] text-[#bbb]">HYDRATATION</div>
-            <div className="text-[var(--color-accent)] font-extrabold text-lg">{rp.hydratationPerH} ml/h</div>
-          </div>
+          {!isTri && (
+            <>
+              <div className="text-right">
+                <div className="text-[10px] text-[#bbb]">GLUCIDES</div>
+                <div className="text-[var(--color-accent)] font-extrabold text-lg">{rp.choPerH} g/h</div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] text-[#bbb]">HYDRATATION</div>
+                <div className="text-[var(--color-accent)] font-extrabold text-lg">{rp.hydratationPerH} ml/h</div>
+              </div>
+            </>
+          )}
+          {isTri && (
+            <div className="text-right">
+              <div className="text-[10px] text-[#bbb]">CIBLES</div>
+              <div className="text-[var(--color-accent)] font-extrabold text-sm">par phase</div>
+            </div>
+          )}
           {onEdit && (
             <button onClick={() => onEdit(rp)} className="btn-ghost btn-xs" style={{ color: "#fff", border: "1px solid #fff4" }}>
               Éditer
@@ -226,34 +310,90 @@ function RacePlanCard({
           </div>
         )}
 
-        <div className="relative pl-5">
-          <div className="absolute left-1.5 top-1.5 bottom-1.5 w-[2px] bg-[var(--color-primary)] opacity-30" />
-          {rp.segments.map((s, i) => (
-            <div key={i} className="relative mb-4">
-              <div className="absolute -left-[19px] top-1 w-3 h-3 rounded-full bg-[var(--color-primary)]" style={{ border: "2px solid #fff" }} />
-              <div className="flex justify-between flex-wrap gap-1.5">
-                <div className="font-extrabold text-sm">
-                  {s.nom}
-                  {s.km !== "" && <span className="text-[var(--color-text-muted)] font-semibold"> · KM {s.km}</span>}
-                </div>
-                <div className="text-xs text-[var(--color-text-muted)]">
-                  {s.heure}
-                  {s.temps ? ` · segment ${s.temps}` : ""}
-                </div>
-              </div>
-              <div className="mt-1.5 grid grid-cols-1 md:grid-cols-2 gap-1.5">
-                {s.contenu.map((c, ci) => (
+        {isTri ? (
+          <div className="relative pl-5">
+            <div className="absolute left-1.5 top-1.5 bottom-1.5 w-[2px] bg-[var(--color-primary)] opacity-30" />
+            {(rp.phases ?? []).map((ph, i) => {
+              const meta = TRI_PHASE_META[ph.type];
+              const isTransition = ph.type === "T1" || ph.type === "T2";
+              return (
+                <div key={i} className="relative mb-4">
                   <div
-                    key={ci}
-                    className="text-xs bg-[var(--color-surface-2)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5"
-                  >
-                    {c}
+                    className="absolute -left-[20px] top-0.5 w-4 h-4 rounded-full flex items-center justify-center"
+                    style={{
+                      background: isTransition ? "var(--color-text-muted)" : "var(--color-primary)",
+                      border: "2px solid #fff",
+                      fontSize: 9,
+                    }}
+                  />
+                  <div className="flex justify-between flex-wrap gap-1.5">
+                    <div className="font-extrabold text-sm flex items-center gap-1.5">
+                      <span style={{ fontSize: 15 }}>{meta.icon}</span>
+                      Phase {i + 1} — {meta.label}
+                      {meta.hasDistance && ph.km !== "" && (
+                        <span className="text-[var(--color-text-muted)] font-semibold"> · {ph.km} km</span>
+                      )}
+                      {meta.hasDplus && ph.dplus !== "" && (
+                        <span className="text-[var(--color-text-muted)] font-semibold"> · {ph.dplus} m D+</span>
+                      )}
+                    </div>
+                    <div className="text-xs text-[var(--color-text-muted)]">
+                      {ph.temps && `⏱ ${ph.temps}`}
+                    </div>
                   </div>
-                ))}
+                  {!isTransition && (
+                    <div className="mt-1 text-[11px] flex gap-3 flex-wrap" style={{ color: "var(--color-primary)" }}>
+                      <span><b>{ph.choPerH}</b> g/h</span>
+                      <span><b>{ph.hydratationPerH}</b> ml/h</span>
+                      <span><b>{ph.sodiumPerH}</b> mg/h Na</span>
+                    </div>
+                  )}
+                  {ph.contenu && ph.contenu.length > 0 && ph.contenu.some((c) => c.trim()) && (
+                    <div className="mt-1.5 grid grid-cols-1 md:grid-cols-2 gap-1.5">
+                      {ph.contenu.filter((c) => c.trim()).map((c, ci) => (
+                        <div
+                          key={ci}
+                          className="text-xs bg-[var(--color-surface-2)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5"
+                        >
+                          {c}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="relative pl-5">
+            <div className="absolute left-1.5 top-1.5 bottom-1.5 w-[2px] bg-[var(--color-primary)] opacity-30" />
+            {rp.segments.map((s, i) => (
+              <div key={i} className="relative mb-4">
+                <div className="absolute -left-[19px] top-1 w-3 h-3 rounded-full bg-[var(--color-primary)]" style={{ border: "2px solid #fff" }} />
+                <div className="flex justify-between flex-wrap gap-1.5">
+                  <div className="font-extrabold text-sm">
+                    {s.nom}
+                    {s.km !== "" && <span className="text-[var(--color-text-muted)] font-semibold"> · KM {s.km}</span>}
+                  </div>
+                  <div className="text-xs text-[var(--color-text-muted)]">
+                    {s.heure}
+                    {s.temps ? ` · segment ${s.temps}` : ""}
+                  </div>
+                </div>
+                <div className="mt-1.5 grid grid-cols-1 md:grid-cols-2 gap-1.5">
+                  {s.contenu.map((c, ci) => (
+                    <div
+                      key={ci}
+                      className="text-xs bg-[var(--color-surface-2)] border border-[var(--color-border)] rounded-lg px-2.5 py-1.5"
+                    >
+                      {c}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -335,7 +475,7 @@ export default function RaceStrategyPage() {
     lines: [],
   });
 
-  const blankRacePlan = (): RacePlan => ({
+  const blankRacePlan = (discipline: Discipline = "trail"): RacePlan => ({
     id: newId(),
     name: "Nouveau plan de course",
     km: "",
@@ -344,8 +484,14 @@ export default function RaceStrategyPage() {
     choPerH: "",
     hydratationPerH: "",
     avantCourse: [""],
-    segments: [{ nom: "Départ", km: 0, heure: "", temps: "", contenu: [""] }],
+    segments: discipline === "triathlon"
+      ? []
+      : [{ nom: "Départ", km: 0, heure: "", temps: "", contenu: [""] }],
+    discipline,
+    phases: discipline === "triathlon" ? defaultTriPhases() : undefined,
   });
+
+  const [disciplinePicker, setDisciplinePicker] = useState(false);
 
   const saveStrat = (s: Strategy) => {
     setStrategies((p) => (p.some((x) => x.id === s.id) ? p.map((x) => (x.id === s.id ? s : x)) : [...p, s]));
@@ -589,19 +735,43 @@ export default function RaceStrategyPage() {
     const updatePlan = (patch: Partial<RacePlan>) => setPlanEdit({ ...planEdit, ...patch });
     const updateSeg = (i: number, patch: Partial<RacePlanSegment>) =>
       updatePlan({ segments: planEdit.segments.map((s, idx) => (idx === i ? { ...s, ...patch } : s)) });
+    const discipline: Discipline = planEdit.discipline ?? "trail";
+    const isTri = discipline === "triathlon";
+    const phases = planEdit.phases ?? (isTri ? defaultTriPhases() : []);
+    const updatePhase = (i: number, patch: Partial<TriPhase>) =>
+      updatePlan({ phases: phases.map((p, idx) => (idx === i ? { ...p, ...patch } : p)) });
+
     return (
       <div>
         <PageHeader kicker="Anticiper tes courses" title="Plan de course" />
 
+        <div className="card p-4 mb-3.5" style={{ borderLeft: "5px solid var(--color-primary)" }}>
+          <div className="flex items-center gap-3 flex-wrap">
+            <div style={{ fontSize: 26, lineHeight: 1 }}>{DISCIPLINE_ICON[discipline]}</div>
+            <div>
+              <div className="text-[10px] uppercase font-bold" style={{ letterSpacing: ".08em", color: "var(--color-primary)" }}>Discipline</div>
+              <div className="font-extrabold text-lg" style={{ fontFamily: "var(--font-display)", letterSpacing: "-0.01em" }}>{DISCIPLINE_LABEL[discipline]}</div>
+            </div>
+            <div className="text-xs text-[var(--color-text-muted)] ml-auto">
+              {isTri ? "Stratégie nutritionnelle par phase" : "Stratégie nutritionnelle par ravitaillement"}
+            </div>
+          </div>
+        </div>
+
         <div className="card p-4 mb-3.5">
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
             <Field label="Nom du plan"><input className="input" value={planEdit.name} onChange={(e) => updatePlan({ name: e.target.value })} /></Field>
-            <Field label="KM"><input className="input" value={planEdit.km} onChange={(e) => updatePlan({ km: e.target.value })} /></Field>
+            <Field label="KM (total)"><input className="input" value={planEdit.km} onChange={(e) => updatePlan({ km: e.target.value })} /></Field>
             <Field label="D+ (m)"><input className="input" value={planEdit.dplus} onChange={(e) => updatePlan({ dplus: e.target.value })} /></Field>
             <Field label="Objectif"><input className="input" value={planEdit.objectif} onChange={(e) => updatePlan({ objectif: e.target.value })} /></Field>
-            <Field label="CHO (g/h)"><input className="input" value={planEdit.choPerH} onChange={(e) => updatePlan({ choPerH: e.target.value })} /></Field>
-            <Field label="Hydratation (ml/h)"><input className="input" value={planEdit.hydratationPerH} onChange={(e) => updatePlan({ hydratationPerH: e.target.value })} /></Field>
+            {!isTri && <Field label="CHO (g/h)"><input className="input" value={planEdit.choPerH} onChange={(e) => updatePlan({ choPerH: e.target.value })} /></Field>}
+            {!isTri && <Field label="Hydratation (ml/h)"><input className="input" value={planEdit.hydratationPerH} onChange={(e) => updatePlan({ hydratationPerH: e.target.value })} /></Field>}
           </div>
+          {isTri && (
+            <div className="text-xs text-[var(--color-text-muted)] mt-2">
+              💡 En triathlon, les cibles d&apos;apport sont définies <b>par phase</b> ci-dessous (la natation et les transitions ont des cibles très différentes du vélo et de la course).
+            </div>
+          )}
         </div>
 
         <div className="card p-4 mb-3.5">
@@ -625,7 +795,7 @@ export default function RaceStrategyPage() {
           <button onClick={() => updatePlan({ avantCourse: [...planEdit.avantCourse, ""] })} className="btn-ghost btn-sm">+ Ligne</button>
         </div>
 
-        {planEdit.segments.map((seg, i) => (
+        {!isTri && planEdit.segments.map((seg, i) => (
           <div key={i} className="card p-4 mb-3.5">
             <div className="grid grid-cols-1 md:grid-cols-5 gap-2 mb-3">
               <Field label="Nom (ravito)"><input className="input" value={seg.nom} onChange={(e) => updateSeg(i, { nom: e.target.value })} /></Field>
@@ -655,13 +825,72 @@ export default function RaceStrategyPage() {
           </div>
         ))}
 
+        {isTri && phases.map((ph, i) => {
+          const meta = TRI_PHASE_META[ph.type];
+          const isTransition = ph.type === "T1" || ph.type === "T2";
+          return (
+            <div
+              key={i}
+              className="card p-4 mb-3.5"
+              style={{
+                borderLeft: `4px solid ${isTransition ? "var(--color-text-muted)" : "var(--color-primary)"}`,
+              }}
+            >
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
+                <div style={{ fontSize: 22 }}>{meta.icon}</div>
+                <div className="font-display font-extrabold text-base" style={{ letterSpacing: "-0.01em" }}>
+                  Phase {i + 1} — {meta.label}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+                {meta.hasDistance && (
+                  <Field label="Distance (km)"><input className="input" value={ph.km} onChange={(e) => updatePhase(i, { km: e.target.value })} /></Field>
+                )}
+                {meta.hasDplus && (
+                  <Field label="D+ (m)"><input className="input" value={ph.dplus} onChange={(e) => updatePhase(i, { dplus: e.target.value })} /></Field>
+                )}
+                <Field label="Temps estimé"><input className="input" value={ph.temps} placeholder={isTransition ? "1:30" : "1h25"} onChange={(e) => updatePhase(i, { temps: e.target.value })} /></Field>
+                {!isTransition && (
+                  <>
+                    <Field label="CHO (g/h)"><input className="input" value={ph.choPerH} onChange={(e) => updatePhase(i, { choPerH: e.target.value })} /></Field>
+                    <Field label="Hydratation (ml/h)"><input className="input" value={ph.hydratationPerH} onChange={(e) => updatePhase(i, { hydratationPerH: e.target.value })} /></Field>
+                    <Field label="Sodium (mg/h)"><input className="input" value={ph.sodiumPerH} onChange={(e) => updatePhase(i, { sodiumPerH: e.target.value })} /></Field>
+                  </>
+                )}
+              </div>
+
+              <div className="font-extrabold mb-1 text-sm">Contenu / ravito de la phase</div>
+              {ph.contenu.map((l, ci) => (
+                <div key={ci} className="flex gap-2 mb-1.5">
+                  <input
+                    className="input"
+                    value={l}
+                    onChange={(e) => updatePhase(i, { contenu: ph.contenu.map((x, idx) => (idx === ci ? e.target.value : x)) })}
+                  />
+                  <button
+                    onClick={() => updatePhase(i, { contenu: ph.contenu.filter((_, idx) => idx !== ci) })}
+                    className="btn-ghost btn-sm"
+                    style={{ color: "var(--color-danger)" }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              <button onClick={() => updatePhase(i, { contenu: [...ph.contenu, ""] })} className="btn-ghost btn-sm">+ Ligne</button>
+            </div>
+          );
+        })}
+
         <div className="flex justify-between flex-wrap gap-2 mb-4">
-          <button
-            onClick={() => updatePlan({ segments: [...planEdit.segments, { nom: "Nouveau ravito", km: "", heure: "", temps: "", contenu: [""] }] })}
-            className="btn-ghost"
-          >
-            + Ravitaillement
-          </button>
+          {!isTri ? (
+            <button
+              onClick={() => updatePlan({ segments: [...planEdit.segments, { nom: "Nouveau ravito", km: "", heure: "", temps: "", contenu: [""] }] })}
+              className="btn-ghost"
+            >
+              + Ravitaillement
+            </button>
+          ) : <div />}
           <div className="flex gap-2 flex-wrap">
             <button onClick={() => setPlanEdit(null)} className="btn-ghost">Annuler</button>
             <button onClick={() => downloadExport(planEdit)} className="btn-dark">Exporter en texte</button>
@@ -670,56 +899,113 @@ export default function RaceStrategyPage() {
           </div>
         </div>
 
-        {printPlan && (
-          <PrintReport
-            kicker="Anticiper tes courses"
-            title={printPlan.name}
-            subtitle={`${printPlan.km} km · ${printPlan.dplus} m D+ · objectif ${printPlan.objectif}`}
-          >
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 9 }}>
-              <PrintKpi label="Glucides" value={printPlan.choPerH} unit="g/h" />
-              <PrintKpi label="Hydratation" value={printPlan.hydratationPerH} unit="ml/h" accent="#0a0a0a" />
-              <PrintKpi label="Distance" value={printPlan.km} unit="km" accent="#5f8c0a" />
-              <PrintKpi label="Dénivelé +" value={printPlan.dplus} unit="m" accent="#cf2e2e" />
-            </div>
-            {printPlan.avantCourse.length > 0 && (
-              <>
-                <PrintH>Avant la course</PrintH>
-                <div style={{ background: "#fafaf8", borderRadius: 10, padding: "12px 14px", borderLeft: "4px solid #FF4501" }}>
-                  {printPlan.avantCourse.map((l, i) => (
-                    <div key={i} style={{ fontSize: 12, padding: "2px 0" }}>• {l}</div>
-                  ))}
+        {printPlan && (() => {
+          const printDiscipline: Discipline = printPlan.discipline ?? "trail";
+          const printIsTri = printDiscipline === "triathlon";
+          return (
+            <PrintReport
+              kicker={`Anticiper tes courses · ${DISCIPLINE_LABEL[printDiscipline]}`}
+              title={printPlan.name}
+              subtitle={`${printPlan.km} km · ${printPlan.dplus} m D+ · objectif ${printPlan.objectif}`}
+            >
+              {!printIsTri && (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 9 }}>
+                  <PrintKpi label="Glucides" value={printPlan.choPerH} unit="g/h" />
+                  <PrintKpi label="Hydratation" value={printPlan.hydratationPerH} unit="ml/h" accent="#0a0a0a" />
+                  <PrintKpi label="Distance" value={printPlan.km} unit="km" accent="#5f8c0a" />
+                  <PrintKpi label="Dénivelé +" value={printPlan.dplus} unit="m" accent="#cf2e2e" />
                 </div>
-              </>
-            )}
-            <PrintH>Déroulé par ravitaillement</PrintH>
-            <div style={{ position: "relative", paddingLeft: 20 }}>
-              <div style={{ position: "absolute", left: 5, top: 4, bottom: 4, width: 2, background: "#FF450155" }} />
-              {printPlan.segments.map((s, i) => (
-                <div key={i} className="no-break" style={{ position: "relative", marginBottom: 13 }}>
-                  <div style={{ position: "absolute", left: -19, top: 3, width: 11, height: 11, borderRadius: "50%", background: "#FF4501", border: "2px solid #fff" }} />
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <b style={{ fontSize: 12.5 }}>
-                      {s.nom}
-                      {s.km !== "" ? <span style={{ color: "#787876", fontWeight: 600 }}> · KM {s.km}</span> : ""}
-                    </b>
-                    <span style={{ fontSize: 11, color: "#787876" }}>
-                      {s.heure}
-                      {s.temps ? ` · ${s.temps}` : ""}
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 5 }}>
-                    {s.contenu.map((c, ci) => (
-                      <span key={ci} style={{ fontSize: 11, background: "#fff", border: "1px solid #e6e6e3", borderRadius: 7, padding: "4px 9px" }}>
-                        {c}
-                      </span>
+              )}
+              {printIsTri && (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 9 }}>
+                  <PrintKpi label="Distance" value={printPlan.km} unit="km" accent="#5f8c0a" />
+                  <PrintKpi label="Dénivelé +" value={printPlan.dplus} unit="m" accent="#cf2e2e" />
+                  <PrintKpi label="Phases" value={(printPlan.phases ?? []).length} unit="" accent="#FF4501" />
+                </div>
+              )}
+              {printPlan.avantCourse.length > 0 && (
+                <>
+                  <PrintH>Avant la course</PrintH>
+                  <div style={{ background: "#fafaf8", borderRadius: 10, padding: "12px 14px", borderLeft: "4px solid #FF4501" }}>
+                    {printPlan.avantCourse.map((l, i) => (
+                      <div key={i} style={{ fontSize: 12, padding: "2px 0" }}>• {l}</div>
                     ))}
                   </div>
-                </div>
-              ))}
-            </div>
-          </PrintReport>
-        )}
+                </>
+              )}
+              <PrintH>{printIsTri ? "Stratégie par phase" : "Déroulé par ravitaillement"}</PrintH>
+              <div style={{ position: "relative", paddingLeft: 20 }}>
+                <div style={{ position: "absolute", left: 5, top: 4, bottom: 4, width: 2, background: "#FF450155" }} />
+
+                {!printIsTri && printPlan.segments.map((s, i) => (
+                  <div key={i} className="no-break" style={{ position: "relative", marginBottom: 13 }}>
+                    <div style={{ position: "absolute", left: -19, top: 3, width: 11, height: 11, borderRadius: "50%", background: "#FF4501", border: "2px solid #fff" }} />
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <b style={{ fontSize: 12.5 }}>
+                        {s.nom}
+                        {s.km !== "" ? <span style={{ color: "#787876", fontWeight: 600 }}> · KM {s.km}</span> : ""}
+                      </b>
+                      <span style={{ fontSize: 11, color: "#787876" }}>
+                        {s.heure}
+                        {s.temps ? ` · ${s.temps}` : ""}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 5 }}>
+                      {s.contenu.map((c, ci) => (
+                        <span key={ci} style={{ fontSize: 11, background: "#fff", border: "1px solid #e6e6e3", borderRadius: 7, padding: "4px 9px" }}>
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                {printIsTri && (printPlan.phases ?? []).map((ph, i) => {
+                  const meta = TRI_PHASE_META[ph.type];
+                  const isTransition = ph.type === "T1" || ph.type === "T2";
+                  return (
+                    <div key={i} className="no-break" style={{ position: "relative", marginBottom: 13 }}>
+                      <div
+                        style={{
+                          position: "absolute",
+                          left: -19,
+                          top: 3,
+                          width: 11,
+                          height: 11,
+                          borderRadius: "50%",
+                          background: isTransition ? "#787876" : "#FF4501",
+                          border: "2px solid #fff",
+                        }}
+                      />
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                        <b style={{ fontSize: 12.5 }}>
+                          {meta.icon} Phase {i + 1} — {meta.label}
+                          {meta.hasDistance && ph.km !== "" && <span style={{ color: "#787876", fontWeight: 600 }}> · {ph.km} km</span>}
+                          {meta.hasDplus && ph.dplus !== "" && <span style={{ color: "#787876", fontWeight: 600 }}> · {ph.dplus} m D+</span>}
+                        </b>
+                        <span style={{ fontSize: 11, color: "#787876" }}>{ph.temps && `⏱ ${ph.temps}`}</span>
+                      </div>
+                      {!isTransition && (
+                        <div style={{ fontSize: 11, color: "#FF4501", fontWeight: 700, marginTop: 3 }}>
+                          {ph.choPerH} g/h · {ph.hydratationPerH} ml/h · {ph.sodiumPerH} mg/h Na
+                        </div>
+                      )}
+                      {ph.contenu && ph.contenu.some((c) => c.trim()) && (
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 5 }}>
+                          {ph.contenu.filter((c) => c.trim()).map((c, ci) => (
+                            <span key={ci} style={{ fontSize: 11, background: "#fff", border: "1px solid #e6e6e3", borderRadius: 7, padding: "4px 9px" }}>
+                              {c}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </PrintReport>
+          );
+        })()}
       </div>
     );
   }
@@ -748,8 +1034,42 @@ export default function RaceStrategyPage() {
         <>
           <div className="flex justify-end gap-2 mb-3.5 flex-wrap">
             <button onClick={() => setImportOpen((o) => !o)} className="btn-ghost">Importer un plan</button>
-            <button onClick={() => setPlanEdit(blankRacePlan())} className="btn-primary">+ Nouveau plan</button>
+            <button onClick={() => setDisciplinePicker(true)} className="btn-primary">+ Nouveau plan</button>
           </div>
+
+          {disciplinePicker && (
+            <div className="card p-4 mb-4" style={{ border: "2px solid var(--color-primary)" }}>
+              <div className="font-display font-extrabold text-lg mb-1" style={{ letterSpacing: "-0.01em" }}>
+                Quel est le sport de ta course ?
+              </div>
+              <div className="text-xs text-[var(--color-text-muted)] mb-3">
+                La structure du plan s&apos;adapte au sport choisi. Pour le triathlon, tu auras 5 phases (Natation · T1 · Vélo · T2 · Course).
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                {(["course", "trail", "cyclisme", "triathlon"] as Discipline[]).map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => { setPlanEdit(blankRacePlan(d)); setDisciplinePicker(false); }}
+                    className="card"
+                    style={{
+                      padding: "16px 10px",
+                      cursor: "pointer",
+                      border: "1.5px solid var(--color-border)",
+                      background: "var(--color-surface-2)",
+                      textAlign: "center",
+                      transition: "transform .12s ease, border-color .12s ease",
+                    }}
+                  >
+                    <div style={{ fontSize: 28, lineHeight: 1, marginBottom: 6 }}>{DISCIPLINE_ICON[d]}</div>
+                    <div className="font-extrabold text-sm">{DISCIPLINE_LABEL[d]}</div>
+                  </button>
+                ))}
+              </div>
+              <div className="flex justify-end mt-3">
+                <button onClick={() => setDisciplinePicker(false)} className="btn-ghost btn-sm">Annuler</button>
+              </div>
+            </div>
+          )}
 
           {importOpen && (
             <div className="card p-4 mb-4" style={{ border: "2px solid var(--color-dark)" }}>

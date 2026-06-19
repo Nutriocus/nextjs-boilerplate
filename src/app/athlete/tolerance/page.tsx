@@ -303,7 +303,7 @@ export default function TolerancePage() {
         </HelpBlock>
       </HelpSection>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-4">
         <Kpi
           label="Tol. glucides — Course/Trail"
           value={maxFor("glucides", "Course") ?? maxFor("glucides", "Trail") ?? profile.tolGlucCAP ?? "—"}
@@ -320,6 +320,12 @@ export default function TolerancePage() {
           label="Tol. glucides — Cyclisme"
           value={maxFor("glucides", "Cyclisme") ?? "—"}
           unit="g/h"
+          color="var(--color-success)"
+        />
+        <Kpi
+          label="Tol. hydrique — Cyclisme"
+          value={maxFor("hydrique", "Cyclisme") ?? "—"}
+          unit="ml/h"
           color="var(--color-success)"
         />
         <Kpi label="Caféine validée" value={profile.cafeineValidee ? "Oui" : "Non"} color="#8a8a88" />

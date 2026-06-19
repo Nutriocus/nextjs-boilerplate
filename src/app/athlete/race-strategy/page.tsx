@@ -22,13 +22,46 @@ type Line = {
   qty: number | string;
 };
 
+type TolDiscipline = "Course" | "Trail" | "Cyclisme" | "Triathlon";
+
 type Strategy = {
   id: string;
   name: string;
   duree: number | string;
   poids: number | string;
   lines: Line[];
+  tolDiscipline?: TolDiscipline;
 };
+
+const TOL_DISCIPLINES: TolDiscipline[] = ["Course", "Trail", "Cyclisme", "Triathlon"];
+const TOL_DISCIPLINE_ICON: Record<TolDiscipline, string> = {
+  Course: "🏃",
+  Trail: "⛰️",
+  Cyclisme: "🚴",
+  Triathlon: "🏊🚴🏃",
+};
+
+// Minimal shape of a tolerance test (from the `tests` storage key).
+type ToleranceTest = {
+  discipline: TolDiscipline;
+  type: "glucides" | "hydrique";
+  valeur: number | string;
+  ressenti: "bien" | "moyen" | "mauvais" | "indetermine";
+};
+
+function maxToleranceFor(
+  tests: ToleranceTest[],
+  type: "glucides" | "hydrique",
+  discipline: TolDiscipline,
+): number | null {
+  const xs = tests
+    .filter((t) => t.type === type && t.ressenti === "bien" && t.discipline === discipline)
+    .map((t) => {
+      const n = parseFloat(String(t.valeur).replace(",", "."));
+      return isNaN(n) ? 0 : n;
+    });
+  return xs.length ? Math.max(...xs) : null;
+}
 
 type RacePlanSegment = {
   nom: string;
@@ -600,10 +633,20 @@ export default function RaceStrategyPage() {
   const [racePlans, setRacePlans, loadedR] = useAthleteData<RacePlan[]>("raceplans", []);
   const [custom] = useAthleteData<Product[]>("custom", []);
   const [profile] = useAthleteData<{ poids?: number | string; tolGlucCAP?: number | string; tolHydrCAP?: number | string }>("profile", {});
+  const [tolTests] = useAthleteData<ToleranceTest[]>("tests", []);
   const allProducts = useMemo(() => [...PRODUCTS_CATALOG, ...custom], [custom]);
 
-  const tolGluc = toNum(profile.tolGlucCAP) || null;
-  const tolHydr = toNum(profile.tolHydrCAP) || null;
+  const profileTolGluc = toNum(profile.tolGlucCAP) || null;
+  const profileTolHydr = toNum(profile.tolHydrCAP) || null;
+
+  // Resolve tolerance for a given discipline: prefer real "bien toléré" test maxima,
+  // fall back to the global CAP from the profile.
+  const tolFor = (discipline: TolDiscipline | undefined) => {
+    const d = discipline ?? "Course";
+    const g = maxToleranceFor(tolTests, "glucides", d) ?? profileTolGluc;
+    const h = maxToleranceFor(tolTests, "hydrique", d) ?? profileTolHydr;
+    return { tolGluc: g, tolHydr: h };
+  };
 
   const [tab, setTab] = useState<"plans" | "calc">("plans");
 
@@ -626,6 +669,7 @@ export default function RaceStrategyPage() {
     duree: 3,
     poids: toNum(profile.poids) || 70,
     lines: [],
+    tolDiscipline: "Course",
   });
 
   const blankRacePlan = (discipline: Discipline = "trail"): RacePlan => ({
@@ -698,16 +742,35 @@ export default function RaceStrategyPage() {
   // ============================================================
   if (editing) {
     const c = computeTotals(editing, allProducts);
+    const editingDiscipline = editing.tolDiscipline ?? "Course";
+    const { tolGluc: editTolGluc, tolHydr: editTolHydr } = tolFor(editingDiscipline);
     return (
       <div>
         <div className="screen-only">
         <PageHeader kicker="Anticiper tes courses" title="Stratégie de course" />
 
         <div className="card p-4 mb-3.5">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <Field label="Nom de la stratégie"><input className="input" value={editing.name} onChange={(e) => setEditing({ ...editing, name: e.target.value })} /></Field>
             <Field label="Durée (h)"><input className="input" value={editing.duree} onChange={(e) => setEditing({ ...editing, duree: e.target.value })} /></Field>
             <Field label="Poids athlète (kg)"><input className="input" value={editing.poids} onChange={(e) => setEditing({ ...editing, poids: e.target.value })} /></Field>
+            <Field label="Discipline (tolérance)">
+              <select
+                className="input"
+                value={editingDiscipline}
+                onChange={(e) => setEditing({ ...editing, tolDiscipline: e.target.value as TolDiscipline })}
+              >
+                {TOL_DISCIPLINES.map((d) => (
+                  <option key={d} value={d}>{TOL_DISCIPLINE_ICON[d]} {d}</option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <div className="text-xs text-[var(--color-text-muted)] mt-2">
+            💡 Tes seuils de tolérance proviennent de tes <b>tests &quot;bien tolérés&quot;</b> pour cette discipline
+            {editTolGluc != null && <> · Glucides max : <b>{editTolGluc} g/h</b></>}
+            {editTolHydr != null && <> · Hydratation max : <b>{editTolHydr} ml/h</b></>}
+            {editTolGluc == null && editTolHydr == null && <> · Pas de tests pour cette discipline — fallback sur les CAPs du profil.</>}
           </div>
         </div>
 
@@ -825,7 +888,7 @@ export default function RaceStrategyPage() {
         </div>
 
         <div className="card p-4 mb-3.5">
-          <SummaryCards c={c} tolGluc={tolGluc} tolHydr={tolHydr} />
+          <SummaryCards c={c} tolGluc={editTolGluc} tolHydr={editTolHydr} />
         </div>
 
         <div className="flex justify-end gap-2 flex-wrap">
@@ -1165,11 +1228,29 @@ export default function RaceStrategyPage() {
           <div className="flex flex-col gap-3.5">
             {strategies.map((s) => {
               const c = computeTotals(s, allProducts);
+              const disc = s.tolDiscipline ?? "Course";
+              const { tolGluc: sTolG, tolHydr: sTolH } = tolFor(disc);
               return (
                 <div key={s.id} className="card p-4">
                   <div className="flex justify-between items-center mb-2.5 flex-wrap gap-2">
                     <div>
-                      <div className="font-display font-extrabold text-xl">{s.name}</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="font-display font-extrabold text-xl">{s.name}</div>
+                        <span
+                          style={{
+                            fontSize: 10,
+                            background: "var(--color-primary)",
+                            color: "#fff",
+                            padding: "2px 7px",
+                            borderRadius: 3,
+                            fontWeight: 800,
+                            letterSpacing: ".06em",
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          {TOL_DISCIPLINE_ICON[disc]} {disc}
+                        </span>
+                      </div>
                       <div className="text-xs text-[var(--color-text-muted)]">{s.duree} h · {s.lines.length} produits</div>
                     </div>
                     <div className="flex gap-1.5">
@@ -1177,7 +1258,7 @@ export default function RaceStrategyPage() {
                       <button onClick={() => delStrat(s.id)} className="btn-ghost btn-sm" style={{ color: "var(--color-danger)" }}>✕</button>
                     </div>
                   </div>
-                  <SummaryCards c={c} tolGluc={tolGluc} tolHydr={tolHydr} />
+                  <SummaryCards c={c} tolGluc={sTolG} tolHydr={sTolH} />
                 </div>
               );
             })}

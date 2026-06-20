@@ -3,6 +3,7 @@
 import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader, Field, Kpi } from "@/components/ui/PageHeader";
 import { IntroQuestionnaire } from "@/components/athlete/IntroQuestionnaire";
+import { SubscriptionCard } from "@/components/athlete/SubscriptionCard";
 import { useState, useEffect } from "react";
 
 type Profile = {
@@ -175,6 +176,9 @@ export default function ProfilePage() {
           ✴ Questionnaire d&apos;introduction
         </button>
       </div>
+
+      {/* Subscription card — always visible regardless of tab */}
+      <SubscriptionCard />
 
       {tab === "intro" && <IntroQuestionnaire />}
 

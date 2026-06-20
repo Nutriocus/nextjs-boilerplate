@@ -65,17 +65,25 @@ export async function POST(req: NextRequest) {
         const email = (session.customer_details?.email || "").toLowerCase();
         const fullName = session.customer_details?.name || "";
 
-        if (!email) break;
+        console.log("[stripe webhook] checkout.session.completed", { email, customerId, tier });
+
+        if (!email) {
+          throw new Error("checkout.session.completed: missing customer email");
+        }
 
         // 1. Already an athlete with this email? → just link Stripe
-        const { data: existing } = await admin
+        const { data: existing, error: lookupErr } = await admin
           .from("athletes")
           .select("id")
           .eq("email", email)
           .maybeSingle();
 
+        if (lookupErr) {
+          throw new Error(`Lookup athlete failed: ${lookupErr.message}`);
+        }
+
         if (existing) {
-          await admin
+          const { error: updateErr } = await admin
             .from("athletes")
             .update({
               stripe_customer_id: customerId,
@@ -86,32 +94,53 @@ export async function POST(req: NextRequest) {
               expired_at: null,
             })
             .eq("id", existing.id);
+          if (updateErr) {
+            throw new Error(`Update athlete failed: ${updateErr.message}`);
+          }
+          console.log("[stripe webhook] athlete updated", { id: existing.id, email });
           break;
         }
 
-        // 2. New athlete: send invite (Supabase auth user + email)
+        // 2. New athlete: try invite (Supabase auth user + email)
+        let userId: string | undefined;
         const inviteRes = await admin.auth.admin.inviteUserByEmail(email, {
           redirectTo: `${siteUrl}/auth/callback`,
           data: { full_name: fullName, source: "stripe", tier },
         });
 
-        let userId: string | undefined = inviteRes.data?.user?.id;
+        userId = inviteRes.data?.user?.id;
         if (inviteRes.error) {
-          // If already exists (manual auth user created earlier), fetch the id
-          if (/already/i.test(inviteRes.error.message)) {
-            const { data: list } = await admin.auth.admin.listUsers();
-            const found = list.users.find((u) => u.email?.toLowerCase() === email);
-            userId = found?.id;
+          console.warn("[stripe webhook] invite returned error:", inviteRes.error.message);
+          // Try to find the user anyway (rate-limited or already exists)
+          const { data: list } = await admin.auth.admin.listUsers();
+          const found = list.users.find((u) => u.email?.toLowerCase() === email);
+          if (found) {
+            userId = found.id;
+            console.log("[stripe webhook] reusing existing auth user", { userId });
           } else {
-            throw new Error(`Invite failed: ${inviteRes.error.message}`);
+            // Create the auth user directly (no invite email) so we still have a row.
+            // The athlete will need to reset password later.
+            const createRes = await admin.auth.admin.createUser({
+              email,
+              email_confirm: true,
+              user_metadata: { full_name: fullName, source: "stripe_fallback", tier },
+            });
+            if (createRes.error) {
+              throw new Error(`Create user failed (after invite rate-limit): ${createRes.error.message}`);
+            }
+            userId = createRes.data.user?.id;
           }
+        }
+
+        if (!userId) {
+          throw new Error("No user_id available after invite/create");
         }
 
         const parts = fullName.trim().split(/\s+/);
         const first_name = parts[0] || email.split("@")[0];
         const last_name = parts.slice(1).join(" ") || "—";
 
-        await admin.from("athletes").insert({
+        const { error: insertErr } = await admin.from("athletes").insert({
           user_id: userId,
           coach_id: defaultCoachId,
           first_name,
@@ -122,6 +151,10 @@ export async function POST(req: NextRequest) {
           subscription_status: "active",
           subscription_tier: tier,
         });
+        if (insertErr) {
+          throw new Error(`Insert athlete failed: ${insertErr.message}`);
+        }
+        console.log("[stripe webhook] athlete created", { email, userId });
 
         break;
       }

@@ -176,6 +176,8 @@ export default function ParcoursPage() {
               {phase.missions.map((m) => {
                 const status = getMissionStatus(m, snapshot, progress, unlocked);
                 const isManualChecked = !!progress.manual[m.id];
+                // Auto-detected = mission is "done" without being manually checked
+                const isAutoDetected = status === "done" && !isManualChecked && !!m.isComplete;
                 return (
                   <div
                     key={m.id}
@@ -223,10 +225,19 @@ export default function ParcoursPage() {
                         >
                           {m.durationLabel}
                         </div>
+                        {isAutoDetected && (
+                          <span
+                            className="text-[9px] font-bold px-1.5 py-0.5 rounded uppercase"
+                            style={{ background: "rgba(95,140,10,0.15)", color: "var(--color-success)", letterSpacing: ".05em" }}
+                            title="Détecté automatiquement à partir de tes données"
+                          >
+                            ⚡ auto
+                          </span>
+                        )}
                       </div>
                       <div className="text-xs text-[var(--color-text-muted)] mt-1 leading-relaxed">{m.why}</div>
 
-                      <div className="flex gap-2 mt-2 flex-wrap">
+                      <div className="flex gap-2 mt-2 flex-wrap items-center">
                         {m.href && status !== "locked" && (
                           <Link href={m.href}>
                             <button className={status === "done" ? "btn-ghost btn-sm" : "btn-dark btn-sm"}>
@@ -234,7 +245,10 @@ export default function ParcoursPage() {
                             </button>
                           </Link>
                         )}
-                        {m.manualOnly && unlocked && (
+                        {/* Manual toggle — always available when phase unlocked.
+                            Use it for manualOnly missions OR as an override when
+                            auto-detection misses something the athlete already did. */}
+                        {unlocked && (
                           <button
                             onClick={() => toggleManual(m.id)}
                             className="btn-ghost btn-sm"
@@ -242,17 +256,17 @@ export default function ParcoursPage() {
                               color: isManualChecked ? "var(--color-success)" : "var(--color-text-muted)",
                               fontWeight: 700,
                             }}
+                            title={
+                              isManualChecked
+                                ? "Cliquer pour annuler le marquage manuel"
+                                : "Marquer cette mission comme déjà faite"
+                            }
                           >
-                            {isManualChecked ? "✓ Marqué comme fait" : "Marquer comme fait"}
-                          </button>
-                        )}
-                        {!m.manualOnly && status === "done" && progress.manual[m.id] && (
-                          <button
-                            onClick={() => toggleManual(m.id)}
-                            className="btn-ghost btn-sm"
-                            style={{ color: "var(--color-text-muted)" }}
-                          >
-                            Annuler "marqué fait"
+                            {isManualChecked
+                              ? "✓ Marquée comme faite"
+                              : isAutoDetected
+                                ? "Forcer comme faite manuellement"
+                                : "Marquer comme faite"}
                           </button>
                         )}
                       </div>

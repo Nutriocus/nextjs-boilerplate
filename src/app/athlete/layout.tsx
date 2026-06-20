@@ -4,6 +4,7 @@ import { useState, Suspense } from "react";
 import { AthleteSidebar } from "@/components/athlete/AthleteSidebar";
 import { MobileTopbar } from "@/components/layout/MobileTopbar";
 import { GlobalAthleteSearch } from "@/components/coach/GlobalAthleteSearch";
+import { AccessGate } from "@/components/athlete/AccessGate";
 
 function Shell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -21,7 +22,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       />
       <main className="lg:pl-[262px]">
         <div className="max-w-7xl mx-auto px-4 lg:px-8 pt-[96px] lg:pt-8 pb-8">
-          {children}
+          <AccessGate>{children}</AccessGate>
         </div>
       </main>
 

@@ -1,6 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ReferenceArea,
+  ReferenceLine,
+  ResponsiveContainer,
+  CartesianGrid,
+} from "recharts";
 import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader, Empty, Field, Kpi } from "@/components/ui/PageHeader";
 import { PrintReport, PrintH, PrintButton } from "@/components/ui/PrintReport";
@@ -89,6 +100,7 @@ export default function BloodTestsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [printTest, setPrintTest] = useState<BloodTest | null>(null);
   const [printPrescription, setPrintPrescription] = useState(false);
+  const [tab, setTab] = useState<"list" | "trends">("list");
 
   const groups = useMemo(markersByCategory, []);
 
@@ -96,6 +108,30 @@ export default function BloodTestsPage() {
     () => [...tests].sort((a, b) => (a.date < b.date ? 1 : -1)),
     [tests],
   );
+
+  // Ascending order for time-series (oldest → newest)
+  const sortedAsc = useMemo(
+    () => [...tests].sort((a, b) => (a.date < b.date ? -1 : 1)),
+    [tests],
+  );
+
+  // Build per-marker series: only markers with ≥2 numeric data points
+  const markerSeries = useMemo(() => {
+    const out: Record<string, { date: string; value: number }[]> = {};
+    for (const m of BLOOD_MARKERS) {
+      const pts = sortedAsc
+        .map((t) => {
+          const raw = t.markers[m.key];
+          if (raw === "" || raw === undefined || raw === null) return null;
+          const n = typeof raw === "number" ? raw : parseFloat(String(raw).replace(",", "."));
+          if (isNaN(n)) return null;
+          return { date: t.date, value: n };
+        })
+        .filter((p): p is { date: string; value: number } => p !== null);
+      if (pts.length >= 2) out[m.key] = pts;
+    }
+    return out;
+  }, [sortedAsc]);
 
   const startCreate = () => {
     setEditing(blank());
@@ -547,7 +583,16 @@ export default function BloodTestsPage() {
           </HelpBlock>
         </HelpSection>
 
-        {sorted.length === 0 ? (
+        <div className="flex gap-1.5 mb-4 flex-wrap">
+          <button onClick={() => setTab("list")} className={tab === "list" ? "btn-primary btn-sm" : "btn-ghost btn-sm"}>
+            📋 Mes bilans ({sorted.length})
+          </button>
+          <button onClick={() => setTab("trends")} className={tab === "trends" ? "btn-primary btn-sm" : "btn-ghost btn-sm"}>
+            📈 Évolution dans le temps
+          </button>
+        </div>
+
+        {tab === "list" && (sorted.length === 0 ? (
           <Empty>
             Aucun bilan enregistré. Commence par télécharger la <b>fiche médecin</b> pour la prescription,
             puis saisis les valeurs reçues du laboratoire.
@@ -621,6 +666,111 @@ export default function BloodTestsPage() {
               );
             })}
           </div>
+        ))}
+
+        {tab === "trends" && (
+          Object.keys(markerSeries).length === 0 ? (
+            <Empty>
+              Au moins <b>2 bilans</b> avec une valeur commune sont nécessaires pour afficher l&apos;évolution.
+              Saisis un second bilan pour activer cette vue.
+            </Empty>
+          ) : (
+            <div>
+              <div className="text-xs text-[var(--color-text-muted)] mb-3">
+                Évolution des marqueurs disposant d&apos;au moins 2 mesures. La zone verte représente la
+                cible <b>optimale endurance</b>, les pointillés rouges les seuils d&apos;alerte.
+              </div>
+              {CATEGORY_ORDER.map((cat) => {
+                const markersInCat = (groups[cat] ?? []).filter((m) => markerSeries[m.key]);
+                if (markersInCat.length === 0) return null;
+                return (
+                  <div key={cat} className="card p-4 mb-3" style={{ borderLeft: `5px solid ${CATEGORY_META[cat].color}` }}>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div style={{ fontSize: 18 }}>{CATEGORY_META[cat].icon}</div>
+                      <div className="font-display font-extrabold text-base" style={{ letterSpacing: "-0.01em" }}>
+                        {CATEGORY_META[cat].label}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                      {markersInCat.map((m) => {
+                        const series = markerSeries[m.key];
+                        const range = m.sexSpecific && sex
+                          ? (m.ranges.find((r) => r.sex === sex) ?? m.ranges[0])
+                          : m.ranges[0];
+                        const first = series[0].value;
+                        const last = series[series.length - 1].value;
+                        const delta = last - first;
+                        const pct = first !== 0 ? (delta / first) * 100 : 0;
+                        const arrow = delta > 0.001 ? "↗" : delta < -0.001 ? "↘" : "→";
+                        const lastEval = evaluateMarker(m, last, sex);
+                        return (
+                          <div key={m.key} className="rounded-lg p-3" style={{ background: "var(--color-surface-2)", border: "1px solid var(--color-border)" }}>
+                            <div className="flex justify-between items-baseline mb-1">
+                              <div className="font-bold text-sm">{m.label}</div>
+                              <div className="text-[10px] text-[var(--color-text-muted)]">{m.unit}</div>
+                            </div>
+                            <div className="flex items-baseline gap-2 mb-2 flex-wrap">
+                              <span className="font-extrabold text-xl" style={{ color: STATUS_META[lastEval.status].color, fontFamily: "var(--font-display)" }}>
+                                {last}
+                              </span>
+                              <span className="text-[11px] font-bold" style={{ color: delta > 0 ? "var(--color-success)" : delta < 0 ? "var(--color-danger)" : "var(--color-text-muted)" }}>
+                                {arrow} {delta > 0 ? "+" : ""}{delta.toFixed(2)} ({pct > 0 ? "+" : ""}{pct.toFixed(1)}%)
+                              </span>
+                              <span className="text-[10px] text-[var(--color-text-muted)]">
+                                · {series.length} mesure{series.length > 1 ? "s" : ""}
+                              </span>
+                            </div>
+                            <ResponsiveContainer width="100%" height={170}>
+                              <LineChart data={series} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+                                <CartesianGrid stroke="#e6e6e3" strokeDasharray="2 3" />
+                                {range.optimalMin !== undefined && range.optimalMax !== undefined && (
+                                  <ReferenceArea
+                                    y1={range.optimalMin}
+                                    y2={range.optimalMax}
+                                    fill="rgba(95,140,10,0.14)"
+                                    fillOpacity={1}
+                                    stroke="none"
+                                  />
+                                )}
+                                {range.alertBelow !== undefined && (
+                                  <ReferenceLine y={range.alertBelow} stroke="#cf2e2e" strokeDasharray="3 3" />
+                                )}
+                                {range.alertAbove !== undefined && (
+                                  <ReferenceLine y={range.alertAbove} stroke="#cf2e2e" strokeDasharray="3 3" />
+                                )}
+                                <XAxis
+                                  dataKey="date"
+                                  tick={{ fontSize: 10, fill: "#787876" }}
+                                  tickFormatter={(d) => {
+                                    const dt = new Date(d + "T00:00:00");
+                                    return dt.toLocaleDateString("fr-FR", { month: "short", year: "2-digit" });
+                                  }}
+                                />
+                                <YAxis tick={{ fontSize: 10, fill: "#787876" }} />
+                                <Tooltip
+                                  formatter={(v: number) => [`${v} ${m.unit}`, m.label]}
+                                  labelFormatter={(d) => dateLong(d as string)}
+                                  contentStyle={{ fontSize: 11, borderRadius: 6 }}
+                                />
+                                <Line
+                                  type="monotone"
+                                  dataKey="value"
+                                  stroke="var(--color-primary)"
+                                  strokeWidth={2.5}
+                                  dot={{ r: 4, fill: "var(--color-primary)" }}
+                                  activeDot={{ r: 6 }}
+                                />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
         )}
       </div>
 

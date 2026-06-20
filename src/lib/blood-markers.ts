@@ -12,11 +12,11 @@ export type BloodCategory =
   | "inflammation";
 
 export const CATEGORY_META: Record<BloodCategory, { label: string; icon: string; color: string }> = {
-  fer:           { label: "Fer & transport oxygène", icon: "🩸", color: "#cf2e2e" },
-  hormones:      { label: "Hormones",                 icon: "⚗️", color: "#FF4501" },
-  vitamines:     { label: "Vitamines",                icon: "☀️", color: "#b36b00" },
-  lipides:       { label: "Lipides",                  icon: "💧", color: "#5f8c0a" },
-  inflammation:  { label: "Inflammation",             icon: "🔥", color: "#0a0a0a" },
+  fer:           { label: "Fer & transport oxygène",        icon: "🩸", color: "#cf2e2e" },
+  hormones:      { label: "Hormones",                        icon: "⚗️", color: "#FF4501" },
+  vitamines:     { label: "Vitamines & micronutriments",     icon: "☀️", color: "#b36b00" },
+  lipides:       { label: "Lipides",                         icon: "💧", color: "#5f8c0a" },
+  inflammation:  { label: "Inflammation",                    icon: "🔥", color: "#0a0a0a" },
 };
 
 export type MarkerStatus = "optimal" | "normal" | "alertLow" | "alertHigh" | "missing";
@@ -135,7 +135,7 @@ export const BLOOD_MARKERS: MarkerDef[] = [
     ],
   },
 
-  // ─── Vitamines ───
+  // ─── Vitamines & micronutriments ───
   {
     key: "vitamine_d",
     label: "Vitamine D (25-OH)",
@@ -144,6 +144,36 @@ export const BLOOD_MARKERS: MarkerDef[] = [
     utility: "Essentielle pour l'immunité, les fonctions musculaires et l'absorption du calcium.",
     ranges: [
       { normalMin: 30, normalMax: 100, optimalMin: 40, optimalMax: 80, alertBelow: 30, alertMessage: "Carence en vitamine D → immunité, force musculaire et qualité osseuse affaiblies." },
+    ],
+  },
+  {
+    key: "vitamine_b12",
+    label: "Vitamine B12 (cobalamine)",
+    category: "vitamines",
+    unit: "pg/mL",
+    utility: "Indispensable à la formation des globules rouges, au système nerveux et à la production d'énergie — déficit fréquent chez les végétariens / véganes.",
+    ranges: [
+      { normalMin: 200, normalMax: 900, optimalMin: 400, optimalMax: 800, alertBelow: 300, alertMessage: "B12 basse → fatigue, anémie macrocytaire, troubles neuro — à supplémenter rapidement." },
+    ],
+  },
+  {
+    key: "vitamine_b9",
+    label: "Vitamine B9 (folates)",
+    category: "vitamines",
+    unit: "ng/mL",
+    utility: "Indispensable à la production des globules rouges et au métabolisme énergétique cellulaire.",
+    ranges: [
+      { normalMin: 5, normalMax: 20, optimalMin: 7, optimalMax: 18, alertBelow: 5, alertMessage: "Folates bas → anémie macrocytaire, fatigue chronique." },
+    ],
+  },
+  {
+    key: "zinc",
+    label: "Zinc",
+    category: "vitamines",
+    unit: "mg/L",
+    utility: "Cofacteur enzymatique clé (synthèse protéique, immunité, production de testostérone) — souvent perdu via la sueur chez le sportif d'endurance.",
+    ranges: [
+      { normalMin: 0.7, normalMax: 1.2, optimalMin: 0.9, optimalMax: 1.15, alertBelow: 0.7, alertMessage: "Zinc bas → immunité affaiblie, cicatrisation lente, baisse de testostérone." },
     ],
   },
 

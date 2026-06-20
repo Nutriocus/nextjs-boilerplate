@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { hasAccess, type AthleteSubscription } from "@/lib/subscription";
+import {
+  hasAccess,
+  getRequiredTierForPath,
+  tierMeetsRequirement,
+  SUBSCRIPTION_TIERS,
+  type AthleteSubscription,
+  type SubscriptionTier,
+} from "@/lib/subscription";
 
 // =====================================================================
 // AccessGate — enforces subscription access on every athlete page.
@@ -27,6 +34,7 @@ export function AccessGate({ children }: { children: React.ReactNode }) {
 
   const [checked, setChecked] = useState(false);
   const [showPastDueBanner, setShowPastDueBanner] = useState(false);
+  const [tierBlocked, setTierBlocked] = useState<SubscriptionTier | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -69,7 +77,7 @@ export function AccessGate({ children }: { children: React.ReactNode }) {
 
       const { data: athlete } = await supabase
         .from("athletes")
-        .select("subscription_status, subscription_ends_at, expired_at")
+        .select("subscription_status, subscription_ends_at, expired_at, subscription_tier")
         .eq("user_id", user.id)
         .maybeSingle();
 
@@ -91,6 +99,12 @@ export function AccessGate({ children }: { children: React.ReactNode }) {
         if (mounted) setShowPastDueBanner(true);
       }
 
+      // 6. Tier gating — check if the current page requires a tier the athlete doesn't have
+      const required = getRequiredTierForPath(pathname || "");
+      if (required && !tierMeetsRequirement(athlete.subscription_tier, required)) {
+        if (mounted) setTierBlocked(required);
+      }
+
       if (mounted) setChecked(true);
     })();
 
@@ -103,6 +117,34 @@ export function AccessGate({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center text-[var(--color-text-muted)]">
         Vérification de l&apos;accès…
+      </div>
+    );
+  }
+
+  if (tierBlocked) {
+    const tierLabel = SUBSCRIPTION_TIERS[tierBlocked].label;
+    return (
+      <div>
+        <div
+          className="card p-8 text-center"
+          style={{ borderLeft: "5px solid var(--color-primary)" }}
+        >
+          <div style={{ fontSize: 48, marginBottom: 12 }}>🔒</div>
+          <h2
+            className="font-display font-extrabold text-2xl mb-2"
+            style={{ letterSpacing: "-0.01em" }}
+          >
+            Réservé à {tierLabel}
+          </h2>
+          <p className="text-sm text-[var(--color-text-muted)] max-w-md mx-auto mb-4">
+            Cette fonctionnalité est uniquement accessible aux athlètes inscrits
+            à l&apos;offre <b>{tierLabel}</b> ou supérieure. Passe à cette offre
+            pour y accéder.
+          </p>
+          <a href="/athlete/subscription" className="btn-primary btn-sm">
+            💳 Mettre à jour mon abonnement →
+          </a>
+        </div>
       </div>
     );
   }

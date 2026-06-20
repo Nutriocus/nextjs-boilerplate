@@ -98,6 +98,33 @@ export function tierMeetsRequirement(
   return a >= r;
 }
 
+/**
+ * Per-module tier gating. Maps athlete page pathnames to the minimum
+ * tier required to access them. Modules absent from this map are
+ * accessible to all subscription tiers.
+ *
+ * Extend this map as more features become tier-restricted.
+ */
+export const MODULE_TIER_REQUIREMENTS: Record<string, SubscriptionTier> = {
+  "/athlete/consultations": "progression_guidee",
+  // Examples for future restrictions:
+  // "/athlete/protocols": "mission_performance",
+  // "/athlete/energy-expenditure": "mission_performance",
+  // "/athlete/race-analysis": "mission_performance",
+  // "/athlete/ai-tools": "mission_performance",
+};
+
+/**
+ * Returns the required tier for a given pathname, or null if no
+ * restriction applies. Matches prefixes too (e.g. /athlete/consultations/foo).
+ */
+export function getRequiredTierForPath(pathname: string): SubscriptionTier | null {
+  for (const [path, tier] of Object.entries(MODULE_TIER_REQUIREMENTS)) {
+    if (pathname === path || pathname.startsWith(path + "/")) return tier;
+  }
+  return null;
+}
+
 export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, {
   label: string;
   description: string;

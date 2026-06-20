@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { getRequiredTierForPath, tierMeetsRequirement } from "@/lib/subscription";
 
 export const ATHLETE_NAV = [
   {
@@ -74,8 +75,9 @@ export function AthleteSidebar({
   const athleteIdFromUrl = searchParams?.get("athleteId") || null;
   const [athleteName, setAthleteName] = useState<string | null>(null);
   const [isCoach, setIsCoach] = useState(false);
+  const [athleteTier, setAthleteTier] = useState<string | null>(null);
 
-  // Detect if current user is a coach (so we can show "Retour coach" link)
+  // Detect if current user is a coach + load own athlete tier (for tier gating)
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -86,6 +88,13 @@ export function AthleteSidebar({
         .eq("user_id", user.id)
         .maybeSingle();
       setIsCoach(!!coach);
+
+      const { data: athlete } = await supabase
+        .from("athletes")
+        .select("subscription_tier")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (athlete) setAthleteTier(athlete.subscription_tier);
     })();
   }, []);
 
@@ -176,14 +185,21 @@ export function AthleteSidebar({
           {!isCoachView && <div style={{ marginBottom: 16 }} />}
         </div>
 
-        {/* Nav */}
+        {/* Nav — items locked by tier are hidden for athletes, always shown for coaches */}
         <div className="flex-1">
-          {ATHLETE_NAV.map((section, i) => (
+          {ATHLETE_NAV.map((section, i) => {
+            const visibleItems = section.items.filter((item) => {
+              if (isCoach) return true;
+              const required = getRequiredTierForPath(item.href);
+              return tierMeetsRequirement(athleteTier, required);
+            });
+            if (visibleItems.length === 0) return null;
+            return (
             <div key={i} style={{ marginBottom: 14 }}>
               {section.grp && (
                 <div className="sidebar-group-label">{section.grp}</div>
               )}
-              {section.items.map((item) => {
+              {visibleItems.map((item) => {
                 const active = pathname === item.href;
                 return (
                   <Link
@@ -201,7 +217,8 @@ export function AthleteSidebar({
                 );
               })}
             </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Footer */}

@@ -71,17 +71,27 @@ export const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, { label: str
   incomplete: { label: "Inscription en attente", color: "var(--color-text-muted)" },
 };
 
-export const SUBSCRIPTION_TIERS: Record<string, { label: string; description: string }> = {
-  mission_performance: {
-    label: "Mission Performance",
-    description: "Accompagnement premium — consultations, suivi 1-to-1, accès complet",
+export type SubscriptionTier = "plateforme" | "progression_guidee" | "mission_performance";
+export type SubscriptionInterval = "monthly" | "yearly";
+
+export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, {
+  label: string;
+  description: string;
+  prices: Record<SubscriptionInterval, number>;  // EUR
+}> = {
+  plateforme: {
+    label: "La plateforme Nutriocus",
+    description: "Accès complet à la plateforme en autonomie — parcours guidé, modules, outils",
+    prices: { monthly: 97, yearly: 997 },
   },
   progression_guidee: {
     label: "Progression Guidée",
-    description: "Offre intermédiaire — accès plateforme + revues régulières",
+    description: "Plateforme + revues régulières avec Florian — offre intermédiaire",
+    prices: { monthly: 199, yearly: 1999 },
   },
-  decouverte: {
-    label: "Découverte",
-    description: "Self-service — accès plateforme + parcours guidé en autonomie",
+  mission_performance: {
+    label: "Mission Performance",
+    description: "Premium — consultations, suivi 1-to-1, accompagnement complet sur la saison",
+    prices: { monthly: 399, yearly: 3497 },
   },
 };

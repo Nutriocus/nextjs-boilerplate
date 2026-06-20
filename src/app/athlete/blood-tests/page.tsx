@@ -9,7 +9,9 @@ import {
   BLOOD_MARKERS,
   CATEGORY_META,
   STATUS_META,
+  CONCLUSION_STATUS_META,
   evaluateMarker,
+  generateConclusion,
   type BloodCategory,
   type MarkerDef,
 } from "@/lib/blood-markers";
@@ -284,6 +286,86 @@ export default function BloodTestsPage() {
             <Kpi label="Alertes" value={alerts} color={alerts > 0 ? "var(--color-danger)" : "var(--color-text-muted)"} />
           </div>
 
+          {(() => {
+            const cc = generateConclusion(cur.markers, sex);
+            const meta = CONCLUSION_STATUS_META[cc.status];
+            return (
+              <div
+                className="card p-4 mb-4"
+                style={{ borderLeft: `5px solid ${meta.color}`, background: meta.bg }}
+              >
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                  <span style={{ fontSize: 18 }}>{meta.icon}</span>
+                  <div
+                    className="text-[10px] uppercase font-extrabold"
+                    style={{ letterSpacing: ".08em", color: meta.color }}
+                  >
+                    Conclusion du bilan · {meta.label}
+                  </div>
+                </div>
+                <div className="font-display font-extrabold text-base mb-3" style={{ letterSpacing: "-0.01em" }}>
+                  {cc.summary}
+                </div>
+
+                {cc.patterns.length > 0 && (
+                  <div className="mb-3">
+                    <div className="text-[10px] uppercase font-bold mb-1.5" style={{ letterSpacing: ".08em", color: "var(--color-primary)" }}>
+                      🔍 Patterns cliniques détectés
+                    </div>
+                    <ul className="space-y-1 text-sm">
+                      {cc.patterns.map((p, i) => (
+                        <li key={i}>• {p}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {cc.alerts.length > 0 && (
+                  <div className="mb-3">
+                    <div className="text-[10px] uppercase font-bold mb-1.5" style={{ letterSpacing: ".08em", color: "var(--color-danger)" }}>
+                      ⚠️ Points d&apos;attention ({cc.alerts.length})
+                    </div>
+                    <ul className="space-y-1 text-sm">
+                      {cc.alerts.map((a, i) => (
+                        <li key={i}>
+                          • <b>{a.label}</b> — {a.message}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {cc.strengths.length > 0 && (
+                  <div className="mb-3">
+                    <div className="text-[10px] uppercase font-bold mb-1.5" style={{ letterSpacing: ".08em", color: "var(--color-success)" }}>
+                      ✅ Points forts ({cc.strengths.length})
+                    </div>
+                    <div className="text-sm">
+                      {cc.strengths.join(" · ")}
+                    </div>
+                  </div>
+                )}
+
+                {cc.recommendations.length > 0 && (
+                  <div>
+                    <div className="text-[10px] uppercase font-bold mb-1.5" style={{ letterSpacing: ".08em", color: "var(--color-primary)" }}>
+                      💡 Recommandations
+                    </div>
+                    <ul className="space-y-1 text-sm">
+                      {cc.recommendations.map((r, i) => (
+                        <li key={i}>• {r}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="text-[10px] text-[var(--color-text-muted)] italic mt-3">
+                  ⓘ Conclusion automatique générée à partir des seuils sportif endurance. Ne remplace pas l&apos;avis d&apos;un médecin ou diététicien.
+                </div>
+              </div>
+            );
+          })()}
+
           {CATEGORY_ORDER.map((cat) => (
             <div key={cat} className="card p-4 mb-3" style={{ borderLeft: `5px solid ${CATEGORY_META[cat].color}` }}>
               <div className="flex items-center gap-2 mb-3">
@@ -344,6 +426,37 @@ export default function BloodTestsPage() {
             title={`Bilan biologique du ${dateLong(printTest.date)}`}
             subtitle={[printTest.laboratoire, printTest.prescripteur].filter(Boolean).join(" · ")}
           >
+            {(() => {
+              const cc = generateConclusion(printTest.markers, sex);
+              const meta = CONCLUSION_STATUS_META[cc.status];
+              return (
+                <div className="no-break" style={{ marginBottom: 16, borderLeft: `4px solid ${meta.color}`, background: meta.bg, padding: "12px 14px", borderRadius: 8 }}>
+                  <div style={{ fontSize: 10, textTransform: "uppercase", fontWeight: 800, color: meta.color, letterSpacing: ".08em", marginBottom: 4 }}>
+                    Conclusion · {meta.label}
+                  </div>
+                  <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>{cc.summary}</div>
+                  {cc.patterns.length > 0 && (
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#FF4501", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>Patterns cliniques</div>
+                      {cc.patterns.map((p, i) => <div key={i} style={{ fontSize: 11, marginBottom: 2 }}>• {p}</div>)}
+                    </div>
+                  )}
+                  {cc.alerts.length > 0 && (
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#cf2e2e", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>Points d&apos;attention</div>
+                      {cc.alerts.map((a, i) => <div key={i} style={{ fontSize: 11, marginBottom: 2 }}>• <b>{a.label}</b> — {a.message}</div>)}
+                    </div>
+                  )}
+                  {cc.recommendations.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#FF4501", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 3 }}>Recommandations</div>
+                      {cc.recommendations.map((r, i) => <div key={i} style={{ fontSize: 11, marginBottom: 2 }}>• {r}</div>)}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {CATEGORY_ORDER.map((cat) => (
               <div key={cat} className="no-break" style={{ marginBottom: 14 }}>
                 <PrintH>{CATEGORY_META[cat].icon} {CATEGORY_META[cat].label}</PrintH>

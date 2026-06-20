@@ -271,3 +271,200 @@ export const STATUS_META: Record<MarkerStatus, { label: string; color: string; b
 export function getMarker(key: string): MarkerDef | undefined {
   return BLOOD_MARKERS.find((m) => m.key === key);
 }
+
+// =====================================================================
+// CLINICAL CONCLUSION GENERATOR
+// Detects classical endurance patterns (RED-S, carence martiale, sur-
+// entraînement, déficits vitaminiques) and produces a structured report
+// for the athlete: synthèse, alertes, points forts, recommandations.
+// =====================================================================
+export type ConclusionStatus = "optimal" | "good" | "watch" | "alert";
+
+export type Conclusion = {
+  summary: string;
+  status: ConclusionStatus;
+  patterns: string[];       // High-level clinical patterns detected
+  alerts: { label: string; message: string }[];
+  strengths: string[];      // Markers in optimal endurance range
+  recommendations: string[];
+  filled: number;
+  total: number;
+};
+
+type Eval = { status: MarkerStatus; range: MarkerDef["ranges"][number]; alert?: string };
+type MarkersMap = Record<string, string | number>;
+
+function toNum(v: unknown): number | null {
+  if (v === "" || v === null || v === undefined) return null;
+  const n = typeof v === "number" ? v : parseFloat(String(v).replace(",", "."));
+  return isNaN(n) ? null : n;
+}
+
+export function generateConclusion(
+  markers: MarkersMap,
+  sex?: "H" | "F",
+): Conclusion {
+  const evals = new Map<string, Eval>();
+  let filled = 0;
+  for (const m of BLOOD_MARKERS) {
+    const ev = evaluateMarker(m, markers[m.key], sex);
+    evals.set(m.key, ev);
+    if (ev.status !== "missing") filled += 1;
+  }
+
+  const total = BLOOD_MARKERS.length;
+  const get = (k: string) => evals.get(k);
+  const isAlert = (k: string) => {
+    const e = get(k);
+    return e && (e.status === "alertLow" || e.status === "alertHigh");
+  };
+  const isOptimal = (k: string) => get(k)?.status === "optimal";
+
+  const alerts: { label: string; message: string }[] = [];
+  const strengths: string[] = [];
+  const patterns: string[] = [];
+  const recommendations: string[] = [];
+
+  for (const m of BLOOD_MARKERS) {
+    const e = get(m.key)!;
+    if (e.status === "alertLow" || e.status === "alertHigh") {
+      alerts.push({ label: m.label, message: e.alert ?? STATUS_META[e.status].label });
+    } else if (e.status === "optimal") {
+      strengths.push(m.label);
+    }
+  }
+
+  // ─── Pattern detection ───
+  const ferritine = toNum(markers.ferritine);
+  const hb = toNum(markers.hemoglobine);
+  const sat = toNum(markers.saturation_tf);
+  const t3 = toNum(markers.t3_libre);
+  const testo = toNum(markers.testosterone_totale);
+  const cortisol = toNum(markers.cortisol);
+  const crp = toNum(markers.crp_us);
+  const vitD = toNum(markers.vitamine_d);
+  const b12 = toNum(markers.vitamine_b12);
+  const b9 = toNum(markers.vitamine_b9);
+  const zinc = toNum(markers.zinc);
+  const hdl = toNum(markers.hdl);
+  const trigly = toNum(markers.triglycerides);
+  const chol = toNum(markers.cholesterol_total);
+  const tsh = toNum(markers.tsh);
+
+  // 1) Carence martiale + anémie ferriprive
+  if (isAlert("ferritine") && (isAlert("hemoglobine") || (sat !== null && sat < 20))) {
+    patterns.push("🩸 Carence martiale + anémie ferriprive probable");
+    recommendations.push("Supplémentation fer (60–100 mg/j de fer-élément) sur 3 mois minimum, hors repas avec vitamine C, et recontrôler la ferritine.");
+  } else if (isAlert("ferritine")) {
+    patterns.push("🩸 Carence martiale fonctionnelle (réserves basses, transport encore OK)");
+    recommendations.push("Augmenter l'apport en fer alimentaire (viandes rouges, abats, légumineuses + vitamine C) et envisager une supplémentation légère.");
+  }
+
+  // 2) RED-S / déficit énergétique relatif
+  const redsSignals: string[] = [];
+  if (t3 !== null && t3 < 3) redsSignals.push("T3 libre basse");
+  if (sex === "H" && testo !== null && testo < 3) redsSignals.push("testostérone basse");
+  if (sex === "F" && testo !== null && testo < 0.05) redsSignals.push("testostérone effondrée");
+  if (cortisol !== null && cortisol > 250) redsSignals.push("cortisol élevé");
+  if (redsSignals.length >= 2) {
+    patterns.push("⚡ Signaux compatibles avec un déficit énergétique relatif (RED-S) : " + redsSignals.join(", "));
+    recommendations.push("Augmenter la disponibilité énergétique (>45 kcal/kg de masse maigre/jour) et revoir la périodisation avec ton coach.");
+  } else if (redsSignals.length === 1) {
+    patterns.push("⚡ Signal isolé à surveiller (" + redsSignals[0] + ") — à recontrôler en cas de fatigue persistante.");
+  }
+
+  // 3) Inflammation chronique / surentraînement
+  if (crp !== null && crp > 2) {
+    const overload = (cortisol !== null && cortisol > 250) || (testo !== null && sex === "H" && testo < 3);
+    if (overload) {
+      patterns.push("🔥 Inflammation chronique + dérégulation hormonale — suspicion de surentraînement.");
+      recommendations.push("Réduire la charge d'entraînement de 30 % pendant 2 semaines, prioriser sommeil et récupération, vérifier infection latente.");
+    } else {
+      patterns.push("🔥 CRPus élevée — chercher la cause (infection, charge récente, sommeil).");
+      recommendations.push("Vérifier infection latente, ajuster charge d'entraînement, refaire un dosage à 2 semaines.");
+    }
+  }
+
+  // 4) Déficit thyroïdien
+  if (isAlert("tsh") || (tsh !== null && tsh > 4)) {
+    patterns.push("🦋 Fonction thyroïdienne à investiguer (TSH hors plage).");
+    recommendations.push("Consulter un endocrinologue, doser T3 libre + anticorps anti-thyroïdiens.");
+  }
+
+  // 5) Carences vitaminiques
+  const vitDeficits: string[] = [];
+  if (isAlert("vitamine_d")) vitDeficits.push("vitamine D");
+  if (isAlert("vitamine_b12") || (b12 !== null && b12 < 300)) vitDeficits.push("B12");
+  if (isAlert("vitamine_b9")) vitDeficits.push("B9 (folates)");
+  if (vitDeficits.length >= 2) {
+    patterns.push("☀️ Carences vitaminiques multiples : " + vitDeficits.join(", "));
+  }
+  if (isAlert("vitamine_d") || (vitD !== null && vitD < 30)) {
+    recommendations.push("Supplémentation vitamine D 2 000–4 000 UI/j (selon valeur) + exposition solaire raisonnée, recontrôle à 3 mois.");
+  }
+  if (isAlert("vitamine_b12") || (b12 !== null && b12 < 300)) {
+    recommendations.push("Supplémentation B12 (1 000 µg/j pendant 4 semaines puis 250 µg/j d'entretien) — surtout si régime végétarien ou végan.");
+  }
+  if (isAlert("vitamine_b9")) {
+    recommendations.push("Augmenter les apports en folates (légumes verts, légumineuses) ± supplémentation 400 µg/j.");
+  }
+
+  // 6) Zinc
+  if (isAlert("zinc") || (zinc !== null && zinc < 0.7)) {
+    patterns.push("🛡 Statut en zinc insuffisant — vigilance immunité, cicatrisation et testostérone.");
+    recommendations.push("Apport zinc 15–30 mg/j (huîtres, viandes rouges, oléagineux) ou supplémentation 15 mg/j sur 8 semaines.");
+  }
+
+  // 7) Profil lipidique
+  const lipidProblems: string[] = [];
+  if (chol !== null && chol > 2.4) lipidProblems.push("cholestérol total élevé");
+  if (hdl !== null && hdl < (sex === "F" ? 0.5 : 0.4)) lipidProblems.push("HDL bas");
+  if (trigly !== null && trigly > 1.5) lipidProblems.push("triglycérides élevés");
+  if (lipidProblems.length) {
+    patterns.push("💧 Profil lipidique à surveiller : " + lipidProblems.join(", "));
+    if (trigly !== null && trigly > 1.5) {
+      recommendations.push("Revoir équilibre glucides simples / alcool, augmenter oméga 3 (poissons gras, lin, noix).");
+    }
+    if (hdl !== null && hdl < (sex === "F" ? 0.5 : 0.4)) {
+      recommendations.push("Augmenter activité aérobie et apports en acides gras de qualité (avocat, huile d'olive, noix).");
+    }
+  }
+
+  // ─── Synthèse + statut global ───
+  let status: ConclusionStatus;
+  let summary: string;
+  if (filled < total / 2) {
+    status = "watch";
+    summary = `Bilan partiellement renseigné (${filled}/${total} marqueurs). Complète-le pour une analyse complète.`;
+  } else if (alerts.length === 0 && strengths.length >= 5) {
+    status = "optimal";
+    summary = `Excellent bilan : ${strengths.length} marqueurs dans la zone optimale endurance, aucune alerte.`;
+  } else if (alerts.length === 0) {
+    status = "good";
+    summary = `Bilan satisfaisant : aucune alerte, ${strengths.length} marqueur${strengths.length > 1 ? "s" : ""} dans la zone optimale.`;
+  } else if (alerts.length <= 2 && patterns.length <= 1) {
+    status = "watch";
+    summary = `Bilan correct avec ${alerts.length} point${alerts.length > 1 ? "s" : ""} d'attention identifié${alerts.length > 1 ? "s" : ""}.`;
+  } else {
+    status = "alert";
+    summary = `Bilan à surveiller : ${alerts.length} alertes et ${patterns.length} pattern${patterns.length > 1 ? "s" : ""} clinique${patterns.length > 1 ? "s" : ""} détecté${patterns.length > 1 ? "s" : ""}.`;
+  }
+
+  return {
+    summary,
+    status,
+    patterns,
+    alerts,
+    strengths,
+    recommendations: Array.from(new Set(recommendations)),
+    filled,
+    total,
+  };
+}
+
+export const CONCLUSION_STATUS_META: Record<ConclusionStatus, { label: string; color: string; bg: string; icon: string }> = {
+  optimal: { label: "Excellent", color: "var(--color-success)", bg: "rgba(95,140,10,0.12)", icon: "🟢" },
+  good:    { label: "Bon",        color: "var(--color-success)", bg: "rgba(95,140,10,0.08)", icon: "🟢" },
+  watch:   { label: "À surveiller", color: "#b36b00",            bg: "rgba(179,107,0,0.10)", icon: "🟠" },
+  alert:   { label: "Alerte",     color: "var(--color-danger)",  bg: "rgba(207,46,46,0.12)", icon: "🔴" },
+};

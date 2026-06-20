@@ -46,6 +46,7 @@
     "react-markdown": "^10.1.0",
     "recharts": "^2.12.7",
     "remark-gfm": "^4.0.1",
+    "stripe": "^22.2.2",
     "tailwind-merge": "^2.3.0",
     "zod": "^3.23.8"
   },

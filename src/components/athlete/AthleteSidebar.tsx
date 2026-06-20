@@ -214,14 +214,22 @@ export function AthleteSidebar({
               </div>
             </Link>
           ) : (
-            <button
-              onClick={handleLogout}
-              className="sidebar-link w-full"
-              style={{ color: "#cf2e2e" }}
-            >
-              <span style={{ width: 16, textAlign: "center" }}>⎋</span>
-              Déconnexion
-            </button>
+            <>
+              <button
+                onClick={handleLogout}
+                className="sidebar-link w-full"
+                style={{ color: "#cf2e2e" }}
+              >
+                <span style={{ width: 16, textAlign: "center" }}>⎋</span>
+                Déconnexion
+              </button>
+              <Link href="/athlete/subscription" onClick={() => onCloseMobile?.()}>
+                <div className="sidebar-link w-full" style={{ color: "#c9c9c5" }}>
+                  <span style={{ width: 16, textAlign: "center" }}>💳</span>
+                  Mon abonnement
+                </div>
+              </Link>
+            </>
           )}
           <div
             style={{

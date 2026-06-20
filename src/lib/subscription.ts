@@ -74,6 +74,30 @@ export const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, { label: str
 export type SubscriptionTier = "plateforme" | "progression_guidee" | "mission_performance";
 export type SubscriptionInterval = "monthly" | "yearly";
 
+/** Tier hierarchy — higher rank = more access. */
+export const TIER_RANK: Record<SubscriptionTier, number> = {
+  plateforme: 1,
+  progression_guidee: 2,
+  mission_performance: 3,
+};
+
+/**
+ * Returns true if the athlete's tier grants access to content
+ * requiring at least `requiredTier`. Mission Performance includes
+ * everything Plateforme & Progression Guidée can see.
+ */
+export function tierMeetsRequirement(
+  athleteTier: string | null | undefined,
+  requiredTier: string | null | undefined,
+): boolean {
+  if (!requiredTier) return true; // no restriction
+  if (!athleteTier) return false;
+  const a = TIER_RANK[athleteTier as SubscriptionTier];
+  const r = TIER_RANK[requiredTier as SubscriptionTier];
+  if (!a || !r) return false;
+  return a >= r;
+}
+
 export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, {
   label: string;
   description: string;

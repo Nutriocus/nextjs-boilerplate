@@ -6,10 +6,22 @@ import { useCoachData } from "@/lib/coach-storage";
 import { supabase } from "@/lib/supabase";
 import { PageHeader, Empty } from "@/components/ui/PageHeader";
 import { VideoEmbed } from "@/components/ui/VideoEmbed";
+import {
+  tierMeetsRequirement,
+  SUBSCRIPTION_TIERS,
+  type SubscriptionTier,
+} from "@/lib/subscription";
 
 type Lesson = { id: string; title: string; url: string; duration: string };
 type Module = { id: string; title: string; lessons: Lesson[] };
-type Formation = { id: string; title: string; desc: string; modules: Module[] };
+type Formation = {
+  id: string;
+  title: string;
+  desc: string;
+  modules: Module[];
+  /** Minimum tier required to access. If undefined → open to all. */
+  requiredTier?: SubscriptionTier;
+};
 
 const newId = () => Math.random().toString(36).slice(2, 9);
 
@@ -18,6 +30,7 @@ const DEFAULT: Formation[] = [
     id: "f1",
     title: "Formation 1 — Les fondamentaux de la nutrition endurance",
     desc: "Ta première formation complète.",
+    requiredTier: "mission_performance",
     modules: [
       {
         id: "m1",
@@ -30,6 +43,7 @@ const DEFAULT: Formation[] = [
     id: "f2",
     title: "Formation 2 — Nutrition de performance avancée",
     desc: "Ta seconde formation complète.",
+    requiredTier: "mission_performance",
     modules: [
       {
         id: "m1",
@@ -62,6 +76,7 @@ export default function AcademyPage() {
   const [editing, setEditing] = useState(false);
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const [isCoach, setIsCoach] = useState(false);
+  const [athleteTier, setAthleteTier] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -73,8 +88,20 @@ export default function AcademyPage() {
         .eq("user_id", user.id)
         .maybeSingle();
       setIsCoach(!!coach);
+
+      // Load athlete tier (null for coach-only accounts)
+      const { data: athlete } = await supabase
+        .from("athletes")
+        .select("subscription_tier")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (athlete) setAthleteTier(athlete.subscription_tier);
     })();
   }, []);
+
+  // Coach sees everything; athlete must meet the tier requirement.
+  const canAccessFormation = (f: Formation) =>
+    isCoach || tierMeetsRequirement(athleteTier, f.requiredTier);
 
   const f = academy.find((x) => x.id === view);
 
@@ -131,6 +158,34 @@ export default function AcademyPage() {
   }
 
   if (f) {
+    // Tier gating — block opening the formation if the athlete is below the required tier
+    if (!canAccessFormation(f)) {
+      const requiredLabel = f.requiredTier ? SUBSCRIPTION_TIERS[f.requiredTier].label : "—";
+      return (
+        <div>
+          <div className="flex justify-between items-center mb-1.5">
+            <button onClick={() => setView(null)} className="btn-ghost btn-sm">
+              ← Toutes les formations
+            </button>
+          </div>
+          <div className="card p-8 text-center" style={{ borderLeft: "5px solid var(--color-primary)" }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>🔒</div>
+            <h2 className="font-display font-extrabold text-2xl mb-2" style={{ letterSpacing: "-0.01em" }}>
+              Réservé à {requiredLabel}
+            </h2>
+            <p className="text-sm text-[var(--color-text-muted)] max-w-md mx-auto mb-4">
+              Cette formation est uniquement accessible aux athlètes inscrits à
+              l&apos;offre <b>{requiredLabel}</b>. Passe à cette offre pour accéder à
+              tout le contenu de l&apos;Académie.
+            </p>
+            <a href="/athlete/subscription" className="btn-primary btn-sm">
+              💳 Mettre à jour mon abonnement →
+            </a>
+          </div>
+        </div>
+      );
+    }
+
     const prog = progressOf(f, done);
     const lesson = selectedLesson || (f.modules[0]?.lessons[0] ?? null);
 
@@ -162,9 +217,30 @@ export default function AcademyPage() {
         )}
 
         {editing && isCoach && (
-          <div className="text-xs text-[var(--color-primary)] mb-2">
-            ✏ Mode édition coach — tes modifications sont partagées avec tous tes athlètes.
-          </div>
+          <>
+            <div className="text-xs text-[var(--color-primary)] mb-2">
+              ✏ Mode édition coach — tes modifications sont partagées avec tous tes athlètes.
+            </div>
+            <div className="card p-3 mb-3" style={{ background: "var(--color-surface-2)" }}>
+              <div className="text-[10px] uppercase font-bold mb-2" style={{ letterSpacing: ".08em", color: "var(--color-primary)" }}>
+                🔒 Accès — tier requis
+              </div>
+              <select
+                className="input"
+                style={{ maxWidth: 320 }}
+                value={f.requiredTier ?? ""}
+                onChange={(e) => updateF(f.id, { requiredTier: (e.target.value || undefined) as SubscriptionTier | undefined })}
+              >
+                <option value="">Aucune restriction (accessible à tous)</option>
+                <option value="plateforme">La plateforme Nutriocus (et plus)</option>
+                <option value="progression_guidee">Progression Guidée (et plus)</option>
+                <option value="mission_performance">Mission Performance uniquement</option>
+              </select>
+              <div className="text-[11px] text-[var(--color-text-muted)] mt-2">
+                Les tiers supérieurs ont automatiquement accès au contenu des tiers inférieurs.
+              </div>
+            </div>
+          </>
         )}
 
         <div className="flex items-center gap-3 mb-4 flex-wrap">
@@ -249,24 +325,73 @@ export default function AcademyPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {academy.map((f) => {
           const p = progressOf(f, done);
+          const accessible = canAccessFormation(f);
+          const tierLabel = f.requiredTier ? SUBSCRIPTION_TIERS[f.requiredTier].label : null;
           return (
-            <div key={f.id} className="card overflow-hidden cursor-pointer" onClick={() => setView(f.id)}>
-              <div className="h-[90px] bg-[var(--color-dark)] flex items-center justify-center">
+            <div
+              key={f.id}
+              className="card overflow-hidden cursor-pointer relative"
+              onClick={() => setView(f.id)}
+              style={{ opacity: accessible ? 1 : 0.72 }}
+            >
+              <div className="h-[90px] bg-[var(--color-dark)] flex items-center justify-center relative">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src="/logos/nutriocus-white.png" alt="NUTRIOCUS" style={{ height: 38, width: "auto" }} />
+                {!accessible && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: 8,
+                      right: 8,
+                      background: "var(--color-primary)",
+                      color: "#fff",
+                      fontSize: 16,
+                      borderRadius: "50%",
+                      width: 28,
+                      height: 28,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    🔒
+                  </div>
+                )}
               </div>
               <div className="p-4">
+                {tierLabel && (
+                  <span
+                    className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded mb-1.5 inline-block"
+                    style={{
+                      background: accessible ? "rgba(95,140,10,0.14)" : "rgba(255,69,1,0.10)",
+                      color: accessible ? "var(--color-success)" : "var(--color-primary)",
+                      letterSpacing: ".08em",
+                    }}
+                  >
+                    {accessible ? "✓ " : "🔒 "}{tierLabel}
+                  </span>
+                )}
                 <div className="font-extrabold text-base mb-1">{f.title}</div>
-                <div className="text-xs text-[var(--color-text-muted)] mb-3">{f.desc || `${f.modules.length} modules`}</div>
-                <div className="flex items-center gap-2.5">
-                  <div className="flex-1 h-1.5 bg-[var(--color-border)] rounded-full overflow-hidden">
-                    <div style={{ width: p.pct + "%", height: "100%", background: "var(--color-primary)" }} />
+                <div className="text-xs text-[var(--color-text-muted)] mb-3">
+                  {f.desc || `${f.modules.length} modules`}
+                </div>
+                {accessible ? (
+                  <>
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex-1 h-1.5 bg-[var(--color-border)] rounded-full overflow-hidden">
+                        <div style={{ width: p.pct + "%", height: "100%", background: "var(--color-primary)" }} />
+                      </div>
+                      <span className="font-extrabold text-[var(--color-primary)] text-sm">{p.pct}%</span>
+                    </div>
+                    <div className="text-[11px] text-[var(--color-text-muted)] mt-1">
+                      {p.d}/{p.t} leçons · {f.modules.length} modules
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-[11px] font-bold" style={{ color: "var(--color-primary)" }}>
+                    Réservé à {tierLabel} →
                   </div>
-                  <span className="font-extrabold text-[var(--color-primary)] text-sm">{p.pct}%</span>
-                </div>
-                <div className="text-[11px] text-[var(--color-text-muted)] mt-1">
-                  {p.d}/{p.t} leçons · {f.modules.length} modules
-                </div>
+                )}
               </div>
             </div>
           );

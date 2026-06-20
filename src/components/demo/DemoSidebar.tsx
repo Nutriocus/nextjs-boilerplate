@@ -8,6 +8,7 @@ const DEMO_NAV = [
   {
     grp: "",
     items: [
+      { href: "/demo/parcours", label: "Mon parcours", ic: "🗺" },
       { href: "/demo/dashboard", label: "Tableau de bord", ic: "◧" },
       { href: "/demo/calendar", label: "Calendrier", ic: "▦" },
       { href: "/demo/profile", label: "Mon profil", ic: "●" },

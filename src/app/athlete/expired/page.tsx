@@ -96,24 +96,18 @@ export default function ExpiredPage() {
           historiques de progression sont conservés. Si tu reprends ton abonnement avant la fin de
           cette période, tu retrouves immédiatement <b>tout</b> où tu l&apos;avais laissé.
         </p>
-        <a
-          href="https://nutriocus.com"
+        <button
+          onClick={openPortal}
+          disabled={portalLoading}
           className="btn-primary"
           style={{ display: "inline-flex", padding: "10px 20px", fontSize: 14 }}
         >
-          🔄 Reprendre mon abonnement →
-        </a>
-      </div>
-
-      <div className="card p-5 mb-4">
-        <div className="font-extrabold text-base mb-2">Gérer mon abonnement Stripe</div>
-        <p className="text-sm text-[var(--color-text-muted)] mb-3">
-          Tu peux consulter ton historique de paiement, télécharger tes factures, ou réactiver ton
-          abonnement via le portail Stripe.
-        </p>
-        <button onClick={openPortal} disabled={portalLoading} className="btn-dark btn-sm">
-          {portalLoading ? "Ouverture…" : "Ouvrir mon portail Stripe →"}
+          {portalLoading ? "Ouverture…" : "🔄 Reprendre mon abonnement →"}
         </button>
+        <div className="text-[11px] text-[var(--color-text-muted)] mt-2">
+          Ouvre ton portail Stripe sécurisé pour réactiver ton abonnement,
+          mettre à jour ta carte ou changer de plan.
+        </div>
       </div>
 
       <div className="card p-4 text-sm text-[var(--color-text-muted)]">

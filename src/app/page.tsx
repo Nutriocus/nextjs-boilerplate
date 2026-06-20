@@ -14,15 +14,20 @@ export default function HomePage() {
         transition={{ duration: 0.4 }}
         className="text-center mb-12"
       >
-        <div className="inline-flex items-center gap-3 mb-2 px-5 py-1.5 rounded-full bg-[var(--color-dark)] text-white">
-          <span
-            className="font-extrabold tracking-tight text-sm"
-            style={{ fontFamily: "var(--font-display)" }}
-          >
-            NUTRIOCUS
-            <span className="text-[var(--color-primary)]">.</span>
-          </span>
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/logos/nutriocus-white.png"
+          alt="NUTRIOCUS"
+          style={{
+            height: 56,
+            width: "auto",
+            display: "inline-block",
+            // CSS filter makes the white logo render in pure black on the
+            // cream background. Replace with /logos/nutriocus-black.png and
+            // remove the filter if a true black PNG is provided.
+            filter: "brightness(0)",
+          }}
+        />
         <h1
           className="font-extrabold uppercase mt-3 text-3xl sm:text-4xl md:text-[44px]"
           style={{

@@ -26,6 +26,7 @@ const DEMO_NAV = [
       { href: "/demo/energy", label: "Carnet de bord énergie", ic: "▮" },
       { href: "/demo/composition", label: "Composition corporelle", ic: "▤" },
       { href: "/demo/sweat", label: "Taux de sudation", ic: "◓" },
+      { href: "/demo/blood-tests", label: "Bilans biologiques", ic: "🩸" },
     ],
   },
   {

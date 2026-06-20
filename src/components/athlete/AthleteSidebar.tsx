@@ -27,6 +27,7 @@ export const ATHLETE_NAV = [
       { href: "/athlete/energy", label: "Carnet de bord énergie", ic: "▮" },
       { href: "/athlete/composition", label: "Composition corporelle", ic: "▤" },
       { href: "/athlete/sweat", label: "Taux de sudation", ic: "◓" },
+      { href: "/athlete/blood-tests", label: "Bilans biologiques", ic: "🩸" },
     ],
   },
   {

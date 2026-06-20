@@ -51,6 +51,8 @@ export type Mission = {
   isComplete?: (s: ParcoursSnapshot) => boolean;
   /** Pure reading/awareness — only completable via manual check. */
   manualOnly?: boolean;
+  /** Future tutorial video URL. If undefined → placeholder "à venir bientôt". */
+  videoUrl?: string;
 };
 
 export type Phase = {

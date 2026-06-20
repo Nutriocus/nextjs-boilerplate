@@ -61,7 +61,7 @@ function AuthForm() {
       .eq("user_id", userId)
       .single();
     if (athlete) {
-      router.push("/athlete/dashboard");
+      router.push("/athlete/parcours");
       return;
     }
 

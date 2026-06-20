@@ -27,7 +27,7 @@ export default function CallbackPage() {
 
       const { data: athlete } = await supabase
         .from("athletes").select("id").eq("user_id", session.user.id).single();
-      if (athlete) { router.push("/athlete/dashboard"); return; }
+      if (athlete) { router.push("/athlete/parcours"); return; }
 
       router.push("/auth/error?reason=no-role");
     }

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { PageHeader, Field } from "@/components/ui/PageHeader";
 
-const SPORTS = ["trail", "course", "cyclisme", "triathlon", "natation"] as const;
+const SPORTS = ["Trail", "Course", "Cyclisme", "Triathlon", "Natation"] as const;
 const LEVELS = [
   { value: "loisir", label: "Loisir" },
   { value: "amateur_confirme", label: "Amateur confirmé" },
@@ -22,7 +22,6 @@ export default function NewAthletePage() {
     email: "",
     sport: [] as string[],
     level: "",
-    height_cm: "",
     tier: "mission_performance",
   });
   const [loading, setLoading] = useState(false);
@@ -68,7 +67,6 @@ export default function NewAthletePage() {
           email: form.email.trim().toLowerCase(),
           sport: form.sport.length > 0 ? form.sport : null,
           level: form.level || null,
-          height_cm: form.height_cm ? Number(form.height_cm) : null,
           tier: form.tier || null,
         }),
       });
@@ -154,7 +152,7 @@ export default function NewAthletePage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+        <div className="mt-3">
           <Field label="Niveau">
             <select
               className="input"
@@ -166,15 +164,6 @@ export default function NewAthletePage() {
                 <option key={l.value} value={l.value}>{l.label}</option>
               ))}
             </select>
-          </Field>
-          <Field label="Taille (cm)">
-            <input
-              className="input"
-              value={form.height_cm}
-              onChange={(e) => setForm({ ...form, height_cm: e.target.value })}
-              placeholder="175"
-              inputMode="numeric"
-            />
           </Field>
         </div>
 

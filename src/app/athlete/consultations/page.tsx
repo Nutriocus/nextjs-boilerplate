@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAthleteData } from "@/lib/athlete-storage";
+import { supabase } from "@/lib/supabase";
 import { PageHeader, Empty, Field } from "@/components/ui/PageHeader";
 import { VideoEmbed } from "@/components/ui/VideoEmbed";
 import { PrintReport, PrintH, PrintButton } from "@/components/ui/PrintReport";
@@ -40,13 +42,51 @@ const blank = (): Consultation => ({
 });
 
 export default function ConsultationsPage() {
+  const searchParams = useSearchParams();
+  const athleteIdFromUrl = searchParams?.get("athleteId") || null;
+  const isCoachView = !!athleteIdFromUrl;
+
   const [consultations, setConsultations, loaded] = useAthleteData<Consultation[]>("consultations", []);
   const [draft, setDraft] = useState<Consultation>(blank());
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [view, setView] = useState<string | null>(null);
+  const [notifyByEmail, setNotifyByEmail] = useState(true);
+  const [notifyMsg, setNotifyMsg] = useState<string | null>(null);
 
   const update = (k: keyof Consultation, v: string) => setDraft((d) => ({ ...d, [k]: v }));
+
+  async function sendNotification(consult: Consultation) {
+    if (!athleteIdFromUrl) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        setNotifyMsg("⚠ Session expirée — email non envoyé.");
+        return;
+      }
+      const res = await fetch("/api/notify/consultation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          athleteId: athleteIdFromUrl,
+          consultationType: consult.type,
+          consultationDate: consult.date,
+        }),
+      });
+      const json = await res.json();
+      if (res.ok && json.ok) {
+        setNotifyMsg("✓ Email envoyé à l'athlète.");
+      } else {
+        setNotifyMsg("⚠ Email non envoyé : " + (json.error || "erreur inconnue"));
+      }
+      setTimeout(() => setNotifyMsg(null), 5000);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "erreur inconnue";
+      setNotifyMsg("⚠ Email non envoyé : " + msg);
+      setTimeout(() => setNotifyMsg(null), 5000);
+    }
+  }
 
   const startCreate = () => {
     setDraft(blank());
@@ -69,14 +109,20 @@ export default function ConsultationsPage() {
 
   const save = () => {
     if (!draft.date) return;
+    const newConsult: Consultation = editingId ? { ...draft, id: editingId } : { ...draft, id: newId() };
     setConsultations((p) => {
       if (editingId) {
-        return p
-          .map((c) => (c.id === editingId ? { ...draft, id: editingId } : c))
-          .sort((a, b) => (a.date < b.date ? 1 : -1));
+        return p.map((c) => (c.id === editingId ? newConsult : c)).sort((a, b) => (a.date < b.date ? 1 : -1));
       }
-      return [...p, { ...draft, id: newId() }].sort((a, b) => (a.date < b.date ? 1 : -1));
+      return [...p, newConsult].sort((a, b) => (a.date < b.date ? 1 : -1));
     });
+    // Send notification ONLY when:
+    //  - new consultation (not an edit)
+    //  - we are in coach view (?athleteId=…)
+    //  - the coach left the "Notifier" checkbox enabled
+    if (!editingId && isCoachView && notifyByEmail) {
+      sendNotification(newConsult);
+    }
     cancelForm();
   };
 
@@ -219,7 +265,29 @@ export default function ConsultationsPage() {
               />
             </Field>
           </div>
-          <div className="flex justify-end gap-2 mt-3">
+          {/* Notify the athlete by email — only when coach view + new consultation */}
+          {isCoachView && !editingId && (
+            <div className="mt-3 p-2.5 rounded-lg" style={{ background: "var(--color-surface-2)", border: "1px dashed var(--color-border)" }}>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={notifyByEmail}
+                  onChange={(e) => setNotifyByEmail(e.target.checked)}
+                  style={{ width: 16, height: 16 }}
+                />
+                <span className="text-sm">
+                  📧 Prévenir l&apos;athlète par email que son compte rendu est disponible
+                </span>
+              </label>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 mt-3 items-center flex-wrap">
+            {notifyMsg && (
+              <span className="text-xs" style={{ color: notifyMsg.startsWith("✓") ? "var(--color-success)" : "var(--color-danger)" }}>
+                {notifyMsg}
+              </span>
+            )}
             <button onClick={cancelForm} className="btn-ghost">Annuler</button>
             <button onClick={save} className="btn-primary">
               {editingId ? "Enregistrer les modifications" : "Enregistrer"}

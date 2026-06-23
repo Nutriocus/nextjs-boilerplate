@@ -9,6 +9,8 @@ type SportKey = "trail" | "triathlon" | "cyclisme" | "route" | "autre";
 type EventItem = {
   id: string;
   date: string;
+  /** Optional end date for multi-day stage races (course à étapes). */
+  endDate?: string;
   name: string;
   sport: SportKey;
   type: "objectif" | "test";
@@ -55,6 +57,10 @@ function toNum(v: unknown): number {
 function daysFromToday(dateStr: string): number {
   return Math.ceil((+new Date(dateStr + "T00:00:00") - +new Date(today() + "T00:00:00")) / 86400000);
 }
+function daysBetween(a: string, b: string): number {
+  // inclusive count (jour début + jour fin = 2)
+  return Math.round((+new Date(b + "T00:00:00") - +new Date(a + "T00:00:00")) / 86400000) + 1;
+}
 const dateLong = (d: string) =>
   new Date(d + "T00:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
 
@@ -72,6 +78,7 @@ export default function SeasonPage() {
     phase: "Préparation",
     notes: "",
   });
+  const [multiDay, setMultiDay] = useState(false);
   const [phaseDraft, setPhaseDraft] = useState<{ label: Phase["label"]; start: string; end: string }>({
     label: "Préparation",
     start: "",
@@ -81,8 +88,11 @@ export default function SeasonPage() {
   function addEvent() {
     if (!draft.date || !draft.name) return;
     const sport = SPORTS.find((s) => s.label === draft.sport)?.k ?? draft.sport;
-    setEvents((p) => [...p, { ...draft, id: newId(), sport: sport as SportKey }]);
+    // Strip endDate if multi-day not selected OR if endDate is empty/before start
+    const validEnd = multiDay && draft.endDate && draft.endDate >= draft.date ? draft.endDate : undefined;
+    setEvents((p) => [...p, { ...draft, id: newId(), sport: sport as SportKey, endDate: validEnd }]);
     setDraft({ id: "", date: "", name: "", sport: "trail", type: "objectif", phase: "Préparation", notes: "" });
+    setMultiDay(false);
   }
   function removeEvent(id: string) {
     setEvents((p) => p.filter((e) => e.id !== id));
@@ -209,21 +219,28 @@ export default function SeasonPage() {
               const w = weekFromDate(e.date);
               if (w < 1 || w > totalWeeks) return null;
               const isObj = e.type === "objectif";
+              const wEnd = e.endDate ? weekFromDate(e.endDate) : w;
+              const isMultiDay = !!e.endDate && wEnd > w;
+              const bandWidth = isMultiDay ? (wEnd - w + 1) * weekWidth - 4 : 14;
+              const left = isMultiDay ? (w - 1) * weekWidth + 2 : (w - 0.5) * weekWidth - 7;
+              const dateLabel = isMultiDay && e.endDate
+                ? `${e.name} — du ${dateLong(e.date)} au ${dateLong(e.endDate)}`
+                : `${e.name} — ${dateLong(e.date)}`;
               return (
                 <div
                   key={e.id}
-                  title={`${e.name} — ${dateLong(e.date)}`}
+                  title={dateLabel}
                   className="absolute"
-                  style={{ left: (w - 0.5) * weekWidth - 7, top: 92 }}
+                  style={{ left, top: 92 }}
                 >
                   <div
-                    className="rounded-full"
                     style={{
-                      width: 14,
+                      width: bandWidth,
                       height: 14,
                       background: isObj ? "var(--color-primary)" : "var(--color-success)",
                       border: "2px solid #fff",
                       boxShadow: "0 1px 3px rgba(0,0,0,.2)",
+                      borderRadius: isMultiDay ? 7 : "50%",
                     }}
                   />
                   <div
@@ -267,7 +284,10 @@ export default function SeasonPage() {
         <div className="card p-4">
           <div className="font-extrabold mb-3">Ajouter un objectif / test</div>
           <div className="grid grid-cols-2 gap-2.5">
-            <Field label="Date"><input type="date" className="input" value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })} /></Field>
+            <Field label={multiDay ? "Date début" : "Date"}>
+              <input type="date" className="input" value={draft.date}
+                     onChange={(e) => setDraft({ ...draft, date: e.target.value })} />
+            </Field>
             <Field label="Nom"><input className="input" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></Field>
             <Field label="Sport">
               <select className="input" value={draft.sport} onChange={(e) => setDraft({ ...draft, sport: e.target.value as SportKey })}>
@@ -281,6 +301,41 @@ export default function SeasonPage() {
               </select>
             </Field>
           </div>
+
+          {/* Multi-day toggle */}
+          <div className="mt-2.5 p-2 rounded-lg" style={{ background: "var(--color-surface-2)", border: "1px dashed var(--color-border)" }}>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={multiDay}
+                onChange={(e) => {
+                  setMultiDay(e.target.checked);
+                  if (!e.target.checked) setDraft({ ...draft, endDate: undefined });
+                }}
+                style={{ width: 16, height: 16 }}
+              />
+              <span className="text-sm">📅 Course à étapes / multi-jours</span>
+            </label>
+            {multiDay && (
+              <div className="mt-2">
+                <Field label="Date de fin">
+                  <input
+                    type="date"
+                    className="input"
+                    value={draft.endDate || ""}
+                    min={draft.date || undefined}
+                    onChange={(e) => setDraft({ ...draft, endDate: e.target.value })}
+                  />
+                </Field>
+                {draft.date && draft.endDate && draft.endDate >= draft.date && (
+                  <div className="text-[11px] text-[var(--color-text-muted)] mt-1">
+                    Durée totale : <b>{daysBetween(draft.date, draft.endDate)} jours</b>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <Field label="Notes"><input className="input mt-2.5" value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} /></Field>
           <div className="flex justify-end mt-2.5">
             <button onClick={addEvent} className="btn-primary">Ajouter</button>
@@ -332,9 +387,17 @@ export default function SeasonPage() {
                       {e.name}
                       <Badge variant={isObj ? "orange" : "green"}>{isObj ? "Objectif" : "Test"}</Badge>
                       <Badge variant="dark">S{w}</Badge>
+                      {e.endDate && (
+                        <Badge variant="dark">
+                          📅 {daysBetween(e.date, e.endDate)} jours
+                        </Badge>
+                      )}
                     </div>
                     <div className="text-xs text-[var(--color-text-muted)] mt-0.5">
-                      {sport.label} · {dateLong(e.date)}
+                      {sport.label} ·{" "}
+                      {e.endDate
+                        ? `Du ${dateLong(e.date)} au ${dateLong(e.endDate)}`
+                        : dateLong(e.date)}
                       {e.notes ? ` · ${e.notes}` : ""}
                     </div>
                   </div>
@@ -360,7 +423,11 @@ export default function SeasonPage() {
                   <div className="text-xl">{sport.ic}</div>
                   <div className="flex-1">
                     <div className="font-bold">{e.name}</div>
-                    <div className="text-xs text-[var(--color-text-muted)]">{dateLong(e.date)}</div>
+                    <div className="text-xs text-[var(--color-text-muted)]">
+                      {e.endDate
+                        ? `Du ${dateLong(e.date)} au ${dateLong(e.endDate)} · ${daysBetween(e.date, e.endDate)} jours`
+                        : dateLong(e.date)}
+                    </div>
                   </div>
                   <button onClick={() => removeEvent(e.id)} style={{ border: "none", background: "none", color: "var(--color-danger)", cursor: "pointer" }}>✕</button>
                 </div>

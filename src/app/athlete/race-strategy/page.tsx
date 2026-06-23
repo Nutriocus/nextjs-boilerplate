@@ -138,6 +138,17 @@ function defaultTriPhases(): TriPhase[] {
 }
 
 const newId = () => Math.random().toString(36).slice(2, 9);
+
+/** Move item at `from` by `delta` positions (e.g. -1 for up, +1 for down). */
+function moveItem<T>(arr: T[], from: number, delta: number): T[] {
+  const to = from + delta;
+  if (to < 0 || to >= arr.length) return arr;
+  const next = [...arr];
+  const [removed] = next.splice(from, 1);
+  next.splice(to, 0, removed);
+  return next;
+}
+
 function toNum(v: unknown): number {
   const n = parseFloat(String(v).replace(",", "."));
   return isNaN(n) ? 0 : n;
@@ -1022,12 +1033,30 @@ export default function RaceStrategyPage() {
         <div className="card p-4 mb-3.5">
           <div className="font-extrabold mb-2">Avant la course</div>
           {planEdit.avantCourse.map((l, i) => (
-            <div key={i} className="flex gap-2 mb-1.5">
+            <div key={i} className="flex gap-1 mb-1.5">
               <input
-                className="input"
+                className="input flex-1"
                 value={l}
                 onChange={(e) => updatePlan({ avantCourse: planEdit.avantCourse.map((x, idx) => (idx === i ? e.target.value : x)) })}
               />
+              <button
+                onClick={() => updatePlan({ avantCourse: moveItem(planEdit.avantCourse, i, -1) })}
+                disabled={i === 0}
+                className="btn-ghost btn-sm"
+                style={{ opacity: i === 0 ? 0.3 : 1, minWidth: 30 }}
+                title="Monter"
+              >
+                ↑
+              </button>
+              <button
+                onClick={() => updatePlan({ avantCourse: moveItem(planEdit.avantCourse, i, 1) })}
+                disabled={i === planEdit.avantCourse.length - 1}
+                className="btn-ghost btn-sm"
+                style={{ opacity: i === planEdit.avantCourse.length - 1 ? 0.3 : 1, minWidth: 30 }}
+                title="Descendre"
+              >
+                ↓
+              </button>
               <button
                 onClick={() => updatePlan({ avantCourse: planEdit.avantCourse.filter((_, idx) => idx !== i) })}
                 className="btn-ghost btn-sm"
@@ -1042,21 +1071,64 @@ export default function RaceStrategyPage() {
 
         {!isTri && planEdit.segments.map((seg, i) => (
           <div key={i} className="card p-4 mb-3.5">
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-2 mb-3">
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <div className="text-[10px] uppercase font-bold" style={{ letterSpacing: ".08em", color: "var(--color-primary)" }}>
+                Ravito {i + 1} / {planEdit.segments.length}
+              </div>
+              <div className="flex gap-1">
+                <button
+                  onClick={() => updatePlan({ segments: moveItem(planEdit.segments, i, -1) })}
+                  disabled={i === 0}
+                  className="btn-ghost btn-sm"
+                  style={{ opacity: i === 0 ? 0.3 : 1 }}
+                  title="Monter ce ravito dans l'ordre"
+                >
+                  ↑ Monter
+                </button>
+                <button
+                  onClick={() => updatePlan({ segments: moveItem(planEdit.segments, i, 1) })}
+                  disabled={i === planEdit.segments.length - 1}
+                  className="btn-ghost btn-sm"
+                  style={{ opacity: i === planEdit.segments.length - 1 ? 0.3 : 1 }}
+                  title="Descendre ce ravito dans l'ordre"
+                >
+                  ↓ Descendre
+                </button>
+                <button onClick={() => updatePlan({ segments: planEdit.segments.filter((_, idx) => idx !== i) })} className="btn-ghost btn-sm" style={{ color: "var(--color-danger)" }}>Supprimer</button>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
               <Field label="Nom (ravito)"><input className="input" value={seg.nom} onChange={(e) => updateSeg(i, { nom: e.target.value })} /></Field>
               <Field label="KM"><input className="input" value={seg.km} onChange={(e) => updateSeg(i, { km: e.target.value })} /></Field>
               <Field label="Heure"><input className="input" value={seg.heure} onChange={(e) => updateSeg(i, { heure: e.target.value })} /></Field>
               <Field label="Temps segment"><input className="input" value={seg.temps} onChange={(e) => updateSeg(i, { temps: e.target.value })} /></Field>
-              <button onClick={() => updatePlan({ segments: planEdit.segments.filter((_, idx) => idx !== i) })} className="btn-ghost" style={{ color: "var(--color-danger)" }}>Supprimer ravito</button>
             </div>
             <div className="font-extrabold mb-1">Contenu du ravito / segment</div>
             {seg.contenu.map((l, ci) => (
-              <div key={ci} className="flex gap-2 mb-1.5">
+              <div key={ci} className="flex gap-1 mb-1.5">
                 <input
-                  className="input"
+                  className="input flex-1"
                   value={l}
                   onChange={(e) => updateSeg(i, { contenu: seg.contenu.map((x, idx) => (idx === ci ? e.target.value : x)) })}
                 />
+                <button
+                  onClick={() => updateSeg(i, { contenu: moveItem(seg.contenu, ci, -1) })}
+                  disabled={ci === 0}
+                  className="btn-ghost btn-sm"
+                  style={{ opacity: ci === 0 ? 0.3 : 1, minWidth: 30 }}
+                  title="Monter"
+                >
+                  ↑
+                </button>
+                <button
+                  onClick={() => updateSeg(i, { contenu: moveItem(seg.contenu, ci, 1) })}
+                  disabled={ci === seg.contenu.length - 1}
+                  className="btn-ghost btn-sm"
+                  style={{ opacity: ci === seg.contenu.length - 1 ? 0.3 : 1, minWidth: 30 }}
+                  title="Descendre"
+                >
+                  ↓
+                </button>
                 <button
                   onClick={() => updateSeg(i, { contenu: seg.contenu.filter((_, idx) => idx !== ci) })}
                   className="btn-ghost btn-sm"
@@ -1107,12 +1179,30 @@ export default function RaceStrategyPage() {
 
               <div className="font-extrabold mb-1 text-sm">Contenu / ravito de la phase</div>
               {ph.contenu.map((l, ci) => (
-                <div key={ci} className="flex gap-2 mb-1.5">
+                <div key={ci} className="flex gap-1 mb-1.5">
                   <input
-                    className="input"
+                    className="input flex-1"
                     value={l}
                     onChange={(e) => updatePhase(i, { contenu: ph.contenu.map((x, idx) => (idx === ci ? e.target.value : x)) })}
                   />
+                  <button
+                    onClick={() => updatePhase(i, { contenu: moveItem(ph.contenu, ci, -1) })}
+                    disabled={ci === 0}
+                    className="btn-ghost btn-sm"
+                    style={{ opacity: ci === 0 ? 0.3 : 1, minWidth: 30 }}
+                    title="Monter"
+                  >
+                    ↑
+                  </button>
+                  <button
+                    onClick={() => updatePhase(i, { contenu: moveItem(ph.contenu, ci, 1) })}
+                    disabled={ci === ph.contenu.length - 1}
+                    className="btn-ghost btn-sm"
+                    style={{ opacity: ci === ph.contenu.length - 1 ? 0.3 : 1, minWidth: 30 }}
+                    title="Descendre"
+                  >
+                    ↓
+                  </button>
                   <button
                     onClick={() => updatePhase(i, { contenu: ph.contenu.filter((_, idx) => idx !== ci) })}
                     className="btn-ghost btn-sm"

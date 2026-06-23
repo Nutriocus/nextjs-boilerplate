@@ -50,10 +50,10 @@ export async function POST(req: NextRequest) {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // 3. Verify caller is a coach
+    // 3. Verify caller is a coach (only need to confirm existence, not detailed fields)
     const { data: coach, error: coachErr } = await admin
       .from("coaches")
-      .select("id, first_name, last_name")
+      .select("id")
       .eq("user_id", user.id)
       .maybeSingle();
     if (coachErr) {
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
     if (!coach) {
       return NextResponse.json(
         {
-          error: `Réservé aux coachs (aucune ligne 'coaches' avec user_id=${user.id} / email=${user.email}). Vérifie ta table 'coaches' sur Supabase.`,
+          error: `Réservé aux coachs (aucune ligne 'coaches' avec user_id=${user.id} / email=${user.email}).`,
         },
         { status: 403 },
       );
@@ -96,7 +96,8 @@ export async function POST(req: NextRequest) {
     }
 
     // 5. Compose + send email
-    const coachName = `${coach.first_name ?? ""} ${coach.last_name ?? ""}`.trim() || "Ton coach Nutriocus";
+    // Coach name = configurable env var (defaults to Florian Mouchel)
+    const coachName = process.env.NOTIFY_COACH_NAME || "Florian Mouchel — Diététicien du sport, fondateur de Nutriocus";
     const dateLong = consultationDate
       ? new Date(consultationDate + "T00:00:00").toLocaleDateString("fr-FR", {
           day: "2-digit",

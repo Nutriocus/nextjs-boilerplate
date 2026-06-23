@@ -57,12 +57,17 @@ export default function ConsultationsPage() {
   const update = (k: keyof Consultation, v: string) => setDraft((d) => ({ ...d, [k]: v }));
 
   async function sendNotification(consult: Consultation) {
-    if (!athleteIdFromUrl) return;
+    if (!athleteIdFromUrl) {
+      console.warn("[notify] skipped: no athleteId in URL (not in coach view)");
+      return;
+    }
+    console.log("[notify] starting send for athlete", athleteIdFromUrl);
+    setNotifyMsg("⏳ Envoi de l'email en cours…");
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token;
       if (!token) {
-        setNotifyMsg("⚠ Session expirée — email non envoyé.");
+        setNotifyMsg("⚠ Session expirée — reconnecte-toi puis renvoie.");
         return;
       }
       const res = await fetch("/api/notify/consultation", {
@@ -74,17 +79,19 @@ export default function ConsultationsPage() {
           consultationDate: consult.date,
         }),
       });
-      const json = await res.json();
+      const json = await res.json().catch(() => ({}));
+      console.log("[notify] response", res.status, json);
       if (res.ok && json.ok) {
         setNotifyMsg("✓ Email envoyé à l'athlète.");
       } else {
-        setNotifyMsg("⚠ Email non envoyé : " + (json.error || "erreur inconnue"));
+        setNotifyMsg("⚠ Email non envoyé : " + (json.error || `HTTP ${res.status}`));
       }
-      setTimeout(() => setNotifyMsg(null), 5000);
+      setTimeout(() => setNotifyMsg(null), 12000);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "erreur inconnue";
+      console.error("[notify] error", e);
       setNotifyMsg("⚠ Email non envoyé : " + msg);
-      setTimeout(() => setNotifyMsg(null), 5000);
+      setTimeout(() => setNotifyMsg(null), 12000);
     }
   }
 
@@ -240,6 +247,26 @@ export default function ConsultationsPage() {
         desc="Comptes rendus et replays de tes consultations."
       />
 
+      {/* Email notification toast — page-level so it survives form close */}
+      {notifyMsg && (
+        <div
+          className="mb-3 p-3 rounded-lg text-sm font-bold"
+          style={{
+            background: notifyMsg.startsWith("✓")
+              ? "rgba(95,140,10,0.10)"
+              : "rgba(207,46,46,0.10)",
+            color: notifyMsg.startsWith("✓")
+              ? "var(--color-success)"
+              : "var(--color-danger)",
+            border: notifyMsg.startsWith("✓")
+              ? "1px solid rgba(95,140,10,0.40)"
+              : "1px solid rgba(207,46,46,0.40)",
+          }}
+        >
+          {notifyMsg}
+        </div>
+      )}
+
       {open && (
         <div className="card p-4 mb-4" style={{ border: `2px solid var(--color-primary)` }}>
           <div className="text-[10px] uppercase font-bold mb-2" style={{ letterSpacing: ".08em", color: "var(--color-primary)" }}>
@@ -283,11 +310,6 @@ export default function ConsultationsPage() {
           )}
 
           <div className="flex justify-end gap-2 mt-3 items-center flex-wrap">
-            {notifyMsg && (
-              <span className="text-xs" style={{ color: notifyMsg.startsWith("✓") ? "var(--color-success)" : "var(--color-danger)" }}>
-                {notifyMsg}
-              </span>
-            )}
             <button onClick={cancelForm} className="btn-ghost">Annuler</button>
             <button onClick={save} className="btn-primary">
               {editingId ? "Enregistrer les modifications" : "Enregistrer"}

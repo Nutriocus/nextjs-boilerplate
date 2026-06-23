@@ -54,18 +54,23 @@ export async function POST(req: NextRequest) {
     if (!body) {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     }
-    const { first_name, last_name, email, sport, level, height_cm } = body as {
+    const { first_name, last_name, email, sport, level, height_cm, tier } = body as {
       first_name?: string;
       last_name?: string;
       email?: string;
       sport?: string[];
       level?: string;
       height_cm?: number;
+      tier?: string;
     };
     if (!first_name || !last_name || !email) {
       return NextResponse.json({ error: "Nom, prénom et email requis" }, { status: 400 });
     }
     const cleanEmail = email.trim().toLowerCase();
+
+    // Validate tier
+    const validTiers = ["plateforme", "progression_guidee", "mission_performance"];
+    const cleanTier = tier && validTiers.includes(tier) ? tier : null;
 
     // --- 3. Admin client (service_role) ---
     const admin = createClient(url, serviceKey, {
@@ -115,36 +120,47 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (existing) {
+      const updatePayload: Record<string, unknown> = {
+        user_id: authUserId,
+        coach_id: coach.id,
+        first_name,
+        last_name,
+        sport: sport || null,
+        level: level || null,
+        height_cm: height_cm || null,
+        status: "active",
+      };
+      // Only set tier if explicitly provided (don't overwrite an existing Stripe tier with null)
+      if (cleanTier) {
+        updatePayload.subscription_tier = cleanTier;
+        updatePayload.subscription_status = "active";
+      }
       const { error: upErr } = await admin
         .from("athletes")
-        .update({
-          user_id: authUserId,
-          coach_id: coach.id,
-          first_name,
-          last_name,
-          sport: sport || null,
-          level: level || null,
-          height_cm: height_cm || null,
-          status: "active",
-        })
+        .update(updatePayload)
         .eq("id", existing.id);
       if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
       return NextResponse.json({ ok: true, athleteId: existing.id, mode: "updated" });
     }
 
+    const insertPayload: Record<string, unknown> = {
+      user_id: authUserId,
+      coach_id: coach.id,
+      first_name,
+      last_name,
+      email: cleanEmail,
+      sport: sport || null,
+      level: level || null,
+      height_cm: height_cm || null,
+      status: "active",
+    };
+    if (cleanTier) {
+      insertPayload.subscription_tier = cleanTier;
+      insertPayload.subscription_status = "active";
+    }
     const { data: created, error: insErr } = await admin
       .from("athletes")
-      .insert({
-        user_id: authUserId,
-        coach_id: coach.id,
-        first_name,
-        last_name,
-        email: cleanEmail,
-        sport: sport || null,
-        level: level || null,
-        height_cm: height_cm || null,
-        status: "active",
-      })
+      .insert(insertPayload)
       .select("id")
       .single();
     if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });

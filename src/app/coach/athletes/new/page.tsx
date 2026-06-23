@@ -23,6 +23,7 @@ export default function NewAthletePage() {
     sport: [] as string[],
     level: "",
     height_cm: "",
+    tier: "mission_performance",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +69,7 @@ export default function NewAthletePage() {
           sport: form.sport.length > 0 ? form.sport : null,
           level: form.level || null,
           height_cm: form.height_cm ? Number(form.height_cm) : null,
+          tier: form.tier || null,
         }),
       });
       const json = await res.json();
@@ -174,6 +176,33 @@ export default function NewAthletePage() {
               inputMode="numeric"
             />
           </Field>
+        </div>
+
+        {/* Offre / abonnement — détermine l'accès aux modules tier-gatés */}
+        <div className="mt-3 p-3 rounded-lg" style={{ background: "var(--color-surface-2)", border: "1px dashed var(--color-border)" }}>
+          <div className="text-[10px] uppercase font-bold mb-2" style={{ letterSpacing: ".08em", color: "var(--color-primary)" }}>
+            💳 Offre / abonnement
+          </div>
+          <Field label="À quelle offre est inscrit cet athlète ?">
+            <select
+              className="input"
+              value={form.tier}
+              onChange={(e) => setForm({ ...form, tier: e.target.value })}
+            >
+              <option value="plateforme">La plateforme Nutriocus — 97€/mois</option>
+              <option value="progression_guidee">Progression Guidée — 199€/mois</option>
+              <option value="mission_performance">Mission Performance — 399€/mois</option>
+            </select>
+          </Field>
+          <div className="text-[11px] text-[var(--color-text-muted)] mt-2 leading-relaxed">
+            👉 Cette offre détermine les modules auxquels l&apos;athlète aura accès :
+            <ul className="list-disc pl-5 mt-1 space-y-0.5">
+              <li><b>Plateforme</b> : tous les modules sauf Consultations, Académie, Outils IA, Protocoles</li>
+              <li><b>Progression Guidée</b> : Plateforme + <b>Consultations</b></li>
+              <li><b>Mission Performance</b> : tout, y compris <b>Académie</b> (formations vidéo) et <b>Outils IA</b></li>
+            </ul>
+            L&apos;athlète pourra basculer vers un paiement Stripe automatique à tout moment.
+          </div>
         </div>
 
         {error && (

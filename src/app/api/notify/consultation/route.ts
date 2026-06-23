@@ -21,37 +21,55 @@ export async function POST(req: NextRequest) {
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     const resendKey = process.env.RESEND_API_KEY;
 
-    if (!url || !anonKey) {
-      return NextResponse.json({ error: "Supabase not configured" }, { status: 500 });
+    if (!url || !anonKey || !serviceKey) {
+      return NextResponse.json({ error: "Supabase env vars missing" }, { status: 500 });
     }
     if (!resendKey) {
       return NextResponse.json({ error: "RESEND_API_KEY not configured on Vercel" }, { status: 500 });
     }
 
-    // Verify caller is a coach
+    // 1. Verify auth + extract user
     const authHeader = req.headers.get("authorization");
     if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Missing authorization" }, { status: 401 });
+      return NextResponse.json({ error: "Missing authorization header" }, { status: 401 });
     }
     const userToken = authHeader.slice(7);
     const userClient = createClient(url, anonKey, {
       global: { headers: { Authorization: `Bearer ${userToken}` } },
     });
-    const { data: { user } } = await userClient.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { data: { user }, error: userErr } = await userClient.auth.getUser();
+    if (userErr || !user) {
+      return NextResponse.json({ error: `Unauthorized: ${userErr?.message ?? "no user"}` }, { status: 401 });
     }
-    const { data: coach } = await userClient
+
+    // 2. Admin client (service role) — bypasses RLS for coach/athlete lookups
+    const admin = createClient(url, serviceKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+
+    // 3. Verify caller is a coach
+    const { data: coach, error: coachErr } = await admin
       .from("coaches")
       .select("id, first_name, last_name")
       .eq("user_id", user.id)
       .maybeSingle();
+    if (coachErr) {
+      console.error("[notify] coach lookup failed", coachErr);
+      return NextResponse.json({ error: `Coach lookup: ${coachErr.message}` }, { status: 500 });
+    }
     if (!coach) {
-      return NextResponse.json({ error: "Réservé aux coachs" }, { status: 403 });
+      return NextResponse.json(
+        {
+          error: `Réservé aux coachs (aucune ligne 'coaches' avec user_id=${user.id} / email=${user.email}). Vérifie ta table 'coaches' sur Supabase.`,
+        },
+        { status: 403 },
+      );
     }
 
+    // 4. Parse body + fetch athlete
     const body = await req.json().catch(() => null);
     if (!body) return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
     const { athleteId, consultationType, consultationDate } = body as {
@@ -62,17 +80,22 @@ export async function POST(req: NextRequest) {
     if (!athleteId) {
       return NextResponse.json({ error: "athleteId requis" }, { status: 400 });
     }
-
-    // Fetch athlete email + first_name
-    const { data: athlete } = await userClient
+    const { data: athlete, error: athleteErr } = await admin
       .from("athletes")
-      .select("email, first_name")
+      .select("email, first_name, coach_id")
       .eq("id", athleteId)
       .maybeSingle();
-    if (!athlete?.email) {
-      return NextResponse.json({ error: "Athlète sans email" }, { status: 404 });
+    if (athleteErr) {
+      return NextResponse.json({ error: `Athlete lookup: ${athleteErr.message}` }, { status: 500 });
+    }
+    if (!athlete) {
+      return NextResponse.json({ error: `Athlète introuvable (id=${athleteId})` }, { status: 404 });
+    }
+    if (!athlete.email) {
+      return NextResponse.json({ error: "L'athlète n'a pas d'email enregistré" }, { status: 400 });
     }
 
+    // 5. Compose + send email
     const coachName = `${coach.first_name ?? ""} ${coach.last_name ?? ""}`.trim() || "Ton coach Nutriocus";
     const dateLong = consultationDate
       ? new Date(consultationDate + "T00:00:00").toLocaleDateString("fr-FR", {
@@ -143,7 +166,6 @@ ${coachName}`;
   </body>
 </html>`;
 
-    // Send via Resend HTTP API
     const resendRes = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
@@ -161,13 +183,14 @@ ${coachName}`;
 
     if (!resendRes.ok) {
       const errText = await resendRes.text();
-      console.error("[notify consultation] Resend error:", errText);
-      return NextResponse.json({ error: `Resend: ${errText}` }, { status: 502 });
+      console.error("[notify] Resend error:", resendRes.status, errText);
+      return NextResponse.json({ error: `Resend (${resendRes.status}): ${errText}` }, { status: 502 });
     }
 
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "unknown";
+    console.error("[notify] unexpected", e);
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

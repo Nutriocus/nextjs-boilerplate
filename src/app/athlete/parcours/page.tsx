@@ -245,24 +245,16 @@ export default function ParcoursPage() {
                             </button>
                           </Link>
                         )}
-                        {/* Tutorial video: real link if videoUrl set, otherwise
-                            placeholder showing "à venir bientôt". */}
-                        {status !== "locked" && (m.videoUrl ? (
+                        {/* Tutorial video: only show button if videoUrl is set.
+                            The "à venir" placeholder has been removed — we'll
+                            re-add real links here once videos are produced. */}
+                        {status !== "locked" && m.videoUrl && (
                           <a href={m.videoUrl} target="_blank" rel="noopener noreferrer">
                             <button className="btn-ghost btn-sm" style={{ color: "var(--color-primary)" }}>
                               📹 Vidéo tuto
                             </button>
                           </a>
-                        ) : (
-                          <button
-                            onClick={() => alert("🚧 Vidéo tuto en cours de tournage — disponible bientôt dans l'Académie !")}
-                            className="btn-ghost btn-sm"
-                            style={{ color: "var(--color-text-muted)" }}
-                            title="Vidéo tuto à venir bientôt"
-                          >
-                            📹 Vidéo tuto · à venir
-                          </button>
-                        ))}
+                        )}
                         {/* Manual toggle — always available when phase unlocked.
                             Use it for manualOnly missions OR as an override when
                             auto-detection misses something the athlete already did. */}

@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { useAthleteData } from "@/lib/athlete-storage";
+import { supabase } from "@/lib/supabase";
 import { PageHeader, Empty, Field } from "@/components/ui/PageHeader";
 import { PrintReport, PrintH, PrintButton, PrintKpi } from "@/components/ui/PrintReport";
 import { PRODUCTS_CATALOG, Product } from "@/lib/products-catalog";
@@ -640,9 +642,54 @@ function SummaryCards({ c, tolGluc, tolHydr }: { c: ReturnType<typeof computeTot
 // MAIN PAGE
 // ============================================================
 export default function RaceStrategyPage() {
+  const searchParams = useSearchParams();
+  const athleteIdFromUrl = searchParams?.get("athleteId") || null;
+  const isCoachView = !!athleteIdFromUrl;
+
   const [strategies, setStrategies, loadedS] = useAthleteData<Strategy[]>("strat", []);
   const [racePlans, setRacePlans, loadedR] = useAthleteData<RacePlan[]>("raceplans", []);
   const [custom] = useAthleteData<Product[]>("custom", []);
+  const [notifyMsg, setNotifyMsg] = useState<string | null>(null);
+  const [notifyLoading, setNotifyLoading] = useState(false);
+
+  async function sendPlanByEmail(plan: RacePlan) {
+    if (!athleteIdFromUrl) {
+      setNotifyMsg("⚠ Tu dois être en mode coach (URL avec ?athleteId=...) pour envoyer un email.");
+      setTimeout(() => setNotifyMsg(null), 8000);
+      return;
+    }
+    setNotifyLoading(true);
+    setNotifyMsg("⏳ Envoi de l'email en cours…");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) throw new Error("Session expirée — reconnecte-toi");
+      const res = await fetch("/api/notify/race-strategy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          athleteId: athleteIdFromUrl,
+          planName: plan.name,
+          discipline: plan.discipline,
+          km: plan.km,
+          dplus: plan.dplus,
+          objectif: plan.objectif,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.ok) {
+        setNotifyMsg("✓ Email envoyé à l'athlète.");
+      } else {
+        setNotifyMsg("⚠ Email non envoyé : " + (json.error || `HTTP ${res.status}`));
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "erreur inconnue";
+      setNotifyMsg("⚠ Email non envoyé : " + msg);
+    } finally {
+      setNotifyLoading(false);
+      setTimeout(() => setNotifyMsg(null), 12000);
+    }
+  }
   const [profile] = useAthleteData<{
     poids?: number | string;
     tolGlucCAP?: number | string;
@@ -1001,6 +1048,19 @@ export default function RaceStrategyPage() {
         <div className="screen-only">
         <PageHeader kicker="Anticiper tes courses" title="Plan de course" />
 
+        {notifyMsg && (
+          <div
+            className="mb-3 p-3 rounded-lg text-sm font-bold"
+            style={{
+              background: notifyMsg.startsWith("✓") ? "rgba(95,140,10,0.10)" : notifyMsg.startsWith("⏳") ? "rgba(0,0,0,0.05)" : "rgba(207,46,46,0.10)",
+              color: notifyMsg.startsWith("✓") ? "var(--color-success)" : notifyMsg.startsWith("⏳") ? "var(--color-text-muted)" : "var(--color-danger)",
+              border: notifyMsg.startsWith("✓") ? "1px solid rgba(95,140,10,0.40)" : notifyMsg.startsWith("⏳") ? "1px solid var(--color-border)" : "1px solid rgba(207,46,46,0.40)",
+            }}
+          >
+            {notifyMsg}
+          </div>
+        )}
+
         <div className="card p-4 mb-3.5" style={{ borderLeft: "5px solid var(--color-primary)" }}>
           <div className="flex items-center gap-3 flex-wrap">
             <div style={{ fontSize: 26, lineHeight: 1 }}>{DISCIPLINE_ICON[discipline]}</div>
@@ -1230,6 +1290,16 @@ export default function RaceStrategyPage() {
             <button onClick={() => setPlanEdit(null)} className="btn-ghost">Annuler</button>
             <button onClick={() => downloadExport(planEdit)} className="btn-dark">Exporter en texte</button>
             <button onClick={() => { setPrintPlan(planEdit); setTimeout(() => window.print(), 200); }} className="btn-dark">Exporter en PDF</button>
+            {isCoachView && (
+              <button
+                onClick={() => sendPlanByEmail(planEdit)}
+                disabled={notifyLoading}
+                className="btn-dark"
+                title="Envoyer cette stratégie à l'athlète par email"
+              >
+                📧 Envoyer par email
+              </button>
+            )}
             <button onClick={() => savePlan(planEdit)} className="btn-primary">Enregistrer</button>
           </div>
         </div>

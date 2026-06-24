@@ -215,6 +215,21 @@ const TOOLTIPS = {
 // =====================================================================
 // PAGE
 // =====================================================================
+// ─── Helpers de coloration pour le score de Disponibilité Énergétique (DE) ───
+// Seuils standards endurance : <30 = déficit chronique (RED-S), 30-45 = à surveiller, ≥45 = optimal
+function deColor(score: number): string {
+  if (!score || score <= 0) return "var(--color-text-muted)";
+  if (score < 30) return "var(--color-danger)";
+  if (score < 45) return "#b36b00";
+  return "var(--color-success)";
+}
+function deLabel(score: number): string {
+  if (!score || score <= 0) return "—";
+  if (score < 30) return "⚠ déficit chronique";
+  if (score < 45) return "à surveiller";
+  return "✓ optimal";
+}
+
 export default function EnergyPage() {
   const [entries, setEntries, loaded] = useAthleteData<Entry[]>("energy", []);
   const [profile] = useAthleteData<{ sexe?: string; poids?: number | string; taille?: number | string; age?: number | string; masseMaigre?: number | string }>("profile", {});
@@ -449,9 +464,9 @@ export default function EnergyPage() {
           label="Score dispo énergétique (21j)"
           value={avgScore ? avgScore.toFixed(1) : "—"}
           unit="kcal/kg"
-          color="var(--color-success)"
+          color={deColor(avgScore)}
           warn={avgScore < 30 && avgScore > 0}
-          note={avgScore ? (avgScore < 30 ? "⚠ sous seuil 30" : "sain ≥ 30") : "—"}
+          note={deLabel(avgScore)}
         />
         <Kpi
           label="Score récupération (21j)"
@@ -621,7 +636,7 @@ export default function EnergyPage() {
                       <td style={{ fontWeight: 700, color: e.bilan >= 0 ? "var(--color-success)" : "var(--color-danger)" }}>
                         {e.bilan >= 0 ? "+" : ""}{Math.round(e.bilan)}
                       </td>
-                      <td style={{ fontWeight: 700, color: e.score < 30 && e.score > 0 ? "var(--color-danger)" : "var(--color-success)" }}>
+                      <td style={{ fontWeight: 700, color: deColor(e.score) }}>
                         {e.score ? e.score.toFixed(0) : "—"}
                       </td>
                       <td>{Math.round(e.recovery)}</td>

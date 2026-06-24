@@ -6,13 +6,23 @@ import { useCoachData } from "@/lib/coach-storage";
 import { supabase } from "@/lib/supabase";
 import { PageHeader, Empty } from "@/components/ui/PageHeader";
 import { VideoEmbed } from "@/components/ui/VideoEmbed";
+import { RichTextEditor } from "@/components/ui/RichTextEditor";
+import { RichHtml } from "@/components/ui/RichHtml";
 import {
   tierMeetsRequirement,
   SUBSCRIPTION_TIERS,
   type SubscriptionTier,
 } from "@/lib/subscription";
 
-type Lesson = { id: string; title: string; url: string; duration: string };
+type Resource = { id: string; label: string; url: string };
+type Lesson = {
+  id: string;
+  title: string;
+  url: string;            // video URL (optional)
+  duration: string;
+  description?: string;   // HTML rich text from TipTap
+  resources?: Resource[]; // PDFs / external links
+};
 type Module = { id: string; title: string; lessons: Lesson[] };
 type Formation = {
   id: string;
@@ -253,8 +263,125 @@ export default function AcademyPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-4 items-start">
           <div className="card p-4">
-            <VideoEmbed url={lesson?.url || ""} title={lesson?.title} />
-            <div className="mt-2.5 font-extrabold">{lesson?.title || "Sélectionne une leçon"}</div>
+            {lesson?.url && <VideoEmbed url={lesson.url} title={lesson.title} />}
+            <div className="mt-2.5 font-extrabold text-lg" style={{ fontFamily: "var(--font-display)", letterSpacing: "-0.01em" }}>
+              {lesson?.title || "Sélectionne une leçon"}
+            </div>
+
+            {/* Description rich text (read mode) */}
+            {lesson?.description && !editing && (
+              <div className="mt-4 prose-academy">
+                <RichHtml html={lesson.description} variant="screen" />
+              </div>
+            )}
+
+            {/* Description rich text (edit mode for coach) */}
+            {lesson && editing && isCoach && (
+              <div className="mt-4">
+                <div className="text-[10px] uppercase font-bold mb-1.5" style={{ letterSpacing: ".08em", color: "var(--color-primary)" }}>
+                  📝 Contenu texte (édition)
+                </div>
+                <RichTextEditor
+                  value={lesson.description || ""}
+                  onChange={(html) => {
+                    const mi = f.modules.findIndex((m) => m.lessons.some((l) => l.id === lesson.id));
+                    if (mi < 0) return;
+                    const li = f.modules[mi].lessons.findIndex((l) => l.id === lesson.id);
+                    updateLesson(mi, li, { description: html });
+                  }}
+                  placeholder="Ajoute du texte, des explications, des liens..."
+                  minHeight={200}
+                />
+              </div>
+            )}
+
+            {/* Resources (PDFs / external links) — read mode */}
+            {lesson?.resources && lesson.resources.length > 0 && !editing && (
+              <div className="mt-4">
+                <div className="text-[10px] uppercase font-bold mb-2" style={{ letterSpacing: ".08em", color: "var(--color-primary)" }}>
+                  📎 Ressources
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  {lesson.resources.map((r) => (
+                    <a
+                      key={r.id}
+                      href={r.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 p-2.5 rounded-lg"
+                      style={{ background: "var(--color-surface-2)", border: "1px solid var(--color-border)" }}
+                    >
+                      <span style={{ fontSize: 18 }}>📄</span>
+                      <span className="flex-1 text-sm font-bold">{r.label}</span>
+                      <span className="text-xs" style={{ color: "var(--color-primary)" }}>Ouvrir →</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Resources — edit mode for coach */}
+            {lesson && editing && isCoach && (
+              <div className="mt-4">
+                <div className="text-[10px] uppercase font-bold mb-2" style={{ letterSpacing: ".08em", color: "var(--color-primary)" }}>
+                  📎 Ressources (PDF / liens) — édition
+                </div>
+                {(lesson.resources ?? []).map((r, ri) => {
+                  const mi = f.modules.findIndex((m) => m.lessons.some((l) => l.id === lesson.id));
+                  const li = mi >= 0 ? f.modules[mi].lessons.findIndex((l) => l.id === lesson.id) : -1;
+                  return (
+                    <div key={r.id} className="flex gap-1.5 mb-1.5 items-center">
+                      <input
+                        className="input text-sm flex-1"
+                        placeholder="Nom (ex. Fiche bilan sanguin)"
+                        value={r.label}
+                        onChange={(e) => {
+                          if (mi < 0 || li < 0) return;
+                          const newRes = [...(lesson.resources ?? [])];
+                          newRes[ri] = { ...newRes[ri], label: e.target.value };
+                          updateLesson(mi, li, { resources: newRes });
+                        }}
+                      />
+                      <input
+                        className="input text-xs"
+                        style={{ flex: 1.5 }}
+                        placeholder="URL (Drive / Dropbox / S3...)"
+                        value={r.url}
+                        onChange={(e) => {
+                          if (mi < 0 || li < 0) return;
+                          const newRes = [...(lesson.resources ?? [])];
+                          newRes[ri] = { ...newRes[ri], url: e.target.value };
+                          updateLesson(mi, li, { resources: newRes });
+                        }}
+                      />
+                      <button
+                        onClick={() => {
+                          if (mi < 0 || li < 0) return;
+                          updateLesson(mi, li, { resources: (lesson.resources ?? []).filter((_, idx) => idx !== ri) });
+                        }}
+                        className="btn-ghost btn-xs"
+                        style={{ color: "var(--color-danger)" }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  );
+                })}
+                <button
+                  onClick={() => {
+                    const mi = f.modules.findIndex((m) => m.lessons.some((l) => l.id === lesson.id));
+                    const li = mi >= 0 ? f.modules[mi].lessons.findIndex((l) => l.id === lesson.id) : -1;
+                    if (mi < 0 || li < 0) return;
+                    updateLesson(mi, li, {
+                      resources: [...(lesson.resources ?? []), { id: newId(), label: "Nouvelle ressource", url: "" }],
+                    });
+                  }}
+                  className="btn-ghost btn-sm"
+                >
+                  + Ressource
+                </button>
+              </div>
+            )}
           </div>
 
           <div>

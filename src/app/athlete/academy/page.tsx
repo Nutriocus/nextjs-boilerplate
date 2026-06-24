@@ -154,6 +154,23 @@ export default function AcademyPage() {
     if (!f) return;
     updateModule(mi, { lessons: f.modules[mi].lessons.filter((_, i) => i !== li) });
   }
+  // Move helpers — generic array reorder
+  function move<T>(arr: T[], from: number, delta: number): T[] {
+    const to = from + delta;
+    if (to < 0 || to >= arr.length) return arr;
+    const next = [...arr];
+    const [el] = next.splice(from, 1);
+    next.splice(to, 0, el);
+    return next;
+  }
+  function moveModule(mi: number, delta: number) {
+    if (!f) return;
+    updateF(f.id, { modules: move(f.modules, mi, delta) });
+  }
+  function moveLesson(mi: number, li: number, delta: number) {
+    if (!f) return;
+    updateModule(mi, { lessons: move(f.modules[mi].lessons, li, delta) });
+  }
   function toggleDone(lesson: Lesson) {
     setDone((p) => ({ ...p, [lesson.id]: !p[lesson.id] }));
   }
@@ -393,8 +410,26 @@ export default function AcademyPage() {
             {f.modules.map((m, mi) => (
               <div key={m.id} className="card p-3 mb-2.5">
                 {editing && isCoach ? (
-                  <div className="flex gap-1.5 mb-1.5">
-                    <input className="input font-bold" value={m.title} onChange={(e) => updateModule(mi, { title: e.target.value })} />
+                  <div className="flex gap-1.5 mb-1.5 items-center">
+                    <input className="input font-bold flex-1" value={m.title} onChange={(e) => updateModule(mi, { title: e.target.value })} />
+                    <button
+                      onClick={() => moveModule(mi, -1)}
+                      disabled={mi === 0}
+                      className="btn-ghost btn-xs"
+                      style={{ opacity: mi === 0 ? 0.3 : 1, minWidth: 26 }}
+                      title="Monter ce module"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      onClick={() => moveModule(mi, 1)}
+                      disabled={mi === f.modules.length - 1}
+                      className="btn-ghost btn-xs"
+                      style={{ opacity: mi === f.modules.length - 1 ? 0.3 : 1, minWidth: 26 }}
+                      title="Descendre ce module"
+                    >
+                      ↓
+                    </button>
                     <button onClick={() => delModule(mi)} className="btn-ghost btn-xs" style={{ color: "var(--color-danger)" }}>✕</button>
                   </div>
                 ) : (
@@ -404,8 +439,26 @@ export default function AcademyPage() {
                   <div key={l.id} className="mb-1.5">
                     {editing && isCoach ? (
                       <div className="flex flex-col gap-1 bg-[var(--color-surface-2)] p-2 rounded-lg">
-                        <div className="flex gap-1.5">
-                          <input className="input text-sm" placeholder="Titre leçon" value={l.title} onChange={(e) => updateLesson(mi, li, { title: e.target.value })} />
+                        <div className="flex gap-1.5 items-center">
+                          <input className="input text-sm flex-1" placeholder="Titre leçon" value={l.title} onChange={(e) => updateLesson(mi, li, { title: e.target.value })} />
+                          <button
+                            onClick={() => moveLesson(mi, li, -1)}
+                            disabled={li === 0}
+                            className="btn-ghost btn-xs"
+                            style={{ opacity: li === 0 ? 0.3 : 1, minWidth: 26 }}
+                            title="Monter cette leçon"
+                          >
+                            ↑
+                          </button>
+                          <button
+                            onClick={() => moveLesson(mi, li, 1)}
+                            disabled={li === m.lessons.length - 1}
+                            className="btn-ghost btn-xs"
+                            style={{ opacity: li === m.lessons.length - 1 ? 0.3 : 1, minWidth: 26 }}
+                            title="Descendre cette leçon"
+                          >
+                            ↓
+                          </button>
                           <button onClick={() => delLesson(mi, li)} className="btn-ghost btn-xs" style={{ color: "var(--color-danger)" }}>✕</button>
                         </div>
                         <input className="input text-xs" placeholder="Lien vidéo (YouTube/Vimeo/Loom)" value={l.url} onChange={(e) => updateLesson(mi, li, { url: e.target.value })} />

@@ -64,6 +64,37 @@ const DEFAULT: Formation[] = [
   },
 ];
 
+/** Parses a duration string like "12:30", "1:45", or "1:23:45" → total seconds. */
+function parseDurationToSeconds(s: string | undefined | null): number {
+  if (!s) return 0;
+  const parts = s.trim().split(":").map((p) => parseInt(p, 10));
+  if (parts.some((n) => isNaN(n))) return 0;
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]; // hh:mm:ss
+  if (parts.length === 2) return parts[0] * 60 + parts[1]; // mm:ss
+  if (parts.length === 1) return parts[0] * 60; // assume minutes
+  return 0;
+}
+
+/** Formats total seconds as "1h23min" or "23min" if under an hour. */
+function formatDurationTotal(totalSeconds: number): string {
+  if (totalSeconds <= 0) return "—";
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.round((totalSeconds % 3600) / 60);
+  if (h > 0 && m > 0) return `${h}h${String(m).padStart(2, "0")}min`;
+  if (h > 0) return `${h}h`;
+  return `${m}min`;
+}
+
+function totalDurationOfFormation(f: Formation): number {
+  let total = 0;
+  for (const m of f.modules) {
+    for (const l of m.lessons) {
+      total += parseDurationToSeconds(l.duration);
+    }
+  }
+  return total;
+}
+
 function progressOf(f: Formation, doneMap: Record<string, boolean>): { t: number; d: number; pct: number } {
   let t = 0;
   let d = 0;
@@ -275,7 +306,9 @@ export default function AcademyPage() {
             <div style={{ width: prog.pct + "%", height: "100%", background: "var(--color-primary)" }} />
           </div>
           <div className="font-extrabold text-[var(--color-primary)]">{prog.pct}%</div>
-          <div className="text-xs text-[var(--color-text-muted)]">{prog.d}/{prog.t} leçons</div>
+          <div className="text-xs text-[var(--color-text-muted)]">
+            {prog.d}/{prog.t} leçons · {f.modules.length} modules · {formatDurationTotal(totalDurationOfFormation(f))}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px] gap-4 items-start">
@@ -564,7 +597,7 @@ export default function AcademyPage() {
                       <span className="font-extrabold text-[var(--color-primary)] text-sm">{p.pct}%</span>
                     </div>
                     <div className="text-[11px] text-[var(--color-text-muted)] mt-1">
-                      {p.d}/{p.t} leçons · {f.modules.length} modules
+                      {p.t} leçons · {f.modules.length} modules · {formatDurationTotal(totalDurationOfFormation(f))}
                     </div>
                   </>
                 ) : (

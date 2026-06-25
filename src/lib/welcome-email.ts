@@ -10,7 +10,7 @@
 
 import type { SubscriptionTier } from "./subscription";
 
-const CALENDLY_URL = "https://calendly.com/nutriocus/appel-telephonique-suivi-du-sportif";
+const CALENDLY_URL = "https://calendly.com/nutriocus/nutriocus-consultation-de-suivi";
 
 const TIER_INFO: Record<SubscriptionTier, { label: string; hasConsult: boolean }> = {
   plateforme: { label: "La plateforme Nutriocus", hasConsult: false },

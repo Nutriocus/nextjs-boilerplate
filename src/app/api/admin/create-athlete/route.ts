@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { sendWelcomeEmail } from "@/lib/welcome-email";
+import type { SubscriptionTier } from "@/lib/subscription";
 
 // =====================================================================
 // POST /api/admin/create-athlete
@@ -77,21 +79,20 @@ export async function POST(req: NextRequest) {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // --- 4. Create or fetch auth user + send invite ---
+    // --- 4. Create or fetch auth user (without Supabase default email) ---
     const redirectTo =
       (process.env.NEXT_PUBLIC_SITE_URL || "https://plateforme.nutriocus.com") + "/auth/callback";
 
     let authUserId: string | null = null;
+    let isNewUser = false;
 
-    // Try inviting (creates user + sends email)
-    const inviteRes = await admin.auth.admin.inviteUserByEmail(cleanEmail, {
-      redirectTo,
-      data: { first_name, last_name },
+    const createRes = await admin.auth.admin.createUser({
+      email: cleanEmail,
+      email_confirm: true,
+      user_metadata: { first_name, last_name, source: "manual", tier: cleanTier, password_set: false },
     });
-
-    if (inviteRes.error) {
-      // If already exists, fetch the user id manually
-      if (/already/i.test(inviteRes.error.message)) {
+    if (createRes.error) {
+      if (/already|registered/i.test(createRes.error.message)) {
         const { data: list } = await admin.auth.admin.listUsers();
         const existing = list?.users.find((u) => u.email?.toLowerCase() === cleanEmail);
         if (!existing) {
@@ -102,14 +103,26 @@ export async function POST(req: NextRequest) {
         }
         authUserId = existing.id;
       } else {
-        return NextResponse.json({ error: inviteRes.error.message }, { status: 500 });
+        return NextResponse.json({ error: createRes.error.message }, { status: 500 });
       }
     } else {
-      authUserId = inviteRes.data.user?.id ?? null;
+      authUserId = createRes.data.user?.id ?? null;
+      isNewUser = true;
     }
 
     if (!authUserId) {
       return NextResponse.json({ error: "Auth user id introuvable" }, { status: 500 });
+    }
+
+    // Generate magic link for first connection (will be used in welcome email)
+    let magicLink: string | null = null;
+    if (isNewUser) {
+      const { data: linkData } = await admin.auth.admin.generateLink({
+        type: "magiclink",
+        email: cleanEmail,
+        options: { redirectTo },
+      });
+      magicLink = linkData?.properties?.action_link ?? null;
     }
 
     // --- 5. Create athletes row (or update if exists with same email) ---
@@ -165,7 +178,31 @@ export async function POST(req: NextRequest) {
       .single();
     if (insErr) return NextResponse.json({ error: insErr.message }, { status: 500 });
 
-    return NextResponse.json({ ok: true, athleteId: created.id, mode: "created" });
+    // Send custom welcome email via Resend (only for newly created users)
+    let emailStatus: "sent" | "skipped" | "error" = "skipped";
+    let emailError: string | undefined;
+    if (isNewUser && magicLink) {
+      const welcome = await sendWelcomeEmail({
+        firstName: first_name,
+        email: cleanEmail,
+        tier: (cleanTier ?? null) as SubscriptionTier | null,
+        magicLink,
+      });
+      if (welcome.ok) emailStatus = "sent";
+      else {
+        emailStatus = "error";
+        emailError = welcome.error;
+        console.warn("[create-athlete] welcome email failed:", welcome.error);
+      }
+    }
+
+    return NextResponse.json({
+      ok: true,
+      athleteId: created.id,
+      mode: "created",
+      email: emailStatus,
+      emailError,
+    });
   } catch (e) {
     console.error("[create-athlete] unexpected error", e);
     return NextResponse.json({ error: (e as Error).message || "Erreur inconnue" }, { status: 500 });

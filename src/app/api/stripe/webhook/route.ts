@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
+import { sendWelcomeEmail } from "@/lib/welcome-email";
+import type { SubscriptionTier } from "@/lib/subscription";
 
 // =====================================================================
 // POST /api/stripe/webhook
@@ -101,45 +103,44 @@ export async function POST(req: NextRequest) {
           break;
         }
 
-        // 2. New athlete: try invite (Supabase auth user + email)
-        let userId: string | undefined;
-        const inviteRes = await admin.auth.admin.inviteUserByEmail(email, {
-          redirectTo: `${siteUrl}/auth/callback`,
-          data: { full_name: fullName, source: "stripe", tier },
-        });
-
-        userId = inviteRes.data?.user?.id;
-        if (inviteRes.error) {
-          console.warn("[stripe webhook] invite returned error:", inviteRes.error.message);
-          // Try to find the user anyway (rate-limited or already exists)
-          const { data: list } = await admin.auth.admin.listUsers();
-          const found = list.users.find((u) => u.email?.toLowerCase() === email);
-          if (found) {
-            userId = found.id;
-            console.log("[stripe webhook] reusing existing auth user", { userId });
-          } else {
-            // Create the auth user directly (no invite email) so we still have a row.
-            // The athlete will need to reset password later.
-            const createRes = await admin.auth.admin.createUser({
-              email,
-              email_confirm: true,
-              user_metadata: { full_name: fullName, source: "stripe_fallback", tier },
-            });
-            if (createRes.error) {
-              throw new Error(`Create user failed (after invite rate-limit): ${createRes.error.message}`);
-            }
-            userId = createRes.data.user?.id;
-          }
-        }
-
-        if (!userId) {
-          throw new Error("No user_id available after invite/create");
-        }
-
+        // 2. New athlete: create user (no Supabase email) + send custom welcome
         const parts = fullName.trim().split(/\s+/);
         const first_name = parts[0] || email.split("@")[0];
         const last_name = parts.slice(1).join(" ") || "—";
 
+        // Create user without sending Supabase's default email (we'll send our own)
+        const createRes = await admin.auth.admin.createUser({
+          email,
+          email_confirm: true,
+          user_metadata: { full_name: fullName, source: "stripe", tier, password_set: false },
+        });
+        let userId = createRes.data?.user?.id;
+        if (createRes.error) {
+          // If user already exists, find them
+          if (/already|registered/i.test(createRes.error.message)) {
+            const { data: list } = await admin.auth.admin.listUsers();
+            const found = list.users.find((u) => u.email?.toLowerCase() === email);
+            userId = found?.id;
+          } else {
+            throw new Error(`Create user failed: ${createRes.error.message}`);
+          }
+        }
+        if (!userId) {
+          throw new Error("No user_id available after createUser");
+        }
+
+        // Generate magic link for first login (used in welcome email)
+        const { data: linkData, error: linkErr } = await admin.auth.admin.generateLink({
+          type: "magiclink",
+          email,
+          options: { redirectTo: `${siteUrl}/auth/callback` },
+        });
+        if (linkErr) {
+          console.warn("[stripe webhook] generateLink error:", linkErr.message);
+        }
+        const magicLink = linkData?.properties?.action_link || `${siteUrl}/auth`;
+
+        // Insert athlete row
         const { error: insertErr } = await admin.from("athletes").insert({
           user_id: userId,
           coach_id: defaultCoachId,
@@ -154,7 +155,18 @@ export async function POST(req: NextRequest) {
         if (insertErr) {
           throw new Error(`Insert athlete failed: ${insertErr.message}`);
         }
-        console.log("[stripe webhook] athlete created", { email, userId });
+
+        // Send custom welcome email via Resend
+        const welcome = await sendWelcomeEmail({
+          firstName: first_name,
+          email,
+          tier: (tier ?? null) as SubscriptionTier | null,
+          magicLink,
+        });
+        if (!welcome.ok) {
+          console.warn("[stripe webhook] welcome email failed:", welcome.error);
+        }
+        console.log("[stripe webhook] athlete created + welcome sent", { email, userId });
 
         break;
       }

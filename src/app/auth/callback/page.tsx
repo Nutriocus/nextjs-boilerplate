@@ -21,15 +21,12 @@ export default function CallbackPage() {
         return;
       }
 
-      const { data: coach } = await supabase
-        .from("coaches").select("id").eq("user_id", session.user.id).single();
-      if (coach) { router.push("/coach"); return; }
-
-      const { data: athlete } = await supabase
-        .from("athletes").select("id").eq("user_id", session.user.id).single();
-      if (athlete) { router.push("/athlete/parcours"); return; }
-
-      router.push("/auth/error?reason=no-role");
+      // Force le passage par /auth/set-password : si le mot de passe n'a jamais
+      // été défini, on demande à l'utilisateur d'en créer un avant d'accéder
+      // au tableau de bord. La page set-password détecte automatiquement si
+      // le mot de passe est déjà défini et redirige immédiatement vers la
+      // bonne destination.
+      router.push("/auth/set-password");
     }
     handleCallback();
   }, [router]);

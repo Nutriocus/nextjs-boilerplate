@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader, Empty, Kpi } from "@/components/ui/PageHeader";
 import { useSearchParams } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 // ============== TYPES ==============
 type EventItem = { id?: string; date: string; name: string; sport?: string };
@@ -18,10 +19,19 @@ type MealPlan = {
   objectif?: string;
 };
 type Suivi = { label?: string; dateDebut?: string; dateFin?: string };
+type CalendlyBooking = { scheduled_at: string; event_name: string | null };
 
 type CalendarItem = {
   date: string; // YYYY-MM-DD
-  kind: "race" | "consultation" | "pre-race" | "plan-start" | "plan-end" | "suivi-start" | "suivi-end";
+  kind:
+    | "race"
+    | "consultation"
+    | "consultation-booked"
+    | "pre-race"
+    | "plan-start"
+    | "plan-end"
+    | "suivi-start"
+    | "suivi-end";
   title: string;
   subtitle?: string;
   href?: string;
@@ -32,6 +42,7 @@ type CalendarItem = {
 const KIND_COLORS: Record<CalendarItem["kind"], string> = {
   race: "var(--color-primary)",
   consultation: "var(--color-dark)",
+  "consultation-booked": "var(--color-success)",
   "pre-race": "#e6a833",
   "plan-start": "var(--color-success)",
   "plan-end": "var(--color-success)",
@@ -42,6 +53,7 @@ const KIND_COLORS: Record<CalendarItem["kind"], string> = {
 const KIND_ICONS: Record<CalendarItem["kind"], string> = {
   race: "🏁",
   consultation: "📋",
+  "consultation-booked": "📅",
   "pre-race": "🍽",
   "plan-start": "▶",
   "plan-end": "⏹",
@@ -51,7 +63,8 @@ const KIND_ICONS: Record<CalendarItem["kind"], string> = {
 
 const KIND_LABELS: Record<CalendarItem["kind"], string> = {
   race: "Course",
-  consultation: "Consultation",
+  consultation: "Compte rendu",
+  "consultation-booked": "Consultation programmée",
   "pre-race": "Préparation alimentaire",
   "plan-start": "Début plan",
   "plan-end": "Fin plan",
@@ -112,8 +125,25 @@ function buildItems(
   consultations: Consultation[],
   meals: MealPlan[],
   suivi: Suivi,
+  bookings: CalendlyBooking[],
 ): CalendarItem[] {
   const items: CalendarItem[] = [];
+
+  for (const b of bookings) {
+    if (!b.scheduled_at) continue;
+    const d = new Date(b.scheduled_at);
+    const dateStr = toISODate(d);
+    const timeStr = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+    items.push({
+      date: dateStr,
+      kind: "consultation-booked",
+      title: `${timeStr} · ${b.event_name || "Consultation"}`,
+      subtitle: "Réservation Calendly",
+      href: "/athlete/consultations",
+      color: KIND_COLORS["consultation-booked"],
+      icon: KIND_ICONS["consultation-booked"],
+    });
+  }
 
   for (const e of events) {
     if (!e.date) continue;
@@ -221,6 +251,34 @@ export default function CalendarPage() {
   const [consultations, , loadedC] = useAthleteData<Consultation[]>("consultations", []);
   const [meals, , loadedM] = useAthleteData<MealPlan[]>("meal", []);
   const [suivi, , loadedS] = useAthleteData<Suivi>("suivi", {});
+  const [bookings, setBookings] = useState<CalendlyBooking[]>([]);
+
+  // Load Calendly bookings (scheduled consultations) for this athlete.
+  // We pull future + recent past (last 60 days) so the calendar/agenda has
+  // continuity even right after a meeting.
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const query = supabase
+        .from("athletes")
+        .select("id");
+      const { data: athlete } = athleteIdParam
+        ? await query.eq("id", athleteIdParam).maybeSingle()
+        : await query.eq("user_id", user.id).maybeSingle();
+      if (!athlete) return;
+      const since = new Date();
+      since.setDate(since.getDate() - 60);
+      const { data } = await supabase
+        .from("calendly_bookings")
+        .select("scheduled_at, event_name")
+        .eq("athlete_id", athlete.id)
+        .eq("status", "booked")
+        .gte("scheduled_at", since.toISOString())
+        .order("scheduled_at", { ascending: true });
+      if (data) setBookings(data);
+    })();
+  }, [athleteIdParam]);
 
   const today = toISODate(new Date());
   const [cursor, setCursor] = useState(() => {
@@ -231,6 +289,7 @@ export default function CalendarPage() {
   const [activeFilters, setActiveFilters] = useState<Record<CalendarItem["kind"], boolean>>({
     race: true,
     consultation: true,
+    "consultation-booked": true,
     "pre-race": true,
     "plan-start": true,
     "plan-end": true,
@@ -239,8 +298,8 @@ export default function CalendarPage() {
   });
 
   const allItems = useMemo(
-    () => buildItems(events, consultations, meals, suivi),
-    [events, consultations, meals, suivi],
+    () => buildItems(events, consultations, meals, suivi, bookings),
+    [events, consultations, meals, suivi, bookings],
   );
 
   const items = useMemo(
@@ -264,7 +323,11 @@ export default function CalendarPage() {
     [items, today],
   );
   const nextRace = upcoming.find((it) => it.kind === "race");
-  const nextConsult = upcoming.find((it) => it.kind === "consultation");
+  // Prefer a Calendly-booked consultation (real upcoming slot);
+  // fall back to a CR whose date is still in the future.
+  const nextConsult =
+    upcoming.find((it) => it.kind === "consultation-booked") ||
+    upcoming.find((it) => it.kind === "consultation");
 
   if (!loadedE || !loadedC || !loadedM || !loadedS) {
     return (
@@ -289,7 +352,9 @@ export default function CalendarPage() {
   const selectedItems = selectedDate ? itemsByDate.get(selectedDate) || [] : [];
 
   const racesUpcoming = upcoming.filter((i) => i.kind === "race");
-  const consultsUpcoming = upcoming.filter((i) => i.kind === "consultation");
+  const consultsUpcoming = upcoming.filter(
+    (i) => i.kind === "consultation" || i.kind === "consultation-booked",
+  );
 
   const filterButton = (kind: CalendarItem["kind"], label: string) => (
     <button
@@ -344,7 +409,8 @@ export default function CalendarPage() {
         <div className="flex gap-1.5 flex-wrap">
           {filterButton("race", "Courses")}
           {filterButton("pre-race", "Pré-course (J-4 → J-1)")}
-          {filterButton("consultation", "Consultations")}
+          {filterButton("consultation-booked", "Consultations programmées")}
+          {filterButton("consultation", "Comptes rendus")}
           {filterButton("plan-start", "Début plan alim.")}
           {filterButton("plan-end", "Fin plan alim.")}
           {filterButton("suivi-start", "Début suivi")}

@@ -38,7 +38,9 @@ export function BookingSection({
   const [email, setEmail] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
-  const [calendlyBookings, setCalendlyBookings] = useState<{ scheduled_at: string }[]>([]);
+  const [calendlyBookings, setCalendlyBookings] = useState<
+    { scheduled_at: string; event_name: string | null }[]
+  >([]);
 
   useEffect(() => {
     (async () => {
@@ -69,11 +71,12 @@ export function BookingSection({
         const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
         const { data: bookings } = await supabase
           .from("calendly_bookings")
-          .select("scheduled_at")
+          .select("scheduled_at, event_name")
           .eq("athlete_id", athlete.id)
           .eq("status", "booked")
           .gte("scheduled_at", startOfMonth)
-          .lt("scheduled_at", startOfNextMonth);
+          .lt("scheduled_at", startOfNextMonth)
+          .order("scheduled_at", { ascending: true });
         if (bookings) setCalendlyBookings(bookings);
       }
       setLoading(false);
@@ -98,6 +101,20 @@ export function BookingSection({
   const remaining = Math.max(0, quota - bookedThisMonth);
   const tierLabel = SUBSCRIPTION_TIERS[tier].label;
   const monthLabel = now.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+
+  // Only show bookings whose slot is still in the future — past slots of the
+  // current month are not "upcoming" anymore (the meeting already happened).
+  const upcomingBookings = calendlyBookings.filter(
+    (b) => new Date(b.scheduled_at) >= now,
+  );
+  const fmtBookingDate = (iso: string) =>
+    new Date(iso).toLocaleDateString("fr-FR", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
 
   return (
     <div
@@ -147,6 +164,43 @@ export function BookingSection({
           {open ? "Fermer le calendrier" : remaining === 0 ? "Quota atteint ce mois" : "Choisir un créneau →"}
         </button>
       </div>
+
+      {upcomingBookings.length > 0 && (
+        <div
+          className="px-4 py-3"
+          style={{ borderBottom: "1px solid var(--color-border)" }}
+        >
+          <div
+            className="text-[10px] uppercase font-extrabold mb-2"
+            style={{ letterSpacing: ".1em", color: "var(--color-text-muted)" }}
+          >
+            ✅ Consultation{upcomingBookings.length > 1 ? "s" : ""} programmée{upcomingBookings.length > 1 ? "s" : ""} ce mois
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {upcomingBookings.map((b) => (
+              <div
+                key={b.scheduled_at}
+                className="flex items-center gap-2 text-sm flex-wrap"
+              >
+                <span
+                  className="rounded px-2 py-0.5 text-xs font-bold"
+                  style={{
+                    background: "rgba(95,140,10,0.15)",
+                    color: "var(--color-success)",
+                  }}
+                >
+                  📅 {fmtBookingDate(b.scheduled_at)}
+                </span>
+                {b.event_name && (
+                  <span className="text-[var(--color-text-muted)] text-xs">
+                    {b.event_name}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {open && remaining > 0 && (
         <div style={{ minHeight: 680 }}>

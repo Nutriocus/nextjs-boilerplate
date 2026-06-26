@@ -11,6 +11,7 @@ import { RichMarkdown } from "@/components/ui/RichMarkdown";
 import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { RichHtml } from "@/components/ui/RichHtml";
 import { CommentThread } from "@/components/ui/CommentThread";
+import { BookingSection } from "@/components/athlete/BookingSection";
 
 // Heuristic: content starting with '<' is treated as HTML (TipTap), otherwise
 // as legacy plain-text / Markdown so older consultations keep rendering nicely.
@@ -246,6 +247,9 @@ export default function ConsultationsPage() {
         }
         desc="Comptes rendus et replays de tes consultations."
       />
+
+      {/* Booking section — visible for Progression Guidée & Mission Performance */}
+      <BookingSection consultations={consultations} athleteIdOverride={athleteIdFromUrl} />
 
       {/* Email notification toast — page-level so it survives form close */}
       {notifyMsg && (

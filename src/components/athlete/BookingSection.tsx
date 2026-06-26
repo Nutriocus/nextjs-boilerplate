@@ -32,10 +32,13 @@ export function BookingSection({
   athleteIdOverride?: string | null;
 }) {
   const [tier, setTier] = useState<SubscriptionTier | null>(null);
+  const [athleteId, setAthleteId] = useState<string | null>(null);
   const [firstName, setFirstName] = useState<string>("");
+  const [lastName, setLastName] = useState<string>("");
   const [email, setEmail] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [calendlyBookings, setCalendlyBookings] = useState<{ scheduled_at: string }[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -44,30 +47,34 @@ export function BookingSection({
         setLoading(false);
         return;
       }
-      // If coach is viewing an athlete via override, fetch that athlete's tier
-      if (athleteIdOverride) {
-        const { data: athlete } = await supabase
-          .from("athletes")
-          .select("subscription_tier, first_name, email")
-          .eq("id", athleteIdOverride)
-          .maybeSingle();
-        if (athlete) {
-          setTier((athlete.subscription_tier as SubscriptionTier | null) ?? null);
-          setFirstName(athlete.first_name ?? "");
-          setEmail(athlete.email ?? "");
-        }
-      } else {
-        // Athlete viewing their own
-        const { data: athlete } = await supabase
-          .from("athletes")
-          .select("subscription_tier, first_name, email")
-          .eq("user_id", user.id)
-          .maybeSingle();
-        if (athlete) {
-          setTier((athlete.subscription_tier as SubscriptionTier | null) ?? null);
-          setFirstName(athlete.first_name ?? "");
-          setEmail(athlete.email ?? "");
-        }
+
+      // Resolve the athlete row (coach override or own)
+      const query = supabase
+        .from("athletes")
+        .select("id, subscription_tier, first_name, last_name, email");
+      const { data: athlete } = athleteIdOverride
+        ? await query.eq("id", athleteIdOverride).maybeSingle()
+        : await query.eq("user_id", user.id).maybeSingle();
+
+      if (athlete) {
+        setAthleteId(athlete.id);
+        setTier((athlete.subscription_tier as SubscriptionTier | null) ?? null);
+        setFirstName(athlete.first_name ?? "");
+        setLastName(athlete.last_name ?? "");
+        setEmail(athlete.email ?? "");
+
+        // Load current-month Calendly bookings for this athlete
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1).toISOString();
+        const { data: bookings } = await supabase
+          .from("calendly_bookings")
+          .select("scheduled_at")
+          .eq("athlete_id", athlete.id)
+          .eq("status", "booked")
+          .gte("scheduled_at", startOfMonth)
+          .lt("scheduled_at", startOfNextMonth);
+        if (bookings) setCalendlyBookings(bookings);
       }
       setLoading(false);
     })();
@@ -77,12 +84,17 @@ export function BookingSection({
   const quota = MONTHLY_QUOTA[tier];
   if (!quota) return null; // Plateforme tier doesn't get this feature
 
-  // Count consultations in the current month
+  // Count current-month "slots" : Calendly bookings (auto via webhook)
+  // + manual CRs (legacy / created by coach without Calendly).
+  // We take the MAX of both sources to avoid double-counting a booking that
+  // also has a CR. This is a safe over-estimate that matches user intent.
   const now = new Date();
   const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const bookedThisMonth = consultations.filter(
+  const crsThisMonth = consultations.filter(
     (c) => c.date && c.date.startsWith(currentYM),
   ).length;
+  const calendlyThisMonth = calendlyBookings.length;
+  const bookedThisMonth = Math.max(crsThisMonth, calendlyThisMonth);
   const remaining = Math.max(0, quota - bookedThisMonth);
   const tierLabel = SUBSCRIPTION_TIERS[tier].label;
   const monthLabel = now.toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
@@ -144,6 +156,15 @@ export function BookingSection({
             prefill={{
               email,
               firstName,
+              lastName,
+              name: `${firstName} ${lastName}`.trim(),
+            }}
+            utm={{
+              // utmContent embeds the athlete UUID so the webhook can match
+              // the booking back to the right athlete row (without ambiguity).
+              utmContent: athleteId || "",
+              utmSource: "plateforme.nutriocus.com",
+              utmMedium: "embed",
             }}
             pageSettings={{
               backgroundColor: "ffffff",

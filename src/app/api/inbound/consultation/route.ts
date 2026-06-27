@@ -150,6 +150,42 @@ function pickBodyText(payload: InboundPayload): string {
   return "";
 }
 
+// Resend inbound webhooks send only metadata. The body must be fetched
+// via a 2nd API call using the email_id.
+async function fetchInboundEmailContent(
+  emailId: string,
+  apiKey: string,
+): Promise<{ text?: string; html?: string } | null> {
+  // Try the inbound-specific endpoint first, then fall back to the generic one.
+  const candidates = [
+    `https://api.resend.com/emails/${emailId}`,
+    `https://api.resend.com/inbound/emails/${emailId}`,
+    `https://api.resend.com/inbound/${emailId}`,
+  ];
+  for (const url of candidates) {
+    try {
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      if (!res.ok) {
+        console.warn(`[inbound] fetch ${url} → HTTP ${res.status}`);
+        continue;
+      }
+      const json = await res.json();
+      // Response can wrap content under `data` or be at top level.
+      const text = json.text ?? json.data?.text ?? json.body_text ?? json.data?.body_text;
+      const html = json.html ?? json.data?.html ?? json.body_html ?? json.data?.body_html;
+      if (text || html) {
+        return { text, html };
+      }
+      console.warn(`[inbound] ${url} ok but no text/html. keys:`, Object.keys(json));
+    } catch (e) {
+      console.warn(`[inbound] fetch ${url} threw`, e);
+    }
+  }
+  return null;
+}
+
 export async function POST(req: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -190,7 +226,22 @@ export async function POST(req: NextRequest) {
 
   const from = pickFrom(payload);
   const subject = pickSubject(payload);
-  const bodyText = pickBodyText(payload);
+  let bodyText = pickBodyText(payload);
+
+  // Resend inbound: payload is metadata-only. Fetch the full content
+  // via the API using email_id when the body is empty.
+  if (!bodyText) {
+    const emailId = pickString(payload as unknown as Record<string, unknown>, [
+      ["data", "email_id"], ["data", "id"], ["email_id"], ["id"],
+    ]);
+    const resendKey = process.env.RESEND_API_KEY;
+    if (emailId && resendKey) {
+      const fetched = await fetchInboundEmailContent(emailId, resendKey);
+      if (fetched) {
+        bodyText = fetched.text || (fetched.html ? htmlToText(fetched.html) : "");
+      }
+    }
+  }
 
   if (!bodyText || bodyText.length < 30) {
     // Diagnostic: log the payload structure so we can adjust pickBodyText

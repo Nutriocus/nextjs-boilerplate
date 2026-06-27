@@ -1,8 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import crypto from "crypto";
 import { parseInboundEmail } from "@/lib/email-inbound-parsers";
 import { matchAthlete } from "@/lib/athlete-matcher";
 import { generateCr } from "@/lib/cr-generator";
+
+// Resend uses Svix-style signatures. The signing secret looks like
+// "whsec_<base64>" and the request carries 3 headers: svix-id,
+// svix-timestamp, svix-signature (which can contain several
+// space-separated "v1,<base64>" entries — any one matching is OK).
+function verifySvixSignature(
+  rawBody: string,
+  headers: { id: string; timestamp: string; signature: string },
+  signingSecret: string,
+): boolean {
+  try {
+    const secretBytes = Buffer.from(signingSecret.replace(/^whsec_/, ""), "base64");
+    const signedPayload = `${headers.id}.${headers.timestamp}.${rawBody}`;
+    const expectedB64 = crypto
+      .createHmac("sha256", secretBytes)
+      .update(signedPayload)
+      .digest("base64");
+    const expectedBuf = Buffer.from(expectedB64, "base64");
+    const provided = headers.signature.split(" ")
+      .map((s) => s.trim())
+      .filter((s) => s.startsWith("v1,"))
+      .map((s) => s.slice(3));
+    return provided.some((sig) => {
+      try {
+        const sigBuf = Buffer.from(sig, "base64");
+        if (sigBuf.length !== expectedBuf.length) return false;
+        return crypto.timingSafeEqual(expectedBuf, sigBuf);
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return false;
+  }
+}
 
 // =====================================================================
 // POST /api/inbound/consultation
@@ -83,18 +119,20 @@ export async function POST(req: NextRequest) {
 
   const rawBody = await req.text();
 
-  // Optional signature verification (Resend uses Svix-style headers).
+  // Signature verification (Svix format used by Resend webhooks).
   const secret = process.env.RESEND_INBOUND_WEBHOOK_SECRET;
   if (secret) {
-    // Svix signature is `v1,base64payload` with timestamp `svix-timestamp`.
-    // For brevity here we only check that the secret matches a shared header
-    // — replace with proper Svix verification once webhook is live.
-    const provided = req.headers.get("x-webhook-secret") || req.headers.get("svix-signature");
-    if (!provided) {
-      return NextResponse.json({ error: "Missing signature header" }, { status: 401 });
+    const svixId = req.headers.get("svix-id");
+    const svixTimestamp = req.headers.get("svix-timestamp");
+    const svixSignature = req.headers.get("svix-signature");
+    if (!svixId || !svixTimestamp || !svixSignature) {
+      return NextResponse.json({ error: "Missing Svix headers" }, { status: 401 });
     }
-    // Simple shared-secret check (Resend Inbound also supports this mode).
-    if (provided !== secret && !provided.includes(secret)) {
+    if (!verifySvixSignature(rawBody, {
+      id: svixId,
+      timestamp: svixTimestamp,
+      signature: svixSignature,
+    }, secret)) {
       return NextResponse.json({ error: "Invalid signature" }, { status: 401 });
     }
   }

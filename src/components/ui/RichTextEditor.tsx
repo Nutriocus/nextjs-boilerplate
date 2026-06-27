@@ -3,6 +3,10 @@
 import { useEditor, EditorContent, Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
+import { Table } from "@tiptap/extension-table";
+import { TableRow } from "@tiptap/extension-table-row";
+import { TableCell } from "@tiptap/extension-table-cell";
+import { TableHeader } from "@tiptap/extension-table-header";
 import { useEffect } from "react";
 
 type Props = {
@@ -83,6 +87,10 @@ export function RichTextEditor({ value, onChange, placeholder, minHeight = 240 }
         // Keep paragraphs and other defaults; enable paste of formatted content.
       }),
       Link.configure({ openOnClick: false, HTMLAttributes: { target: "_blank", rel: "noopener noreferrer" } }),
+      Table.configure({ resizable: false, HTMLAttributes: { class: "rich-table" } }),
+      TableRow,
+      TableHeader,
+      TableCell,
     ],
     content: value || "",
     immediatelyRender: false,

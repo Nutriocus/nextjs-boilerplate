@@ -151,39 +151,32 @@ function pickBodyText(payload: InboundPayload): string {
 }
 
 // Resend inbound webhooks send only metadata. The body must be fetched
-// via a 2nd API call using the email_id.
+// via GET /emails/receiving/{id} using the email_id from the webhook payload.
+// Docs: https://resend.com/docs/api-reference/emails/retrieve-received-email
 async function fetchInboundEmailContent(
   emailId: string,
   apiKey: string,
 ): Promise<{ text?: string; html?: string } | null> {
-  // Try the inbound-specific endpoint first, then fall back to the generic one.
-  const candidates = [
-    `https://api.resend.com/emails/${emailId}`,
-    `https://api.resend.com/inbound/emails/${emailId}`,
-    `https://api.resend.com/inbound/${emailId}`,
-  ];
-  for (const url of candidates) {
-    try {
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      });
-      if (!res.ok) {
-        console.warn(`[inbound] fetch ${url} → HTTP ${res.status}`);
-        continue;
-      }
-      const json = await res.json();
-      // Response can wrap content under `data` or be at top level.
-      const text = json.text ?? json.data?.text ?? json.body_text ?? json.data?.body_text;
-      const html = json.html ?? json.data?.html ?? json.body_html ?? json.data?.body_html;
-      if (text || html) {
-        return { text, html };
-      }
-      console.warn(`[inbound] ${url} ok but no text/html. keys:`, Object.keys(json));
-    } catch (e) {
-      console.warn(`[inbound] fetch ${url} threw`, e);
+  const url = `https://api.resend.com/emails/receiving/${emailId}`;
+  try {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.warn(`[inbound] fetch ${url} → HTTP ${res.status}: ${body.slice(0, 200)}`);
+      return null;
     }
+    const json = await res.json();
+    const text: string | undefined = json.text ?? undefined;
+    const html: string | undefined = json.html ?? undefined;
+    if (text || html) return { text, html };
+    console.warn(`[inbound] ${url} ok but no text/html. keys:`, Object.keys(json));
+    return null;
+  } catch (e) {
+    console.warn(`[inbound] fetch ${url} threw`, e);
+    return null;
   }
-  return null;
 }
 
 export async function POST(req: NextRequest) {

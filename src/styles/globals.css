@@ -527,13 +527,14 @@
   font-size: 22px;
   text-transform: uppercase;
   letter-spacing: -0.01em;
-  margin: 20px 0 8px;
+  margin: 32px 0 14px;
 }
 .rich-editor-content h2 {
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 18px;
-  margin: 16px 0 6px;
+  margin: 36px 0 12px;
+  padding-top: 8px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -549,10 +550,15 @@
 .rich-editor-content h3 {
   font-weight: 800;
   font-size: 15px;
-  margin: 14px 0 5px;
+  margin: 24px 0 8px;
   color: var(--color-primary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+.rich-editor-content h1:first-child,
+.rich-editor-content h2:first-child,
+.rich-editor-content h3:first-child {
+  margin-top: 0;
 }
 .rich-editor-content strong { font-weight: 800; }
 .rich-editor-content em { font-style: italic; }
@@ -601,13 +607,14 @@
   font-size: 22px;
   text-transform: uppercase;
   letter-spacing: -0.01em;
-  margin: 20px 0 8px;
+  margin: 32px 0 14px;
 }
 .rich-html-screen h2 {
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 18px;
-  margin: 16px 0 6px;
+  margin: 36px 0 12px;
+  padding-top: 8px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -623,10 +630,16 @@
 .rich-html-screen h3 {
   font-weight: 800;
   font-size: 15px;
-  margin: 14px 0 5px;
+  margin: 24px 0 8px;
   color: var(--color-primary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+/* First heading in the content should not have extra top space */
+.rich-html-screen > h1:first-child,
+.rich-html-screen > h2:first-child,
+.rich-html-screen > h3:first-child {
+  margin-top: 0;
 }
 .rich-html-screen strong { font-weight: 800; }
 .rich-html-screen em { font-style: italic; }

@@ -16,6 +16,10 @@ const NAV = [
     grp: "Mes athlètes",
     items: [{ href: "/coach/athletes", label: "Liste des athlètes", ic: "●" }],
   },
+  {
+    grp: "Production CR",
+    items: [{ href: "/coach/drafts", label: "Brouillons IA", ic: "📋" }],
+  },
 ];
 
 export default function CoachLayout({

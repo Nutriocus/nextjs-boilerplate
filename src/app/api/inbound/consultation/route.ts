@@ -76,38 +76,78 @@ type InboundPayload = {
   email?: ResendInboundEmail;
 };
 
-function pickFrom(payload: InboundPayload): string {
-  const candidates: Array<unknown> = [
-    payload.data?.from,
-    payload.email?.from,
-    payload.from,
-  ];
-  for (const c of candidates) {
-    if (typeof c === "string" && c) return c;
-    if (c && typeof c === "object" && "email" in c && c.email) return c.email as string;
+// Dig into the payload looking for the first non-empty string at any
+// of the candidate paths. Returns "" if nothing matches.
+function pickString(payload: Record<string, unknown>, paths: string[][]): string {
+  for (const path of paths) {
+    let cur: unknown = payload;
+    for (const key of path) {
+      if (cur && typeof cur === "object" && key in (cur as Record<string, unknown>)) {
+        cur = (cur as Record<string, unknown>)[key];
+      } else {
+        cur = undefined;
+        break;
+      }
+    }
+    if (typeof cur === "string" && cur.trim()) return cur;
+    if (cur && typeof cur === "object" && "email" in (cur as Record<string, unknown>)) {
+      const e = (cur as { email?: unknown }).email;
+      if (typeof e === "string" && e.trim()) return e;
+    }
   }
   return "";
 }
 
-function pickSubject(payload: InboundPayload): string {
-  return payload.data?.subject ?? payload.email?.subject ?? payload.subject ?? "";
+function pickFrom(payload: InboundPayload): string {
+  return pickString(payload as unknown as Record<string, unknown>, [
+    ["data", "from"], ["data", "from", "email"],
+    ["data", "sender"], ["data", "sender", "email"],
+    ["email", "from"], ["from"],
+  ]);
 }
 
-function pickBodyText(payload: InboundPayload): string {
-  // Prefer text; fall back to html stripped.
-  const text = payload.data?.text ?? payload.email?.text ?? payload.text;
-  if (text) return text;
-  const html = payload.data?.html ?? payload.email?.html ?? payload.html ?? "";
+function pickSubject(payload: InboundPayload): string {
+  return pickString(payload as unknown as Record<string, unknown>, [
+    ["data", "subject"], ["email", "subject"], ["subject"],
+  ]);
+}
+
+function htmlToText(html: string): string {
   return html
     .replace(/<style[\s\S]*?<\/style>/gi, "")
     .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
     .replace(/\s+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n");
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function pickBodyText(payload: InboundPayload): string {
+  // Try every plausible text field
+  const text = pickString(payload as unknown as Record<string, unknown>, [
+    ["data", "text"], ["data", "body_text"], ["data", "text_body"],
+    ["data", "content_text"], ["data", "plain"],
+    ["email", "text"], ["text"], ["body_text"],
+  ]);
+  if (text) return text;
+
+  // Fall back to HTML → stripped
+  const html = pickString(payload as unknown as Record<string, unknown>, [
+    ["data", "html"], ["data", "body_html"], ["data", "html_body"],
+    ["data", "content_html"], ["data", "content"], ["data", "body"],
+    ["email", "html"], ["html"], ["body"],
+  ]);
+  if (html) return htmlToText(html);
+
+  return "";
 }
 
 export async function POST(req: NextRequest) {
@@ -152,8 +192,19 @@ export async function POST(req: NextRequest) {
   const subject = pickSubject(payload);
   const bodyText = pickBodyText(payload);
 
-  if (!bodyText || bodyText.length < 50) {
-    return NextResponse.json({ error: "Email body too short / empty" }, { status: 400 });
+  if (!bodyText || bodyText.length < 30) {
+    // Diagnostic: log the payload structure so we can adjust pickBodyText
+    const keys = payload && typeof payload === "object"
+      ? Object.keys(payload as object)
+      : [];
+    const dataKeys = payload && typeof payload === "object" && "data" in payload && payload.data && typeof payload.data === "object"
+      ? Object.keys(payload.data as object)
+      : [];
+    console.warn("[inbound] empty body. Top-level keys:", keys, "data keys:", dataKeys, "bodyText length:", bodyText?.length ?? 0);
+    return NextResponse.json({
+      error: "Email body too short / empty",
+      debug: { topLevelKeys: keys, dataKeys, bodyLength: bodyText?.length ?? 0 },
+    }, { status: 400 });
   }
 
   // 1. Parse format-specific fields

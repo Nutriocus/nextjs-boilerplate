@@ -184,6 +184,11 @@ export default function SweatPage() {
     { id: "seg3", label: "Étape 3 — Fin", duree: "180", temp: "16", fc: "140", humidite: "75" },
   ];
   const [segments, setSegments] = useAthleteData<PredSegment[]>("sweat_pred_segments", defaultSegments);
+  // Pre-race water reserves: hyperhydration protocol (+500 ml) and carb-load (+750 ml of bound water)
+  const [reserve, setReserve] = useAthleteData<{ hyperhydration: boolean; carbLoad: boolean }>(
+    "sweat_pred_reserve",
+    { hyperhydration: false, carbLoad: false },
+  );
   const addSegment = () => setSegments((s) => [
     ...s,
     { id: newId(), label: `Étape ${s.length + 1}`, duree: "120", temp: "20", fc: "145", humidite: "65" },
@@ -974,6 +979,35 @@ export default function SweatPage() {
                     onChange={(e) => setPred({ ...pred, tolerance: e.target.value })}
                   />
                 </Field>
+                <div className="mt-2 p-2.5 rounded-lg" style={{ background: "var(--color-surface-2)", border: "1px dashed var(--color-border)" }}>
+                  <div className="text-[10px] uppercase font-bold mb-1.5" style={{ letterSpacing: ".08em", color: "var(--color-text-muted)" }}>
+                    💧 Réserves pré-course
+                  </div>
+                  <label className="flex items-start gap-2 cursor-pointer text-xs mb-1.5">
+                    <input
+                      type="checkbox"
+                      checked={reserve.hyperhydration}
+                      onChange={(e) => setReserve({ ...reserve, hyperhydration: e.target.checked })}
+                      style={{ width: 14, height: 14, marginTop: 2 }}
+                    />
+                    <span>
+                      <b>Surhydratation pré-course</b> (+500 ml)<br />
+                      <span className="text-[var(--color-text-muted)]">800 ml + 7 g sel dans les 2h pré-départ</span>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2 cursor-pointer text-xs">
+                    <input
+                      type="checkbox"
+                      checked={reserve.carbLoad}
+                      onChange={(e) => setReserve({ ...reserve, carbLoad: e.target.checked })}
+                      style={{ width: 14, height: 14, marginTop: 2 }}
+                    />
+                    <span>
+                      <b>Surcharge glucidique</b> (+750 ml)<br />
+                      <span className="text-[var(--color-text-muted)]">eau liée au glycogène stocké (1g glyco = 3g eau)</span>
+                    </span>
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -984,6 +1018,8 @@ export default function SweatPage() {
                 const poidsKg = toNum(pred.poids);
                 const toleranceMlH = toNum(pred.tolerance) || 750;
                 const maxLossMlGlobal = poidsKg * 25;
+                // Extra pre-race water reserves (in litres)
+                const extraReserveL = (reserve.hyperhydration ? 0.5 : 0) + (reserve.carbLoad ? 0.75 : 0);
 
                 // Per-segment predictions
                 const segResults = segments.map((seg) => {
@@ -1070,8 +1106,9 @@ export default function SweatPage() {
                       </div>
                     )}
 
-                    {/* Hyperhydration recommendation when projected loss > 2.5% */}
-                    {actualLossPct > 2.5 && poidsKg > 0 && (
+                    {/* Hyperhydration recommendation when projected loss > 2.5% AND
+                        the athlete hasn't already activated the hyperhydration checkbox */}
+                    {actualLossPct > 2.5 && poidsKg > 0 && !reserve.hyperhydration && (
                       <div
                         className="p-3 rounded-lg mb-4"
                         style={{ background: "rgba(33,150,243,0.08)", border: "1px solid rgba(33,150,243,0.30)" }}
@@ -1089,6 +1126,9 @@ export default function SweatPage() {
                             <li>Gain net : ~500 ml de réserve hydrique au départ, qui repousse le seuil des 2,5 %</li>
                             <li>À tester en entraînement avant la course pour valider la tolérance digestive</li>
                           </ul>
+                          <div className="mt-2 text-[11px] text-[var(--color-text-muted)]">
+                            👉 Coche la case <b>« Surhydratation pré-course »</b> à gauche pour voir l&apos;impact sur la courbe.
+                          </div>
                         </div>
                       </div>
                     )}
@@ -1103,10 +1143,20 @@ export default function SweatPage() {
                       const TINT_A = "rgba(255,69,1,0.06)";   // orange tint
                       const TINT_B = "rgba(33,150,243,0.06)"; // blue tint
 
-                      chartData.push({ t: 0, weight: poidsKg, lossPct: 0, lossL: 0, segLabel: "Départ", isMarker: true });
+                      // Start with athlete's water reserve credited as "negative loss"
+                      // so the curve begins ABOVE poidsKg and crosses it later.
+                      const startWeight = poidsKg + extraReserveL;
+                      chartData.push({
+                        t: 0,
+                        weight: Math.round(startWeight * 100) / 100,
+                        lossPct: -((extraReserveL / poidsKg) * 100),
+                        lossL: -extraReserveL,
+                        segLabel: extraReserveL > 0 ? `Départ (+${extraReserveL.toFixed(2)} L)` : "Départ",
+                        isMarker: true,
+                      });
 
                       let cumTime = 0;
-                      let cumNetLossL = 0;
+                      let cumNetLossL = -extraReserveL; // negative = water in reserve
 
                       segResults.forEach((r, segIdx) => {
                         const segDurH = r.dureeMin / 60;
@@ -1125,11 +1175,13 @@ export default function SweatPage() {
                           color: segIdx % 2 === 0 ? TINT_A : TINT_B,
                         });
 
-                        // Generate intermediate hourly points within the segment
+                        // Generate intermediate hourly points within the segment.
+                        // We allow lossAtHour to be negative (= still in reserve from
+                        // pre-race water loading) so the curve can start above poidsKg.
                         let nextHour = Math.floor(segStart) + 1;
                         while (nextHour < segEnd) {
                           const dt = nextHour - segStart;
-                          const lossAtHour = Math.max(0, cumNetLossL + dt * netLossLPerH);
+                          const lossAtHour = cumNetLossL + dt * netLossLPerH;
                           chartData.push({
                             t: nextHour,
                             weight: Math.round((poidsKg - lossAtHour) * 100) / 100,
@@ -1142,7 +1194,7 @@ export default function SweatPage() {
 
                         // End-of-segment point (marker)
                         cumTime = segEnd;
-                        cumNetLossL = Math.max(0, cumNetLossL + segDurH * netLossLPerH);
+                        cumNetLossL = cumNetLossL + segDurH * netLossLPerH;
                         chartData.push({
                           t: Math.round(cumTime * 100) / 100,
                           weight: Math.round((poidsKg - cumNetLossL) * 100) / 100,
@@ -1200,7 +1252,7 @@ export default function SweatPage() {
                                   ticks={Array.from({ length: Math.ceil(cumTime) + 1 }, (_, i) => i)}
                                 />
                                 <YAxis
-                                  domain={[Math.floor(yMin * 10) / 10, poidsKg + 0.1]}
+                                  domain={[Math.floor(yMin * 10) / 10, Math.ceil((poidsKg + extraReserveL + 0.2) * 10) / 10]}
                                   tickFormatter={(v) => `${v.toFixed(1)}`}
                                   fontSize={11}
                                   label={{ value: "Poids (kg)", angle: -90, position: "insideLeft", style: { fontSize: 11 } }}
@@ -1214,7 +1266,14 @@ export default function SweatPage() {
                                   y={weightAt25}
                                   stroke="var(--color-danger)"
                                   strokeDasharray="4 4"
-                                  label={{ value: `Seuil 2,5 % (${weightAt25.toFixed(1)} kg)`, position: "right", fontSize: 11, fill: "var(--color-danger)" }}
+                                  label={{
+                                    value: `Seuil 2,5 % · ${weightAt25.toFixed(1)} kg`,
+                                    position: "insideTopRight",
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    fill: "var(--color-danger)",
+                                    offset: 8,
+                                  }}
                                 />
                                 <Line
                                   type="monotone"

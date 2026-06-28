@@ -10,12 +10,15 @@ import {
   Scatter,
   BarChart,
   Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ZAxis,
   ReferenceLine,
+  ReferenceArea,
 } from "recharts";
 
 type SweatTest = {
@@ -1090,92 +1093,150 @@ export default function SweatPage() {
                       </div>
                     )}
 
-                    {/* Weight / dehydration curve over time */}
+                    {/* Weight / dehydration curve over time — hourly resolution */}
                     {poidsKg > 0 && totalDurationMin > 0 && (() => {
-                      const chartData: Array<{ t: number; weight: number; lossPct: number; lossL: number; label?: string }> = [];
-                      chartData.push({ t: 0, weight: poidsKg, lossPct: 0, lossL: 0, label: "Départ" });
+                      type Pt = { t: number; weight: number; lossPct: number; lossL: number; segLabel: string; isMarker?: boolean };
+                      const chartData: Pt[] = [];
+                      const segBands: Array<{ x1: number; x2: number; label: string; color: string }> = [];
+
+                      // Two alternating subtle background tints to distinguish segments
+                      const TINT_A = "rgba(255,69,1,0.06)";   // orange tint
+                      const TINT_B = "rgba(33,150,243,0.06)"; // blue tint
+
+                      chartData.push({ t: 0, weight: poidsKg, lossPct: 0, lossL: 0, segLabel: "Départ", isMarker: true });
+
                       let cumTime = 0;
                       let cumNetLossL = 0;
-                      segResults.forEach((r, i) => {
-                        cumTime += r.dureeMin / 60;
+
+                      segResults.forEach((r, segIdx) => {
+                        const segDurH = r.dureeMin / 60;
+                        const segStart = cumTime;
+                        const segEnd = cumTime + segDurH;
                         const shareOfSweat = totalSweatMl > 0 ? r.sweatTotalMl / totalSweatMl : 0;
                         const ingestSegL = (actualIngestTotalMl * shareOfSweat) / 1000;
-                        const netLossL = r.sweatTotalMl / 1000 - ingestSegL;
-                        cumNetLossL = Math.max(0, cumNetLossL + netLossL);
-                        const weightNow = poidsKg - cumNetLossL;
-                        const lossPct = (cumNetLossL / poidsKg) * 100;
+                        const ingestSegLPerH = segDurH > 0 ? ingestSegL / segDurH : 0;
+                        const sweatLPerH = r.sweatMlH / 1000;
+                        const netLossLPerH = sweatLPerH - ingestSegLPerH;
+
+                        segBands.push({
+                          x1: segStart,
+                          x2: segEnd,
+                          label: r.seg.label,
+                          color: segIdx % 2 === 0 ? TINT_A : TINT_B,
+                        });
+
+                        // Generate intermediate hourly points within the segment
+                        let nextHour = Math.floor(segStart) + 1;
+                        while (nextHour < segEnd) {
+                          const dt = nextHour - segStart;
+                          const lossAtHour = Math.max(0, cumNetLossL + dt * netLossLPerH);
+                          chartData.push({
+                            t: nextHour,
+                            weight: Math.round((poidsKg - lossAtHour) * 100) / 100,
+                            lossPct: Math.round((lossAtHour / poidsKg) * 100 * 10) / 10,
+                            lossL: Math.round(lossAtHour * 100) / 100,
+                            segLabel: r.seg.label,
+                          });
+                          nextHour += 1;
+                        }
+
+                        // End-of-segment point (marker)
+                        cumTime = segEnd;
+                        cumNetLossL = Math.max(0, cumNetLossL + segDurH * netLossLPerH);
                         chartData.push({
-                          t: Math.round(cumTime * 10) / 10,
-                          weight: Math.round(weightNow * 10) / 10,
-                          lossPct: Math.round(lossPct * 10) / 10,
+                          t: Math.round(cumTime * 100) / 100,
+                          weight: Math.round((poidsKg - cumNetLossL) * 100) / 100,
+                          lossPct: Math.round((cumNetLossL / poidsKg) * 100 * 10) / 10,
                           lossL: Math.round(cumNetLossL * 100) / 100,
-                          label: `Fin ${r.seg.label}`,
+                          segLabel: `Fin ${r.seg.label}`,
+                          isMarker: true,
                         });
                       });
-                      const lossThreshold25Pct = poidsKg * 0.025; // in kg (1 kg ≈ 1 L)
+
+                      const lossThreshold25Pct = poidsKg * 0.025;
                       const weightAt25 = poidsKg - lossThreshold25Pct;
+                      const minWeight = Math.min(...chartData.map((d) => d.weight));
+                      const yMin = Math.min(weightAt25 - 0.3, minWeight - 0.2);
+
+                      // Markers shown below the chart
+                      const markers = chartData.filter((d) => d.isMarker);
+
                       return (
                         <div className="card p-4 mb-4">
                           <div className="font-extrabold mb-1" style={{ fontFamily: "var(--font-display)" }}>
                             📉 Courbe poids / déshydratation
                           </div>
                           <div className="text-xs text-[var(--color-text-muted)] mb-3">
-                            Évolution du poids corporel (en bleu) en fonction du temps, en tenant compte de la sudation
-                            par segment et de l&apos;apport hydrique projeté. Ligne rouge = seuil critique 2,5 % (
-                            {weightAt25.toFixed(1)} kg / {lossThreshold25Pct.toFixed(2)} L de perte).
+                            Évolution du poids corporel heure par heure, calculée selon la sudation de chaque segment
+                            et l&apos;apport hydrique projeté. Bandes alternées orange/bleu = segments. Ligne rouge =
+                            seuil critique 2,5 % (<b>{weightAt25.toFixed(1)} kg</b> / {lossThreshold25Pct.toFixed(2)} L de perte).
                           </div>
-                          <div style={{ width: "100%", height: 260 }}>
+                          <div style={{ width: "100%", height: 300 }}>
                             <ResponsiveContainer>
-                              <BarChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                              <LineChart data={chartData} margin={{ top: 12, right: 20, left: 0, bottom: 8 }}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                                {/* Per-segment background bands */}
+                                {segBands.map((b, i) => (
+                                  <ReferenceArea
+                                    key={`band-${i}`}
+                                    x1={b.x1}
+                                    x2={b.x2}
+                                    fill={b.color}
+                                    fillOpacity={1}
+                                    label={{
+                                      value: b.label,
+                                      position: "insideTop",
+                                      fontSize: 9,
+                                      fill: "var(--color-text-muted)",
+                                    }}
+                                  />
+                                ))}
                                 <XAxis
                                   dataKey="t"
                                   type="number"
                                   domain={[0, "dataMax"]}
                                   tickFormatter={(v) => `${v}h`}
                                   fontSize={11}
+                                  ticks={Array.from({ length: Math.ceil(cumTime) + 1 }, (_, i) => i)}
                                 />
                                 <YAxis
-                                  yAxisId="weight"
-                                  domain={[weightAt25 - 0.5, poidsKg + 0.2]}
+                                  domain={[Math.floor(yMin * 10) / 10, poidsKg + 0.1]}
                                   tickFormatter={(v) => `${v.toFixed(1)}`}
                                   fontSize={11}
                                   label={{ value: "Poids (kg)", angle: -90, position: "insideLeft", style: { fontSize: 11 } }}
                                 />
                                 <Tooltip
-                                  formatter={(value: number, name: string) => {
-                                    if (name === "Poids (kg)") return [`${value} kg`, name];
-                                    return [value, name];
-                                  }}
-                                  labelFormatter={(v) => `t = ${v}h`}
+                                  formatter={(value: number) => [`${value} kg`, "Poids"]}
+                                  labelFormatter={(v: number) => `t = ${v}h`}
                                   contentStyle={{ fontSize: 12 }}
                                 />
                                 <ReferenceLine
-                                  yAxisId="weight"
                                   y={weightAt25}
                                   stroke="var(--color-danger)"
                                   strokeDasharray="4 4"
-                                  label={{ value: "Seuil 2,5%", position: "right", fontSize: 11, fill: "var(--color-danger)" }}
+                                  label={{ value: `Seuil 2,5 % (${weightAt25.toFixed(1)} kg)`, position: "right", fontSize: 11, fill: "var(--color-danger)" }}
                                 />
-                                <Bar
-                                  yAxisId="weight"
+                                <Line
+                                  type="monotone"
                                   dataKey="weight"
                                   name="Poids (kg)"
-                                  fill="#2196f3"
-                                  radius={[4, 4, 0, 0]}
+                                  stroke="#2196f3"
+                                  strokeWidth={2.5}
+                                  dot={{ r: 3, fill: "#2196f3" }}
+                                  activeDot={{ r: 5 }}
                                 />
-                              </BarChart>
+                              </LineChart>
                             </ResponsiveContainer>
                           </div>
                           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-xs">
-                            {chartData.map((p, i) => (
+                            {markers.map((p, i) => (
                               <div key={i} className="rounded p-2" style={{ background: "var(--color-surface-2)" }}>
-                                <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]">{p.label}</div>
+                                <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)] truncate">{p.segLabel}</div>
                                 <div className="font-extrabold" style={{ color: p.lossPct > 2.5 ? "var(--color-danger)" : "var(--color-dark)" }}>
                                   {p.weight} kg
                                 </div>
                                 <div className="text-[10px]" style={{ color: p.lossPct > 2.5 ? "var(--color-danger)" : "var(--color-text-muted)" }}>
-                                  -{p.lossL} L · {p.lossPct.toFixed(1)} %
+                                  -{p.lossL} L · {p.lossPct.toFixed(1)} % · t={p.t}h
                                 </div>
                               </div>
                             ))}

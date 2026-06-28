@@ -112,6 +112,46 @@ function predictSweat(
   return { predicted, confidence, topMatches };
 }
 
+// ===================== HYDRATION RECOMMENDATIONS =====================
+// Compute hydration advice for a given sweat rate, duration, weight, and
+// personal tolerance. Caps recommended intake at the athlete's tolerance,
+// and reports the resulting dehydration % when tolerance < ideal intake.
+function hydrationRecs(input: {
+  sweatMlH: number;
+  durationMin: number;
+  weightKg: number;
+  toleranceMlH: number;
+}) {
+  const { sweatMlH, durationMin, weightKg, toleranceMlH } = input;
+  const dureeH = durationMin / 60;
+  const totalSweatMl = sweatMlH * dureeH;
+  const maxLossMl = weightKg * 25; // 2.5% body weight in ml
+  // Ideal intake to stay under 2.5% dehydration
+  const idealIngestTotalMl = Math.max(0, totalSweatMl - maxLossMl);
+  const idealIngestPerH = dureeH > 0 ? idealIngestTotalMl / dureeH : 0;
+  // Apply personal tolerance cap
+  const actualIngestPerH = Math.min(idealIngestPerH, toleranceMlH);
+  const actualIngestTotalMl = actualIngestPerH * dureeH;
+  // Resulting dehydration % if athlete sticks to tolerance
+  const actualLossMl = totalSweatMl - actualIngestTotalMl;
+  const actualLossPct = weightKg > 0 ? (actualLossMl / (weightKg * 1000)) * 100 : 0;
+  // Loss % if athlete drinks NOTHING
+  const lossPctIfZero = weightKg > 0 ? (totalSweatMl / (weightKg * 1000)) * 100 : 0;
+  return {
+    totalSweatMl,
+    maxLossMl,
+    idealIngestTotalMl,
+    idealIngestPerH,
+    actualIngestTotalMl,
+    actualIngestPerH,
+    actualLossMl,
+    actualLossPct,
+    lossPctIfZero,
+    exceedsTolerance: idealIngestPerH > toleranceMlH,
+    canStayUnder25IfZero: lossPctIfZero <= 2.5,
+  };
+}
+
 // ===================== PAGE =====================
 export default function SweatPage() {
   const [tests, setTests, loaded] = useAthleteData<SweatTest[]>("sweat", []);
@@ -127,7 +167,24 @@ export default function SweatPage() {
     humidite: "60",
     duree: "60",
     poids: profile.poids ? String(profile.poids) : "70",
+    tolerance: "750", // ml/h — personal digestive tolerance
   });
+
+  // Multi-segment mode for ultras / long races where conditions vary widely.
+  type PredSegment = { id: string; label: string; duree: string; temp: string; fc: string; humidite: string };
+  const [predMode, setPredMode] = useState<"simple" | "segments">("simple");
+  const [segments, setSegments] = useState<PredSegment[]>([
+    { id: newId(), label: "Étape 1 — Départ", duree: "180", temp: "18", fc: "150", humidite: "70" },
+    { id: newId(), label: "Étape 2 — Cœur de course", duree: "240", temp: "26", fc: "145", humidite: "60" },
+    { id: newId(), label: "Étape 3 — Fin", duree: "180", temp: "16", fc: "140", humidite: "75" },
+  ]);
+  const addSegment = () => setSegments((s) => [
+    ...s,
+    { id: newId(), label: `Étape ${s.length + 1}`, duree: "120", temp: "20", fc: "145", humidite: "65" },
+  ]);
+  const removeSegment = (id: string) => setSegments((s) => s.filter((seg) => seg.id !== id));
+  const updateSegment = (id: string, key: keyof PredSegment, value: string) =>
+    setSegments((s) => s.map((seg) => (seg.id === id ? { ...seg, [key]: value } : seg)));
 
   // Sync prediction weight when profile loads / changes
   useEffect(() => {
@@ -435,6 +492,32 @@ export default function SweatPage() {
 
       {/* ============ TAB: ANTICIPATION ============ */}
       {tab === "anticipation" && (
+        <>
+        {/* Mode toggle: simple vs multi-segments */}
+        <div className="card p-3 mb-3 flex items-center gap-2 flex-wrap">
+          <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]" style={{ letterSpacing: ".08em" }}>
+            Mode anticipation
+          </div>
+          <button
+            onClick={() => setPredMode("simple")}
+            className={predMode === "simple" ? "btn-primary btn-sm" : "btn-ghost btn-sm"}
+          >
+            Conditions constantes
+          </button>
+          <button
+            onClick={() => setPredMode("segments")}
+            className={predMode === "segments" ? "btn-primary btn-sm" : "btn-ghost btn-sm"}
+            title="Pour ultras/ironman où les conditions varient sur la durée"
+          >
+            🏔 Multi-segments (ultra)
+          </button>
+          {predMode === "segments" && (
+            <span className="text-xs text-[var(--color-text-muted)]">
+              · {segments.length} segment{segments.length > 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
+        {predMode === "simple" && (
         <div className="grid grid-cols-1 lg:grid-cols-[400px_1fr] gap-4">
           <div className="card p-4">
             <div className="font-extrabold mb-2" style={{ fontFamily: "var(--font-display)" }}>
@@ -459,8 +542,16 @@ export default function SweatPage() {
               <Field label="Poids athlète (kg)">
                 <input className="input" value={pred.poids} onChange={(e) => setPred({ ...pred, poids: e.target.value })} />
               </Field>
+              <Field label="Tolérance hydrique perso (ml/h)">
+                <input
+                  className="input"
+                  value={pred.tolerance}
+                  onChange={(e) => setPred({ ...pred, tolerance: e.target.value })}
+                  placeholder="750"
+                />
+              </Field>
               <div className="text-[10px] text-[var(--color-text-muted)]">
-                Pré-rempli depuis ton profil. Modifie si besoin.
+                Tolérance digestive : ce que tu peux ingérer/heure sans inconfort. Tolérance moyenne : 500-800 ml/h. À travailler à l&apos;entraînement.
               </div>
             </div>
           </div>
@@ -511,14 +602,20 @@ export default function SweatPage() {
                 </div>
 
                 {(() => {
-                  const dureeH = toNum(pred.duree) / 60;
+                  const recs = hydrationRecs({
+                    sweatMlH: prediction.predicted,
+                    durationMin: toNum(pred.duree),
+                    weightKg: toNum(pred.poids),
+                    toleranceMlH: toNum(pred.tolerance) || 750,
+                  });
+                  const {
+                    totalSweatMl, maxLossMl,
+                    idealIngestTotalMl: toIngestTotalMl,
+                    idealIngestPerH: toIngestPerH,
+                    actualIngestPerH, actualIngestTotalMl, actualLossPct,
+                    lossPctIfZero, exceedsTolerance, canStayUnder25IfZero,
+                  } = recs;
                   const poidsKg = toNum(pred.poids);
-                  // 2.5% rule: max tolerable water loss = 2.5% × body weight (in ml = 25 × kg)
-                  const maxLossMl = poidsKg * 25; // 0.025 × kg × 1000 ml/kg
-                  const totalSweatMl = prediction.predicted * dureeH;
-                  const toIngestTotalMl = Math.max(0, totalSweatMl - maxLossMl);
-                  const toIngestPerH = dureeH > 0 ? toIngestTotalMl / dureeH : 0;
-                  const lossPctIfZero = poidsKg > 0 ? (totalSweatMl / (poidsKg * 1000)) * 100 : 0;
                   const willCompensate = toIngestPerH < prediction.predicted;
                   return (
                     <div className="card p-4">
@@ -663,8 +760,8 @@ export default function SweatPage() {
                       </div>
 
                       {/* Warnings */}
-                      <div className="mt-4 space-y-1.5 text-xs">
-                        {!willCompensate && (
+                      <div className="mt-4 space-y-2 text-xs">
+                        {canStayUnder25IfZero && (
                           <div
                             className="p-2.5 rounded"
                             style={{ background: "rgba(95,140,10,0.10)", color: "var(--color-success)" }}
@@ -673,16 +770,43 @@ export default function SweatPage() {
                             (perte estimée : {lossPctIfZero.toFixed(1)} %). Bois quand même pour le confort.
                           </div>
                         )}
-                        {toIngestPerH > 1000 && (
+
+                        {/* ⚠ CRITICAL: ingest > tolerance → tradeoff message */}
+                        {exceedsTolerance && (
                           <div
-                            className="p-2.5 rounded"
-                            style={{ background: "rgba(207,46,46,0.10)", color: "var(--color-danger)" }}
+                            className="p-3 rounded-lg"
+                            style={{
+                              background: "rgba(207,46,46,0.10)",
+                              border: "1px solid rgba(207,46,46,0.30)",
+                              color: "var(--color-text)",
+                            }}
                           >
-                            ⚠ Plus de 1 000 ml/h à ingérer = au-delà de la tolérance digestive moyenne. Travaille en amont ta
-                            tolérance hydrique (voir le module &quot;Tests de tolérance&quot;).
+                            <div className="font-extrabold mb-1" style={{ color: "var(--color-danger)" }}>
+                              ⚠ Apport théorique &gt; ta tolérance digestive
+                            </div>
+                            <div className="leading-relaxed">
+                              Pour rester sous 2,5 % de déshydratation, il faudrait ingérer{" "}
+                              <b>{Math.round(toIngestPerH)} ml/h</b> — au-delà de ta tolérance déclarée
+                              de <b>{Math.round(toNum(pred.tolerance) || 750)} ml/h</b>.
+                              <br /><br />
+                              <b>👉 Recommandation :</b> <b>reste à ta tolérance</b> ({Math.round(actualIngestPerH)} ml/h,
+                              soit <b>{Math.round(actualIngestTotalMl)} ml</b> sur la course). Chercher à
+                              combler à tout prix = troubles digestifs garantis (nausées, ballonnements,
+                              perte d&apos;énergie, abandon possible).
+                              <br /><br />
+                              <b>Conséquence assumée :</b> tu finiras à <b>~{actualLossPct.toFixed(1)} %
+                              de déshydratation</b>, au-delà du seuil idéal. Ce n&apos;est pas optimal
+                              mais c&apos;est <b>le moindre mal</b> vs un problème digestif en pleine
+                              course.
+                              <br /><br />
+                              <b>À travailler en amont :</b> entraîne ta tolérance hydrique (module
+                              &quot;Tests de tolérance&quot;) — c&apos;est un facteur de progression
+                              majeur sur les longues courses.
+                            </div>
                           </div>
                         )}
-                        {toIngestPerH >= 500 && toIngestPerH <= 1000 && (
+
+                        {!exceedsTolerance && toIngestPerH >= 500 && toIngestPerH <= 1000 && (
                           <div className="text-[var(--color-text-muted)]">
                             ℹ Volume horaire dans la fourchette tolérable (500-1000 ml/h) — vérifie que tu as déjà tenu cette
                             cadence en entraînement.
@@ -716,6 +840,245 @@ export default function SweatPage() {
             ) : null}
           </div>
         </div>
+        )}
+
+        {/* =================== MULTI-SEGMENTS MODE =================== */}
+        {predMode === "segments" && (
+          <div className="grid grid-cols-1 lg:grid-cols-[460px_1fr] gap-4">
+            <div className="card p-4">
+              <div className="font-extrabold mb-1" style={{ fontFamily: "var(--font-display)" }}>
+                🏔 Segments de course
+              </div>
+              <div className="text-xs text-[var(--color-text-muted)] mb-3">
+                Décompose ta course en sections avec leurs propres conditions (température, FC, humidité, durée).
+                Utile pour les ultras et ironman où météo & intensité varient fortement.
+              </div>
+              <div className="flex flex-col gap-3 mb-3">
+                {segments.map((seg, i) => (
+                  <div key={seg.id} className="rounded-lg p-2.5" style={{ background: "var(--color-surface-2)", borderLeft: "3px solid var(--color-primary)" }}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <input
+                        className="input"
+                        style={{ fontSize: 13, fontWeight: 700, flex: 1 }}
+                        value={seg.label}
+                        onChange={(e) => updateSegment(seg.id, "label", e.target.value)}
+                      />
+                      {segments.length > 1 && (
+                        <button
+                          onClick={() => removeSegment(seg.id)}
+                          title="Supprimer ce segment"
+                          style={{ border: "none", background: "none", color: "var(--color-danger)", cursor: "pointer", fontSize: 16 }}
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <Field label="Durée (min)">
+                        <input className="input" value={seg.duree} onChange={(e) => updateSegment(seg.id, "duree", e.target.value)} />
+                      </Field>
+                      <Field label="Temp (°C)">
+                        <input className="input" value={seg.temp} onChange={(e) => updateSegment(seg.id, "temp", e.target.value)} />
+                      </Field>
+                      <Field label="FC (bpm)">
+                        <input className="input" value={seg.fc} onChange={(e) => updateSegment(seg.id, "fc", e.target.value)} />
+                      </Field>
+                      <Field label="Humid (%)">
+                        <input className="input" value={seg.humidite} onChange={(e) => updateSegment(seg.id, "humidite", e.target.value)} />
+                      </Field>
+                    </div>
+                    {(() => {
+                      const segPred = predictSweat(
+                        { temp: toNum(seg.temp), fc: toNum(seg.fc), humidite: toNum(seg.humidite), duree: toNum(seg.duree) },
+                        validForPred,
+                      );
+                      if (!segPred) return null;
+                      const segSweatTotal = (segPred.predicted * toNum(seg.duree)) / 60;
+                      return (
+                        <div className="text-[11px] mt-2 text-[var(--color-text-muted)]">
+                          → <b style={{ color: "var(--color-primary)" }}>{Math.round(segPred.predicted)} ml/h</b>
+                          {" · "}Pertes segment : <b>{Math.round(segSweatTotal)} ml</b>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                ))}
+              </div>
+              <button onClick={addSegment} className="btn-ghost btn-sm w-full">+ Ajouter un segment</button>
+              <div className="mt-4 border-t border-[var(--color-border)] pt-3 flex flex-col gap-2">
+                <Field label="Poids athlète (kg)">
+                  <input className="input" value={pred.poids} onChange={(e) => setPred({ ...pred, poids: e.target.value })} />
+                </Field>
+                <Field label="Tolérance hydrique perso (ml/h)">
+                  <input
+                    className="input"
+                    value={pred.tolerance}
+                    onChange={(e) => setPred({ ...pred, tolerance: e.target.value })}
+                  />
+                </Field>
+              </div>
+            </div>
+
+            <div>
+              {validForPred.length === 0 ? (
+                <Empty>Ajoute au moins 1 test complet pour générer les estimations par segment.</Empty>
+              ) : (() => {
+                const poidsKg = toNum(pred.poids);
+                const toleranceMlH = toNum(pred.tolerance) || 750;
+                const maxLossMlGlobal = poidsKg * 25;
+
+                // Per-segment predictions
+                const segResults = segments.map((seg) => {
+                  const p = predictSweat(
+                    { temp: toNum(seg.temp), fc: toNum(seg.fc), humidite: toNum(seg.humidite), duree: toNum(seg.duree) },
+                    validForPred,
+                  );
+                  const dureeMin = toNum(seg.duree);
+                  const sweatMlH = p?.predicted ?? 0;
+                  const sweatTotalMl = (sweatMlH * dureeMin) / 60;
+                  return { seg, dureeMin, sweatMlH, sweatTotalMl, confidence: p?.confidence ?? "faible" };
+                });
+
+                const totalDurationMin = segResults.reduce((s, r) => s + r.dureeMin, 0);
+                const totalSweatMl = segResults.reduce((s, r) => s + r.sweatTotalMl, 0);
+                const totalDurationH = totalDurationMin / 60;
+                const avgSweatMlH = totalDurationH > 0 ? totalSweatMl / totalDurationH : 0;
+                const idealIngestTotalMl = Math.max(0, totalSweatMl - maxLossMlGlobal);
+                const idealIngestPerH = totalDurationH > 0 ? idealIngestTotalMl / totalDurationH : 0;
+                const actualIngestPerH = Math.min(idealIngestPerH, toleranceMlH);
+                const actualIngestTotalMl = actualIngestPerH * totalDurationH;
+                const actualLossPct = poidsKg > 0 ? ((totalSweatMl - actualIngestTotalMl) / (poidsKg * 1000)) * 100 : 0;
+                const exceedsTolerance = idealIngestPerH > toleranceMlH;
+                const naMinTotal = Math.round((actualIngestTotalMl / 1000) * 500);
+                const naMaxTotal = Math.round((actualIngestTotalMl / 1000) * 1300);
+
+                return (
+                  <>
+                    {/* Global summary */}
+                    <div className="card p-5 mb-4" style={{ borderLeft: "5px solid var(--color-primary)", background: "rgba(255,69,1,0.04)" }}>
+                      <div className="text-[10px] uppercase font-bold text-[var(--color-primary)] mb-2" style={{ letterSpacing: ".08em" }}>
+                        🏁 Estimation globale sur la course
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div>
+                          <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]">Durée totale</div>
+                          <div className="font-extrabold text-xl" style={{ color: "var(--color-dark)" }}>
+                            {Math.floor(totalDurationMin / 60)}h{String(totalDurationMin % 60).padStart(2, "0")}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]">Pertes totales</div>
+                          <div className="font-extrabold text-xl" style={{ color: "var(--color-primary)" }}>
+                            {(totalSweatMl / 1000).toFixed(2)} L
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]">Sudation moyenne</div>
+                          <div className="font-extrabold text-xl" style={{ color: "var(--color-primary)" }}>
+                            {Math.round(avgSweatMlH)} ml/h
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]">À ingérer (recommandé)</div>
+                          <div className="font-extrabold text-xl" style={{ color: "var(--color-primary)" }}>
+                            {(actualIngestTotalMl / 1000).toFixed(2)} L
+                          </div>
+                          <div className="text-[10px] text-[var(--color-text-muted)]">{Math.round(actualIngestPerH)} ml/h en moy.</div>
+                        </div>
+                      </div>
+                      <div className="mt-3 text-xs text-[var(--color-text-muted)]">
+                        Sodium total à viser : <b style={{ color: "#2196f3" }}>{naMinTotal}–{naMaxTotal} mg</b> (500-1300 mg/L)
+                      </div>
+                    </div>
+
+                    {/* Tolerance warning if global ideal > tolerance */}
+                    {exceedsTolerance && (
+                      <div
+                        className="p-3 rounded-lg mb-4"
+                        style={{ background: "rgba(207,46,46,0.10)", border: "1px solid rgba(207,46,46,0.30)" }}
+                      >
+                        <div className="font-extrabold mb-1" style={{ color: "var(--color-danger)" }}>
+                          ⚠ Apport théorique global &gt; ta tolérance
+                        </div>
+                        <div className="text-xs leading-relaxed">
+                          Idéal : <b>{Math.round(idealIngestPerH)} ml/h</b> · Ta tolérance : <b>{toleranceMlH} ml/h</b>.
+                          <br /><br />
+                          <b>👉 Reste à ta tolérance</b> ({Math.round(actualIngestPerH)} ml/h).
+                          Tu finiras à <b>~{actualLossPct.toFixed(1)} % de déshydratation</b> globale —
+                          c&apos;est le moindre mal vs des troubles digestifs en course.
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Per-segment breakdown */}
+                    <div className="card p-4">
+                      <div className="font-extrabold mb-2" style={{ fontFamily: "var(--font-display)" }}>
+                        📊 Détail par segment
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs" style={{ borderCollapse: "collapse" }}>
+                          <thead>
+                            <tr style={{ background: "var(--color-surface-2)" }}>
+                              <th style={{ padding: 8, textAlign: "left", borderBottom: "1px solid var(--color-border)" }}>Segment</th>
+                              <th style={{ padding: 8, textAlign: "right", borderBottom: "1px solid var(--color-border)" }}>Durée</th>
+                              <th style={{ padding: 8, textAlign: "right", borderBottom: "1px solid var(--color-border)" }}>Conditions</th>
+                              <th style={{ padding: 8, textAlign: "right", borderBottom: "1px solid var(--color-border)" }}>Sueur</th>
+                              <th style={{ padding: 8, textAlign: "right", borderBottom: "1px solid var(--color-border)" }}>Pertes</th>
+                              <th style={{ padding: 8, textAlign: "right", borderBottom: "1px solid var(--color-border)" }}>À ingérer*</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {segResults.map((r, i) => {
+                              // Proportional ingestion per segment based on its share of total sweat
+                              const shareOfSweat = totalSweatMl > 0 ? r.sweatTotalMl / totalSweatMl : 0;
+                              const ingestSeg = actualIngestTotalMl * shareOfSweat;
+                              const ingestSegPerH = r.dureeMin > 0 ? (ingestSeg / r.dureeMin) * 60 : 0;
+                              return (
+                                <tr key={r.seg.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
+                                  <td style={{ padding: 8, fontWeight: 700 }}>{r.seg.label}</td>
+                                  <td style={{ padding: 8, textAlign: "right" }}>
+                                    {Math.floor(r.dureeMin / 60)}h{String(r.dureeMin % 60).padStart(2, "0")}
+                                  </td>
+                                  <td style={{ padding: 8, textAlign: "right", color: "var(--color-text-muted)" }}>
+                                    {r.seg.temp}°C · {r.seg.humidite}%
+                                  </td>
+                                  <td style={{ padding: 8, textAlign: "right", color: "var(--color-primary)", fontWeight: 700 }}>
+                                    {Math.round(r.sweatMlH)} ml/h
+                                  </td>
+                                  <td style={{ padding: 8, textAlign: "right" }}>{Math.round(r.sweatTotalMl)} ml</td>
+                                  <td style={{ padding: 8, textAlign: "right" }}>
+                                    {Math.round(ingestSeg)} ml
+                                    <div className="text-[10px] text-[var(--color-text-muted)]">{Math.round(ingestSegPerH)} ml/h</div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                            <tr style={{ background: "var(--color-surface-2)", fontWeight: 800 }}>
+                              <td style={{ padding: 8 }}>Total</td>
+                              <td style={{ padding: 8, textAlign: "right" }}>
+                                {Math.floor(totalDurationMin / 60)}h{String(totalDurationMin % 60).padStart(2, "0")}
+                              </td>
+                              <td style={{ padding: 8 }}></td>
+                              <td style={{ padding: 8, textAlign: "right", color: "var(--color-primary)" }}>
+                                {Math.round(avgSweatMlH)} ml/h
+                              </td>
+                              <td style={{ padding: 8, textAlign: "right" }}>{Math.round(totalSweatMl)} ml</td>
+                              <td style={{ padding: 8, textAlign: "right" }}>{Math.round(actualIngestTotalMl)} ml</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="text-[10px] text-[var(--color-text-muted)] mt-2">
+                        *Apport ingérable réparti proportionnellement à la sudation de chaque segment, capé à la tolérance personnelle.
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+        </>
       )}
 
       {/* ============ DETAIL MODAL ============ */}

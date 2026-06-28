@@ -844,10 +844,15 @@ export default function SweatPage() {
                               combler à tout prix = troubles digestifs garantis (nausées, ballonnements,
                               perte d&apos;énergie, abandon possible).
                               <br /><br />
-                              <b>Conséquence assumée :</b> tu finiras à <b>~{actualLossPct.toFixed(1)} %
-                              de déshydratation</b>, au-delà du seuil idéal. Ce n&apos;est pas optimal
-                              mais c&apos;est <b>le moindre mal</b> vs un problème digestif en pleine
-                              course.
+                              <b>Conséquence prévisible :</b> tu approcheras / dépasseras
+                              le seuil des 2,5 % de déshydratation (estimation théorique :
+                              ~{actualLossPct.toFixed(1)} %). En pratique, ce chiffre est
+                              <b> auto-régulé</b> : dès que la déshydratation atteint ~2,5 %,
+                              les performances baissent → allure ralentie → moins de chaleur
+                              à évacuer → taux de sudation réduit. Tu finiras donc probablement
+                              <b>moins déshydratée</b> que la projection linéaire, mais avec
+                              une <b>perte de performance</b> sur la 2ᵉ moitié de course.
+                              C&apos;est le moindre mal vs un problème digestif.
                               <br /><br />
                               <b>À travailler en amont :</b> entraîne ta tolérance hydrique (module
                               &quot;Tests de tolérance&quot;) — c&apos;est un facteur de progression
@@ -1054,11 +1059,130 @@ export default function SweatPage() {
                           Idéal : <b>{Math.round(idealIngestPerH)} ml/h</b> · Ta tolérance : <b>{toleranceMlH} ml/h</b>.
                           <br /><br />
                           <b>👉 Reste à ta tolérance</b> ({Math.round(actualIngestPerH)} ml/h).
-                          Tu finiras à <b>~{actualLossPct.toFixed(1)} % de déshydratation</b> globale —
-                          c&apos;est le moindre mal vs des troubles digestifs en course.
+                          Estimation théorique de déshydratation finale : <b>~{actualLossPct.toFixed(1)} %</b>.
+                          En pratique, dès que tu approches 2,5 %, tes performances baissent → allure ralentie → moins
+                          de chaleur à évacuer → sudation réduite. Le chiffre réel sera donc <b>moins critique</b>,
+                          mais avec un <b>coût en performance</b>.
                         </div>
                       </div>
                     )}
+
+                    {/* Hyperhydration recommendation when projected loss > 2.5% */}
+                    {actualLossPct > 2.5 && poidsKg > 0 && (
+                      <div
+                        className="p-3 rounded-lg mb-4"
+                        style={{ background: "rgba(33,150,243,0.08)", border: "1px solid rgba(33,150,243,0.30)" }}
+                      >
+                        <div className="font-extrabold mb-1" style={{ color: "#2196f3" }}>
+                          💧 Stratégie de surhydratation pré-course recommandée
+                        </div>
+                        <div className="text-xs leading-relaxed">
+                          La déshydratation projetée (<b>~{actualLossPct.toFixed(1)} %</b>) dépasse le seuil critique
+                          de 2,5 %. Pour partir avec une réserve hydrique,&nbsp;
+                          <b>mets en place un protocole de surhydratation pré-course</b> :
+                          <ul className="mt-2 list-disc pl-5 space-y-0.5">
+                            <li><b>800 ml d&apos;eau + 7 g de sel</b> (≈ 1 cuillère à café rase) dans les <b>2 h avant le départ</b></li>
+                            <li>Le sodium retient l&apos;eau dans le compartiment vasculaire (vs uriner direct)</li>
+                            <li>Gain net : ~500 ml de réserve hydrique au départ, qui repousse le seuil des 2,5 %</li>
+                            <li>À tester en entraînement avant la course pour valider la tolérance digestive</li>
+                          </ul>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Weight / dehydration curve over time */}
+                    {poidsKg > 0 && totalDurationMin > 0 && (() => {
+                      const chartData: Array<{ t: number; weight: number; lossPct: number; lossL: number; label?: string }> = [];
+                      chartData.push({ t: 0, weight: poidsKg, lossPct: 0, lossL: 0, label: "Départ" });
+                      let cumTime = 0;
+                      let cumNetLossL = 0;
+                      segResults.forEach((r, i) => {
+                        cumTime += r.dureeMin / 60;
+                        const shareOfSweat = totalSweatMl > 0 ? r.sweatTotalMl / totalSweatMl : 0;
+                        const ingestSegL = (actualIngestTotalMl * shareOfSweat) / 1000;
+                        const netLossL = r.sweatTotalMl / 1000 - ingestSegL;
+                        cumNetLossL = Math.max(0, cumNetLossL + netLossL);
+                        const weightNow = poidsKg - cumNetLossL;
+                        const lossPct = (cumNetLossL / poidsKg) * 100;
+                        chartData.push({
+                          t: Math.round(cumTime * 10) / 10,
+                          weight: Math.round(weightNow * 10) / 10,
+                          lossPct: Math.round(lossPct * 10) / 10,
+                          lossL: Math.round(cumNetLossL * 100) / 100,
+                          label: `Fin ${r.seg.label}`,
+                        });
+                      });
+                      const lossThreshold25Pct = poidsKg * 0.025; // in kg (1 kg ≈ 1 L)
+                      const weightAt25 = poidsKg - lossThreshold25Pct;
+                      return (
+                        <div className="card p-4 mb-4">
+                          <div className="font-extrabold mb-1" style={{ fontFamily: "var(--font-display)" }}>
+                            📉 Courbe poids / déshydratation
+                          </div>
+                          <div className="text-xs text-[var(--color-text-muted)] mb-3">
+                            Évolution du poids corporel (en bleu) en fonction du temps, en tenant compte de la sudation
+                            par segment et de l&apos;apport hydrique projeté. Ligne rouge = seuil critique 2,5 % (
+                            {weightAt25.toFixed(1)} kg / {lossThreshold25Pct.toFixed(2)} L de perte).
+                          </div>
+                          <div style={{ width: "100%", height: 260 }}>
+                            <ResponsiveContainer>
+                              <BarChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+                                <XAxis
+                                  dataKey="t"
+                                  type="number"
+                                  domain={[0, "dataMax"]}
+                                  tickFormatter={(v) => `${v}h`}
+                                  fontSize={11}
+                                />
+                                <YAxis
+                                  yAxisId="weight"
+                                  domain={[weightAt25 - 0.5, poidsKg + 0.2]}
+                                  tickFormatter={(v) => `${v.toFixed(1)}`}
+                                  fontSize={11}
+                                  label={{ value: "Poids (kg)", angle: -90, position: "insideLeft", style: { fontSize: 11 } }}
+                                />
+                                <Tooltip
+                                  formatter={(value: number, name: string) => {
+                                    if (name === "Poids (kg)") return [`${value} kg`, name];
+                                    return [value, name];
+                                  }}
+                                  labelFormatter={(v) => `t = ${v}h`}
+                                  contentStyle={{ fontSize: 12 }}
+                                />
+                                <ReferenceLine
+                                  yAxisId="weight"
+                                  y={weightAt25}
+                                  stroke="var(--color-danger)"
+                                  strokeDasharray="4 4"
+                                  label={{ value: "Seuil 2,5%", position: "right", fontSize: 11, fill: "var(--color-danger)" }}
+                                />
+                                <Bar
+                                  yAxisId="weight"
+                                  dataKey="weight"
+                                  name="Poids (kg)"
+                                  fill="#2196f3"
+                                  radius={[4, 4, 0, 0]}
+                                />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-xs">
+                            {chartData.map((p, i) => (
+                              <div key={i} className="rounded p-2" style={{ background: "var(--color-surface-2)" }}>
+                                <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]">{p.label}</div>
+                                <div className="font-extrabold" style={{ color: p.lossPct > 2.5 ? "var(--color-danger)" : "var(--color-dark)" }}>
+                                  {p.weight} kg
+                                </div>
+                                <div className="text-[10px]" style={{ color: p.lossPct > 2.5 ? "var(--color-danger)" : "var(--color-text-muted)" }}>
+                                  -{p.lossL} L · {p.lossPct.toFixed(1)} %
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Per-segment breakdown */}
                     <div className="card p-4">

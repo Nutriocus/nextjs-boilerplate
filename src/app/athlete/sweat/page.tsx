@@ -157,27 +157,30 @@ export default function SweatPage() {
   const [tests, setTests, loaded] = useAthleteData<SweatTest[]>("sweat", []);
   const [profile] = useAthleteData<{ poids?: number | string }>("profile", {});
   const [tab, setTab] = useState<"journal" | "analyse" | "anticipation">("journal");
-  const [draft, setDraft] = useState<SweatTest>(blank());
+  // Draft is persisted: a half-filled form survives page reload / navigation.
+  // The user resets it explicitly via the "Réinitialiser" button.
+  const [draft, setDraft] = useAthleteData<SweatTest>("sweat_draft", blank());
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [viewingId, setViewingId] = useState<string | null>(null);
-  const [pred, setPred] = useState({
+  const [pred, setPred] = useAthleteData("sweat_pred", {
     temp: "20",
     fc: "150",
     humidite: "60",
     duree: "60",
     poids: profile.poids ? String(profile.poids) : "70",
-    tolerance: "750", // ml/h — personal digestive tolerance
+    tolerance: "750",
   });
 
   // Multi-segment mode for ultras / long races where conditions vary widely.
   type PredSegment = { id: string; label: string; duree: string; temp: string; fc: string; humidite: string };
-  const [predMode, setPredMode] = useState<"simple" | "segments">("simple");
-  const [segments, setSegments] = useState<PredSegment[]>([
-    { id: newId(), label: "Étape 1 — Départ", duree: "180", temp: "18", fc: "150", humidite: "70" },
-    { id: newId(), label: "Étape 2 — Cœur de course", duree: "240", temp: "26", fc: "145", humidite: "60" },
-    { id: newId(), label: "Étape 3 — Fin", duree: "180", temp: "16", fc: "140", humidite: "75" },
-  ]);
+  const [predMode, setPredMode] = useAthleteData<"simple" | "segments">("sweat_pred_mode", "simple");
+  const defaultSegments: PredSegment[] = [
+    { id: "seg1", label: "Étape 1 — Départ", duree: "180", temp: "18", fc: "150", humidite: "70" },
+    { id: "seg2", label: "Étape 2 — Cœur de course", duree: "240", temp: "26", fc: "145", humidite: "60" },
+    { id: "seg3", label: "Étape 3 — Fin", duree: "180", temp: "16", fc: "140", humidite: "75" },
+  ];
+  const [segments, setSegments] = useAthleteData<PredSegment[]>("sweat_pred_segments", defaultSegments);
   const addSegment = () => setSegments((s) => [
     ...s,
     { id: newId(), label: `Étape ${s.length + 1}`, duree: "120", temp: "20", fc: "145", humidite: "65" },
@@ -193,21 +196,38 @@ export default function SweatPage() {
     }
   }, [profile.poids]);
 
+  // When editing an existing test we use a local-only state so the
+  // persisted new-test draft is never overwritten.
+  const [editDraft, setEditDraft] = useState<SweatTest | null>(null);
+  const activeDraft = editDraft ?? draft;
+  const setActiveDraft: typeof setDraft = (updater) => {
+    if (editDraft) {
+      setEditDraft((d) => {
+        const next = typeof updater === "function" ? (updater as (p: SweatTest) => SweatTest)(d as SweatTest) : updater;
+        return next as SweatTest;
+      });
+    } else {
+      setDraft(updater);
+    }
+  };
   const update = (k: keyof SweatTest, v: string) =>
-    setDraft((d) => ({ ...d, [k]: v }));
+    setActiveDraft((d) => ({ ...d, [k]: v }));
 
   const save = () => {
-    if (!draft.duree) return;
+    if (!activeDraft.duree) return;
     setTests((prev) => {
-      if (editingId) {
-        return prev.map((t) => (t.id === editingId ? { ...draft, id: editingId } : t))
+      if (editingId && editDraft) {
+        return prev.map((t) => (t.id === editingId ? { ...editDraft, id: editingId } : t))
           .sort((a, b) => (a.date < b.date ? 1 : -1));
       }
       return [...prev, { ...draft, id: newId() }].sort((a, b) => (a.date < b.date ? 1 : -1));
     });
-    setDraft(blank());
-    setOpen(false);
+    // After a successful save the new-test draft is reset; the edit-draft
+    // is dropped. Form closes.
+    if (!editingId) setDraft(blank());
+    setEditDraft(null);
     setEditingId(null);
+    setOpen(false);
   };
 
   const remove = (id: string) => {
@@ -217,22 +237,35 @@ export default function SweatPage() {
   };
 
   const startEdit = (t: SweatTest) => {
-    setDraft({ ...t });
+    setEditDraft({ ...t });
     setEditingId(t.id);
     setOpen(true);
     setViewingId(null);
   };
 
   const startNew = () => {
-    setDraft(blank());
+    // Keep the existing persisted draft so a half-filled form is preserved.
+    setEditDraft(null);
     setEditingId(null);
     setOpen(true);
   };
 
   const closeForm = () => {
+    // No data loss: persisted draft stays, edit-draft is dropped.
     setOpen(false);
     setEditingId(null);
-    setDraft(blank());
+    setEditDraft(null);
+  };
+
+  const resetDraft = () => {
+    if (editDraft) {
+      // Reload original test from store
+      const original = editingId ? tests.find((t) => t.id === editingId) : null;
+      setEditDraft(original ? { ...original } : blank());
+    } else {
+      if (!confirm("Effacer toutes les données du formulaire en cours ?")) return;
+      setDraft(blank());
+    }
   };
 
   const withCalcs = tests.map((t) => ({ ...t, ...compute(t) }));
@@ -369,24 +402,41 @@ export default function SweatPage() {
         <>
           {open && (
             <div className="card p-4 mb-4" style={{ border: `2px solid var(--color-primary)` }}>
-              <div className="font-extrabold mb-3">{editingId ? "✎ Modifier le test" : "+ Nouveau test"}</div>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
-                <Field label="Date"><input type="date" className="input" value={draft.date} onChange={(e) => update("date", e.target.value)} /></Field>
-                <Field label="Type d'exercice"><input className="input" value={draft.type} onChange={(e) => update("type", e.target.value)} /></Field>
-                <Field label="Durée (min)"><input className="input" value={draft.duree} onChange={(e) => update("duree", e.target.value)} /></Field>
-                <Field label="FC moyenne (bpm)"><input className="input" value={draft.fc} onChange={(e) => update("fc", e.target.value)} /></Field>
-                <Field label="Poids avant (kg)"><input className="input" value={draft.poidsAvant} onChange={(e) => update("poidsAvant", e.target.value)} /></Field>
-                <Field label="Poids après (kg)"><input className="input" value={draft.poidsApres} onChange={(e) => update("poidsApres", e.target.value)} /></Field>
-                <Field label="Eau ingérée (ml)"><input className="input" value={draft.eau} onChange={(e) => update("eau", e.target.value)} /></Field>
-                <Field label="Urine (ml)"><input className="input" value={draft.urine} onChange={(e) => update("urine", e.target.value)} /></Field>
-                <Field label="Température (°C)"><input className="input" value={draft.temp} onChange={(e) => update("temp", e.target.value)} /></Field>
-                <Field label="Humidité (%)"><input className="input" value={draft.humidite} onChange={(e) => update("humidite", e.target.value)} /></Field>
-                <Field label="Vent (km/h)"><input className="input" value={draft.vent} onChange={(e) => update("vent", e.target.value)} /></Field>
-                <Field label="Indice UV"><input className="input" value={draft.uv} onChange={(e) => update("uv", e.target.value)} /></Field>
+              <div className="flex items-baseline justify-between flex-wrap gap-2 mb-3">
+                <div className="font-extrabold">{editingId ? "✎ Modifier le test" : "+ Nouveau test"}</div>
+                {!editingId && (
+                  <div className="text-[11px] text-[var(--color-text-muted)]">
+                    💾 Saisie sauvegardée automatiquement — fermer la fenêtre ne perd rien.
+                  </div>
+                )}
               </div>
-              <div className="flex justify-end gap-2 mt-3">
-                <button onClick={closeForm} className="btn-ghost">Annuler</button>
-                <button onClick={save} className="btn-primary">{editingId ? "Enregistrer les modifications" : "Ajouter"}</button>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                <Field label="Date"><input type="date" className="input" value={activeDraft.date} onChange={(e) => update("date", e.target.value)} /></Field>
+                <Field label="Type d'exercice"><input className="input" value={activeDraft.type} onChange={(e) => update("type", e.target.value)} /></Field>
+                <Field label="Durée (min)"><input className="input" value={activeDraft.duree} onChange={(e) => update("duree", e.target.value)} /></Field>
+                <Field label="FC moyenne (bpm)"><input className="input" value={activeDraft.fc} onChange={(e) => update("fc", e.target.value)} /></Field>
+                <Field label="Poids avant (kg)"><input className="input" value={activeDraft.poidsAvant} onChange={(e) => update("poidsAvant", e.target.value)} /></Field>
+                <Field label="Poids après (kg)"><input className="input" value={activeDraft.poidsApres} onChange={(e) => update("poidsApres", e.target.value)} /></Field>
+                <Field label="Eau ingérée (ml)"><input className="input" value={activeDraft.eau} onChange={(e) => update("eau", e.target.value)} /></Field>
+                <Field label="Urine (ml)"><input className="input" value={activeDraft.urine} onChange={(e) => update("urine", e.target.value)} /></Field>
+                <Field label="Température (°C)"><input className="input" value={activeDraft.temp} onChange={(e) => update("temp", e.target.value)} /></Field>
+                <Field label="Humidité (%)"><input className="input" value={activeDraft.humidite} onChange={(e) => update("humidite", e.target.value)} /></Field>
+                <Field label="Vent (km/h)"><input className="input" value={activeDraft.vent} onChange={(e) => update("vent", e.target.value)} /></Field>
+                <Field label="Indice UV"><input className="input" value={activeDraft.uv} onChange={(e) => update("uv", e.target.value)} /></Field>
+              </div>
+              <div className="flex justify-between gap-2 mt-3 flex-wrap">
+                <button
+                  onClick={resetDraft}
+                  className="btn-ghost btn-sm"
+                  style={{ color: "var(--color-danger)" }}
+                  title={editingId ? "Recharger les valeurs d'origine du test" : "Vider toutes les valeurs du brouillon"}
+                >
+                  ↺ Réinitialiser
+                </button>
+                <div className="flex gap-2">
+                  <button onClick={closeForm} className="btn-ghost">{editingId ? "Annuler" : "Fermer (saisie conservée)"}</button>
+                  <button onClick={save} className="btn-primary">{editingId ? "Enregistrer les modifications" : "Ajouter"}</button>
+                </div>
               </div>
             </div>
           )}

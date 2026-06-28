@@ -116,23 +116,71 @@ function predictSweat(
   return { predicted, confidence, topMatches };
 }
 
-// ===================== NON-LINEAR ULTRA MODEL =====================
-// Implements the physiological feedback described in the PDF:
-//   - When dehydration exceeds a threshold δ₀ (~2.5 %), the athlete's
-//     sustainable intensity drops: u(δ) = exp(-k · max(0, δ-δ₀))
-//   - Sweat rate scales with intensity: S_actual = S_predicted · u^β
-//   - Result: the linear projection is too pessimistic; the real curve
-//     bends as performance degrades.
-// Defaults from the PDF: k = 0.8 (moderate sensitivity), β = 0.85
-// (strong coupling between intensity and sweat).
-type NlParams = { thresholdPct: number; k: number; beta: number };
+// ===================== HYBRID 3-LAYER ULTRA MODEL =====================
+// Source: PDF "Modèle hydrique et physiologique pour la Restonica Trail"
+// Three coupled layers:
+//   1. Water balance: D_{t+Δt} = D_t + (S_t + R_ns - I_t)·Δt
+//   2. Intensity / auto-regulation: u_t = max(u_min, q · exp(-k · max(0, δ-δ₀)))
+//      where q = chosen starting intensity (pacing strategy)
+//            u_min = locomotion floor (athlete can't slow down infinitely)
+//   3. Weather: S_t = S_ref · g_meteo · u_t^β
+//      g_meteo ∈ {0.85, 1.00, 1.15} for cold / moderate / hot scenario
+// Equilibrium deficit (analytical): δ_eq = δ₀ + (1/(k·β))·ln(S_ref·q^β/(I-R_ns))
+type NlParams = {
+  thresholdPct: number;  // δ₀
+  k: number;             // sensitivity
+  beta: number;          // coupling sweat↔intensity
+  q: number;             // chosen starting intensity (0–1)
+  uMin: number;          // locomotion floor (intensity can't drop below)
+  meteoFactor: number;   // g_meteo (0.85 cold / 1.00 mod / 1.15 hot)
+};
 
 function intensityFactor(deficitPct: number, p: NlParams): number {
-  return Math.exp(-p.k * Math.max(0, deficitPct - p.thresholdPct));
+  const raw = p.q * Math.exp(-p.k * Math.max(0, deficitPct - p.thresholdPct));
+  return Math.max(p.uMin, Math.min(1, raw));
 }
 function regulatedSweat(predictedMlH: number, deficitPct: number, p: NlParams): number {
-  return predictedMlH * Math.pow(intensityFactor(deficitPct, p), p.beta);
+  const u = intensityFactor(deficitPct, p);
+  return predictedMlH * p.meteoFactor * Math.pow(u, p.beta);
 }
+
+// Analytical equilibrium: deficit at which sweat losses equal intake
+// δ_eq = δ₀ + (1/(k·β)) · ln(S_ref · g · q^β / (I - R_ns))
+// Returns null if the equation has no positive solution (intake already covers)
+function equilibriumDeficitPct(opts: {
+  sRefMlH: number; intakeMlH: number; otherLossMlH: number; p: NlParams;
+}): number | null {
+  const { sRefMlH, intakeMlH, otherLossMlH, p } = opts;
+  const denom = intakeMlH - otherLossMlH;
+  if (denom <= 0) return null;
+  const numer = sRefMlH * p.meteoFactor * Math.pow(p.q, p.beta);
+  if (numer <= denom) return null;
+  return p.thresholdPct + (1 / (p.k * p.beta)) * Math.log(numer / denom);
+}
+
+// Pacing strategies (values straight from the PDF table p.4)
+type PacingStrategy = {
+  key: "conservative" | "moderate" | "aggressive" | "custom";
+  label: string;
+  description: string;
+  q: number;
+  thresholdPct: number;
+  k: number;
+  beta: number;
+};
+const PACING_STRATEGIES: PacingStrategy[] = [
+  { key: "conservative", label: "🛡 Conservatrice", description: "Vise ~2,5 %, partir très sage", q: 0.64, thresholdPct: 2.0, k: 0.80, beta: 0.85 },
+  { key: "moderate", label: "⚡ Performance modérée", description: "Meilleure perf en acceptant 3,5–4 %", q: 0.80, thresholdPct: 3.0, k: 0.60, beta: 0.85 },
+  { key: "aggressive", label: "🔥 Agressive", description: "Pari à fort risque (>5 %)", q: 0.95, thresholdPct: 4.0, k: 0.40, beta: 0.85 },
+];
+
+// Weather scenarios — multiplies sweat by a factor (PDF p.4)
+type WeatherScenario = { key: "cold" | "moderate" | "hot"; label: string; factor: number };
+const WEATHER_SCENARIOS: WeatherScenario[] = [
+  { key: "cold",     label: "🥶 Froid",   factor: 0.85 },
+  { key: "moderate", label: "🌤 Modéré",  factor: 1.00 },
+  { key: "hot",      label: "🔥 Chaud",   factor: 1.15 },
+];
 
 // Respiratory losses grow with altitude (dry air at altitude).
 // Rough rule: +20 % per 1000 m above sea level.
@@ -276,11 +324,28 @@ export default function SweatPage() {
     "sweat_pred_losses",
     { urinaryMlH: "30", respiratoryMlH: "60", altitudeM: "0" },
   );
-  // Non-linear model parameters (Ultra mode auto-regulation)
-  const [nlParams, setNlParams] = useAthleteData<{ enabled: boolean; thresholdPct: string; k: string; beta: string }>(
+  // Non-linear model parameters (Ultra mode 3-layer hybrid model from Restonica PDF)
+  const [nlParams, setNlParams] = useAthleteData<{
+    enabled: boolean;
+    thresholdPct: string;
+    k: string;
+    beta: string;
+    q: string;        // starting intensity (0-1)
+    uMin: string;     // locomotion floor (0-1)
+    strategyKey: "conservative" | "moderate" | "aggressive" | "custom";
+    weatherKey: "cold" | "moderate" | "hot";
+  }>(
     "sweat_pred_nl",
-    { enabled: true, thresholdPct: "2.5", k: "0.8", beta: "0.85" },
+    { enabled: true, thresholdPct: "3.0", k: "0.6", beta: "0.85", q: "0.8", uMin: "0.5", strategyKey: "moderate", weatherKey: "moderate" },
   );
+  const applyStrategy = (s: PacingStrategy) => setNlParams({
+    ...nlParams,
+    strategyKey: s.key,
+    q: String(s.q),
+    thresholdPct: String(s.thresholdPct),
+    k: String(s.k),
+    beta: String(s.beta),
+  });
   // Apply a scenario preset to all segments
   const applyScenarioPreset = (preset: ScenarioPreset) => {
     setSegments((s) => s.map((seg) => ({
@@ -1157,10 +1222,10 @@ export default function SweatPage() {
                   </div>
                 </div>
 
-                {/* Non-linear model parameters */}
+                {/* Non-linear model parameters — 3-layer hybrid (PDF Restonica) */}
                 <div className="mt-2 p-2.5 rounded-lg" style={{ background: "var(--color-surface-2)", border: "1px dashed var(--color-border)" }}>
                   <div className="text-[10px] uppercase font-bold mb-1.5" style={{ letterSpacing: ".08em", color: "var(--color-text-muted)" }}>
-                    🔬 Modèle non-linéaire (auto-régulation)
+                    🔬 Modèle hybride à 3 couches
                   </div>
                   <label className="flex items-center gap-2 cursor-pointer text-xs mb-2">
                     <input
@@ -1169,23 +1234,71 @@ export default function SweatPage() {
                       onChange={(e) => setNlParams({ ...nlParams, enabled: e.target.checked })}
                       style={{ width: 14, height: 14 }}
                     />
-                    <span><b>Activer</b> la projection avec auto-régulation (intensité↓ quand déficit↑)</span>
+                    <span><b>Activer</b> la projection auto-régulée (bilan + intensité + météo)</span>
                   </label>
                   {nlParams.enabled && (
-                    <div className="grid grid-cols-3 gap-2">
-                      <Field label="Seuil δ₀ (%)">
-                        <input className="input" value={nlParams.thresholdPct} onChange={(e) => setNlParams({ ...nlParams, thresholdPct: e.target.value })} />
-                      </Field>
-                      <Field label="Sensibilité k">
-                        <input className="input" value={nlParams.k} onChange={(e) => setNlParams({ ...nlParams, k: e.target.value })} />
-                      </Field>
-                      <Field label="Couplage β">
-                        <input className="input" value={nlParams.beta} onChange={(e) => setNlParams({ ...nlParams, beta: e.target.value })} />
-                      </Field>
-                    </div>
+                    <>
+                      {/* Pacing strategy quick-select */}
+                      <div className="mb-2">
+                        <div className="text-[10px] uppercase font-bold mb-1" style={{ letterSpacing: ".06em", color: "var(--color-text-muted)" }}>
+                          🎯 Stratégie de pacing
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {PACING_STRATEGIES.map((s) => (
+                            <button
+                              key={s.key}
+                              onClick={() => applyStrategy(s)}
+                              className={nlParams.strategyKey === s.key ? "btn-primary btn-xs" : "btn-ghost btn-xs"}
+                              style={{ fontSize: 11, padding: "3px 8px" }}
+                              title={s.description}
+                            >
+                              {s.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Weather scenario */}
+                      <div className="mb-2">
+                        <div className="text-[10px] uppercase font-bold mb-1" style={{ letterSpacing: ".06em", color: "var(--color-text-muted)" }}>
+                          🌡 Scénario météo (×sudation)
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {WEATHER_SCENARIOS.map((w) => (
+                            <button
+                              key={w.key}
+                              onClick={() => setNlParams({ ...nlParams, weatherKey: w.key })}
+                              className={nlParams.weatherKey === w.key ? "btn-primary btn-xs" : "btn-ghost btn-xs"}
+                              style={{ fontSize: 11, padding: "3px 8px" }}
+                              title={`Facteur ×${w.factor.toFixed(2)}`}
+                            >
+                              {w.label} ×{w.factor.toFixed(2)}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-2">
+                        <Field label="Intensité q">
+                          <input className="input" value={nlParams.q} onChange={(e) => setNlParams({ ...nlParams, q: e.target.value, strategyKey: "custom" })} />
+                        </Field>
+                        <Field label="Seuil δ₀ (%)">
+                          <input className="input" value={nlParams.thresholdPct} onChange={(e) => setNlParams({ ...nlParams, thresholdPct: e.target.value, strategyKey: "custom" })} />
+                        </Field>
+                        <Field label="Sensibilité k">
+                          <input className="input" value={nlParams.k} onChange={(e) => setNlParams({ ...nlParams, k: e.target.value, strategyKey: "custom" })} />
+                        </Field>
+                        <Field label="Couplage β">
+                          <input className="input" value={nlParams.beta} onChange={(e) => setNlParams({ ...nlParams, beta: e.target.value, strategyKey: "custom" })} />
+                        </Field>
+                        <Field label="Plancher u_min">
+                          <input className="input" value={nlParams.uMin} onChange={(e) => setNlParams({ ...nlParams, uMin: e.target.value })} />
+                        </Field>
+                      </div>
+                    </>
                   )}
                   <div className="text-[10px] text-[var(--color-text-muted)] mt-1">
-                    Modèle : S = S₀ · u^β avec u = exp(-k · max(0, δ-δ₀)). Source : analyse Sawka/Baker (PDF).
+                    Modèle : S = S₀·g_météo·u^β avec u = max(u_min, q·exp(-k·max(0, δ-δ₀))). Source : PDF Restonica.
                   </div>
                 </div>
               </div>
@@ -1355,6 +1468,94 @@ export default function SweatPage() {
                       </div>
                     )}
 
+                    {/* 3 strategies × 3 weather scenarios matrix — analytical equilibrium deficit */}
+                    {nlParams.enabled && (() => {
+                      const sRef = avgSweatMlH; // ml/h
+                      const intakeMlH = toleranceMlH;
+                      const rNsMlH = otherLossesMlH;
+                      const meteos = WEATHER_SCENARIOS;
+                      const rows = PACING_STRATEGIES.map((strat) => {
+                        const cells = meteos.map((m) => {
+                          const p: NlParams = {
+                            thresholdPct: strat.thresholdPct, k: strat.k, beta: strat.beta,
+                            q: strat.q, uMin: toNum(nlParams.uMin) || 0.5, meteoFactor: m.factor,
+                          };
+                          const eq = equilibriumDeficitPct({ sRefMlH: sRef, intakeMlH, otherLossMlH: rNsMlH, p });
+                          return { meteo: m, eqPct: eq };
+                        });
+                        return { strat, cells };
+                      });
+                      return (
+                        <div className="card p-4 mb-4">
+                          <div className="font-extrabold mb-1" style={{ fontFamily: "var(--font-display)" }}>
+                            🧮 Matrice stratégie × météo (déficit d&apos;équilibre)
+                          </div>
+                          <div className="text-xs text-[var(--color-text-muted)] mb-3">
+                            Pour chaque combinaison <b>stratégie de pacing</b> × <b>scénario météo</b>, voici le déficit
+                            de fin de course estimé (formule analytique : δ_eq = δ₀ + (1/(k·β))·ln(S·g·q^β/(I−R_ns))).
+                            <br />Cible : rester &lt;3 % (sécurité) ou &lt;4 % (performance).
+                          </div>
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs" style={{ borderCollapse: "collapse" }}>
+                              <thead>
+                                <tr style={{ background: "var(--color-surface-2)" }}>
+                                  <th style={{ padding: 8, textAlign: "left", borderBottom: "1px solid var(--color-border)" }}>Stratégie</th>
+                                  {meteos.map((m) => (
+                                    <th key={m.key} style={{ padding: 8, textAlign: "right", borderBottom: "1px solid var(--color-border)" }}>
+                                      {m.label}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {rows.map((r) => {
+                                  const isCurrent = r.strat.key === nlParams.strategyKey;
+                                  return (
+                                    <tr key={r.strat.key} style={{
+                                      borderBottom: "1px solid var(--color-border)",
+                                      background: isCurrent ? "rgba(255,69,1,0.08)" : undefined,
+                                      fontWeight: isCurrent ? 700 : undefined,
+                                    }}>
+                                      <td style={{ padding: 8 }}>
+                                        {r.strat.label}
+                                        {isCurrent && <span className="text-[10px] text-[var(--color-primary)] ml-1">← active</span>}
+                                        <div className="text-[10px] text-[var(--color-text-muted)]" style={{ fontWeight: 400 }}>
+                                          {r.strat.description}
+                                        </div>
+                                      </td>
+                                      {r.cells.map((c, i) => {
+                                        if (c.eqPct === null) {
+                                          return (
+                                            <td key={i} style={{ padding: 8, textAlign: "right", color: "var(--color-success)", fontWeight: 700 }}>
+                                              ✓ &lt; seuil
+                                            </td>
+                                          );
+                                        }
+                                        const color =
+                                          c.eqPct < 3 ? "var(--color-success)" :
+                                          c.eqPct < 4 ? "#e6a833" :
+                                          c.eqPct < 5 ? "var(--color-primary)" :
+                                          "var(--color-danger)";
+                                        return (
+                                          <td key={i} style={{ padding: 8, textAlign: "right", color, fontWeight: 700 }}>
+                                            {c.eqPct.toFixed(1)} %
+                                          </td>
+                                        );
+                                      })}
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                          <div className="text-[10px] text-[var(--color-text-muted)] mt-2">
+                            Lecture (cas Restonica typique) : <b>conservatrice</b> termine ≤ 3 % en froid/modéré mais bride la perf ;
+                            <b> performance modérée</b> = bon compromis si météo froid à modéré ; <b>agressive</b> = risque réel &gt;5 %.
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {/* Feasibility scenario table */}
                     <div className="card p-4 mb-4">
                       <div className="font-extrabold mb-2" style={{ fontFamily: "var(--font-display)" }}>
@@ -1514,10 +1715,14 @@ export default function SweatPage() {
 
                       // Non-linear simulation: when deficit > threshold, intensity drops
                       // and sweat shrinks. We simulate hour-by-hour using current deficit %.
+                      const weatherFactor = (WEATHER_SCENARIOS.find((w) => w.key === nlParams.weatherKey)?.factor) ?? 1.0;
                       const nl: NlParams = {
-                        thresholdPct: toNum(nlParams.thresholdPct) || 2.5,
-                        k: toNum(nlParams.k) || 0.8,
+                        thresholdPct: toNum(nlParams.thresholdPct) || 3.0,
+                        k: toNum(nlParams.k) || 0.6,
                         beta: toNum(nlParams.beta) || 0.85,
+                        q: toNum(nlParams.q) || 0.8,
+                        uMin: toNum(nlParams.uMin) || 0.5,
+                        meteoFactor: weatherFactor,
                       };
                       let cumNetLossL_NL = -extraReserveL;
                       const respMlH = respLossesAtAltitude(toNum(losses.respiratoryMlH), toNum(losses.altitudeM));
@@ -1737,6 +1942,109 @@ export default function SweatPage() {
                       );
                     })()}
 
+                    {/* Field pilot guide — what to watch during the race */}
+                    <div
+                      className="card p-4 mb-4"
+                      style={{ borderLeft: "5px solid var(--color-dark)" }}
+                    >
+                      <div className="font-extrabold mb-2" style={{ fontFamily: "var(--font-display)" }}>
+                        🧭 Pilotage terrain en course
+                      </div>
+                      <div className="text-xs text-[var(--color-text-muted)] mb-3">
+                        Source : PDF Restonica. Le bon modèle n&apos;est pas &laquo; rester sous 2,5 % à tout prix &raquo;.
+                        2,5 % devient un <b>seuil d&apos;alerte tactique</b>, pas un plafond dogmatique.
+                        Performance modérée jusqu&apos;à 3,5–4 % reste compatible avec la perf si la chaleur est gérable.
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {/* Pre-race plan */}
+                        <div className="rounded-lg p-3" style={{ background: "var(--color-surface-2)" }}>
+                          <div className="text-[11px] uppercase font-bold mb-1.5" style={{ letterSpacing: ".06em", color: "var(--color-primary)" }}>
+                            ⏱ Avant le départ
+                          </div>
+                          <ul className="list-disc pl-5 space-y-1 text-xs">
+                            <li><b>Surhydratation pré-course</b> : 800 ml + 7 g sel dans les 2h (si réserve activée)</li>
+                            <li><b>Boisson fractionnée dès km 0</b> : ne pas attendre le rattrapage</li>
+                            <li><b>200 ml / 10 min</b> ou <b>300 ml / 15 min</b> = base à 1,2 L/h</li>
+                            <li><b>Refroidissement préventif</b> : tête/nuque, casquette claire, lunettes</li>
+                          </ul>
+                        </div>
+
+                        {/* Warning signs */}
+                        <div className="rounded-lg p-3" style={{ background: "var(--color-surface-2)" }}>
+                          <div className="text-[11px] uppercase font-bold mb-1.5" style={{ letterSpacing: ".06em", color: "var(--color-danger)" }}>
+                            ⚠ Signaux d&apos;alerte (≠ « combien j&apos;ai bu »)
+                          </div>
+                          <ul className="list-disc pl-5 space-y-1 text-xs">
+                            <li><b>FC dérivante</b> sans changement d&apos;allure</li>
+                            <li><b>RPE disproportionnée</b> à l&apos;allure</li>
+                            <li><b>Baisse de lucidité</b>, vue qui se brouille</li>
+                            <li><b>Frissons / chair de poule</b> malgré la chaleur</li>
+                            <li><b>Nausées</b>, sensation d&apos;estomac plein</li>
+                            <li><b>Incapacité</b> à continuer à s&apos;alimenter</li>
+                          </ul>
+                        </div>
+                      </div>
+
+                      {/* Decision flow */}
+                      <div className="mt-3 rounded-lg p-3" style={{ background: "rgba(255,69,1,0.05)", border: "1px dashed var(--color-primary)" }}>
+                        <div className="text-[11px] uppercase font-bold mb-2" style={{ letterSpacing: ".06em", color: "var(--color-primary)" }}>
+                          🔀 Flux décisionnel en course
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                          <div className="rounded p-2" style={{ background: "#fff" }}>
+                            <div className="font-extrabold mb-1">FC / RPE stables ?</div>
+                            ✓ Oui → maintenir le pacing prévu<br />
+                            ✗ Non → réduire l&apos;intensité de 5-10 %
+                          </div>
+                          <div className="rounded p-2" style={{ background: "#fff" }}>
+                            <div className="font-extrabold mb-1">Tolérance digestive OK ?</div>
+                            ✓ Oui → 150-250 ml toutes les 10 min<br />
+                            ✗ Non → réduire le volume / augmenter la fréquence
+                          </div>
+                          <div className="rounded p-2" style={{ background: "#fff" }}>
+                            <div className="font-extrabold mb-1">Dérive thermique ?</div>
+                            ✓ Oui → refroidissement actif (eau nuque/bras, ombre)<br />
+                            ✗ Non → continuer<br />
+                            Pas d&apos;amélioration en 10-20 min → basculer conservateur
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Equilibrium deficit (analytical) for the current strategy */}
+                      {nlParams.enabled && (() => {
+                        const weatherFactor = (WEATHER_SCENARIOS.find((w) => w.key === nlParams.weatherKey)?.factor) ?? 1.0;
+                        const p: NlParams = {
+                          thresholdPct: toNum(nlParams.thresholdPct) || 3.0,
+                          k: toNum(nlParams.k) || 0.6,
+                          beta: toNum(nlParams.beta) || 0.85,
+                          q: toNum(nlParams.q) || 0.8,
+                          uMin: toNum(nlParams.uMin) || 0.5,
+                          meteoFactor: weatherFactor,
+                        };
+                        const eq = equilibriumDeficitPct({
+                          sRefMlH: avgSweatMlH,
+                          intakeMlH: toleranceMlH,
+                          otherLossMlH: otherLossesMlH,
+                          p,
+                        });
+                        return (
+                          <div className="mt-3 text-xs p-2.5 rounded" style={{ background: "var(--color-dark)", color: "#fff" }}>
+                            <b>📊 Déficit d&apos;équilibre (formule analytique)</b> — stratégie actuelle + météo actuelle :
+                            {" "}
+                            {eq === null ? (
+                              <b style={{ color: "var(--color-accent)" }}>L&apos;apport couvre les pertes — pas de dérive.</b>
+                            ) : (
+                              <>
+                                <b style={{ color: "var(--color-accent)" }}>{eq.toFixed(2)} %</b>
+                                {" "}— la courbe va se stabiliser autour de cette valeur si tes paramètres restent constants.
+                              </>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+
                     {/* Per-segment breakdown */}
                     <div className="card p-4">
                       <div className="font-extrabold mb-2" style={{ fontFamily: "var(--font-display)" }}>
@@ -1760,10 +2068,14 @@ export default function SweatPage() {
                           <tbody>
                             {(() => {
                               // Re-run NL simulation per segment to compute intensity at segment end
+                              const weatherFactorTable = (WEATHER_SCENARIOS.find((w) => w.key === nlParams.weatherKey)?.factor) ?? 1.0;
                               const nl: NlParams = {
-                                thresholdPct: toNum(nlParams.thresholdPct) || 2.5,
-                                k: toNum(nlParams.k) || 0.8,
+                                thresholdPct: toNum(nlParams.thresholdPct) || 3.0,
+                                k: toNum(nlParams.k) || 0.6,
                                 beta: toNum(nlParams.beta) || 0.85,
+                                q: toNum(nlParams.q) || 0.8,
+                                uMin: toNum(nlParams.uMin) || 0.5,
+                                meteoFactor: weatherFactorTable,
                               };
                               let nlLossL = -extraReserveL;
                               const respMlH2 = respLossesAtAltitude(toNum(losses.respiratoryMlH), toNum(losses.altitudeM));

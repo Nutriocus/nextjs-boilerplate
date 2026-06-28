@@ -85,6 +85,7 @@ type TriPhase = {
   choPerH: number | string;
   hydratationPerH: number | string;
   sodiumPerH: number | string;
+  cafeinePerH?: number | string;  // mg/h — optional for back-compat
   contenu: string[];
 };
 
@@ -96,6 +97,8 @@ type RacePlan = {
   objectif: string;
   choPerH: number | string;
   hydratationPerH: number | string;
+  sodiumPerH?: number | string;   // mg/h — optional for back-compat
+  cafeinePerH?: number | string;  // mg/h — optional for back-compat
   avantCourse: string[];
   segments: RacePlanSegment[];
   discipline?: Discipline;
@@ -229,6 +232,8 @@ function parseRacePlanText(text: string): RacePlan | null {
     objectif: "",
     choPerH: "",
     hydratationPerH: "",
+    sodiumPerH: "",
+    cafeinePerH: "",
     avantCourse: [],
     segments: [],
   };
@@ -244,6 +249,11 @@ function parseRacePlanText(text: string): RacePlan | null {
     if (ll.startsWith("d+:")) { plan.dplus = l.slice(3).trim(); continue; }
     if (ll.startsWith("cho:")) { plan.choPerH = l.slice(4).trim(); continue; }
     if (ll.startsWith("hydratation:")) { plan.hydratationPerH = l.slice(12).trim(); continue; }
+    if (ll.startsWith("sodium:")) { plan.sodiumPerH = l.slice(7).trim(); continue; }
+    if (ll.startsWith("cafeine:") || ll.startsWith("caféine:")) {
+      plan.cafeinePerH = l.slice(l.indexOf(":") + 1).trim();
+      continue;
+    }
     if (ll.startsWith("avant")) { mode = "avant"; continue; }
     if (l.startsWith("#")) {
       currentSeg = { nom: l.replace(/^#+/, "").trim(), km: "", heure: "", temps: "", contenu: [] };
@@ -259,7 +269,7 @@ function parseRacePlanText(text: string): RacePlan | null {
 }
 
 function exportRacePlanText(plan: RacePlan): string {
-  let out = `Nom: ${plan.name}\nObjectif: ${plan.objectif}\nKM: ${plan.km}\nD+: ${plan.dplus}\nCHO: ${plan.choPerH}\nHydratation: ${plan.hydratationPerH}\n`;
+  let out = `Nom: ${plan.name}\nObjectif: ${plan.objectif}\nKM: ${plan.km}\nD+: ${plan.dplus}\nCHO: ${plan.choPerH}\nHydratation: ${plan.hydratationPerH}\nSodium: ${plan.sodiumPerH ?? ""}\nCaféine: ${plan.cafeinePerH ?? ""}\n`;
   if (plan.avantCourse.length) {
     out += "AVANT\n";
     plan.avantCourse.forEach((l) => (out += l + "\n"));
@@ -297,12 +307,18 @@ function PlanPrintReport({ plan }: { plan: RacePlan }) {
       subtitle={subtitle}
     >
       {!isTri && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 9 }}>
-          <PrintKpi label="Glucides" value={plan.choPerH || "—"} unit="g/h" />
-          <PrintKpi label="Hydratation" value={plan.hydratationPerH || "—"} unit="ml/h" accent="#0a0a0a" />
-          <PrintKpi label="Distance" value={totalKm || "—"} unit="km" accent="#5f8c0a" />
-          <PrintKpi label="Dénivelé +" value={totalDplus || "—"} unit="m" accent="#cf2e2e" />
-        </div>
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 9 }}>
+            <PrintKpi label="Glucides" value={plan.choPerH || "—"} unit="g/h" />
+            <PrintKpi label="Hydratation" value={plan.hydratationPerH || "—"} unit="ml/h" accent="#0a0a0a" />
+            <PrintKpi label="🧂 Sodium" value={plan.sodiumPerH || "—"} unit="mg/h" accent="#2196f3" />
+            <PrintKpi label="☕ Caféine" value={plan.cafeinePerH || "—"} unit="mg/h" accent="#cf2e2e" />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 9, marginTop: 6 }}>
+            <PrintKpi label="Distance" value={totalKm || "—"} unit="km" accent="#5f8c0a" />
+            <PrintKpi label="Dénivelé +" value={totalDplus || "—"} unit="m" accent="#cf2e2e" />
+          </div>
+        </>
       )}
       {isTri && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 9 }}>
@@ -378,6 +394,7 @@ function PlanPrintReport({ plan }: { plan: RacePlan }) {
               {!isTransition && (
                 <div style={{ fontSize: 11, color: "#FF4501", fontWeight: 700, marginTop: 3 }}>
                   {ph.choPerH} g/h · {ph.hydratationPerH} ml/h · {ph.sodiumPerH} mg/h Na
+                  {(ph.cafeinePerH || "") !== "" && <> · {ph.cafeinePerH} mg/h caf</>}
                 </div>
               )}
               {ph.contenu && ph.contenu.some((c) => c.trim()) && (
@@ -467,12 +484,24 @@ function RacePlanCard({
             <>
               <div className="text-right">
                 <div className="text-[10px] text-[#bbb]">GLUCIDES</div>
-                <div className="text-[var(--color-accent)] font-extrabold text-lg">{rp.choPerH} g/h</div>
+                <div className="text-[var(--color-accent)] font-extrabold text-lg">{rp.choPerH || "—"} g/h</div>
               </div>
               <div className="text-right">
                 <div className="text-[10px] text-[#bbb]">HYDRATATION</div>
-                <div className="text-[var(--color-accent)] font-extrabold text-lg">{rp.hydratationPerH} ml/h</div>
+                <div className="text-[var(--color-accent)] font-extrabold text-lg">{rp.hydratationPerH || "—"} ml/h</div>
               </div>
+              {(rp.sodiumPerH || "") !== "" && (
+                <div className="text-right">
+                  <div className="text-[10px] text-[#bbb]">🧂 SODIUM</div>
+                  <div className="font-extrabold text-lg" style={{ color: "#7ec5ff" }}>{rp.sodiumPerH} mg/h</div>
+                </div>
+              )}
+              {(rp.cafeinePerH || "") !== "" && (
+                <div className="text-right">
+                  <div className="text-[10px] text-[#bbb]">☕ CAFÉINE</div>
+                  <div className="font-extrabold text-lg" style={{ color: "#ffb380" }}>{rp.cafeinePerH} mg/h</div>
+                </div>
+              )}
             </>
           )}
           {isTri && (
@@ -545,6 +574,9 @@ function RacePlanCard({
                       <span><b>{ph.choPerH}</b> g/h</span>
                       <span><b>{ph.hydratationPerH}</b> ml/h</span>
                       <span><b>{ph.sodiumPerH}</b> mg/h Na</span>
+                      {(ph.cafeinePerH || "") !== "" && (
+                        <span><b>{ph.cafeinePerH}</b> mg/h caf</span>
+                      )}
                     </div>
                   )}
                   {ph.contenu && ph.contenu.length > 0 && ph.contenu.some((c) => c.trim()) && (
@@ -766,6 +798,8 @@ export default function RaceStrategyPage() {
     objectif: "",
     choPerH: "",
     hydratationPerH: "",
+    sodiumPerH: "",
+    cafeinePerH: "",
     avantCourse: [""],
     segments: discipline === "triathlon"
       ? []
@@ -1075,14 +1109,46 @@ export default function RaceStrategyPage() {
         </div>
 
         <div className="card p-4 mb-3.5">
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-2.5">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
             <Field label="Nom du plan"><input className="input" value={planEdit.name} onChange={(e) => updatePlan({ name: e.target.value })} /></Field>
             <Field label="KM (total)"><input className="input" value={planEdit.km} onChange={(e) => updatePlan({ km: e.target.value })} /></Field>
             <Field label="D+ (m)"><input className="input" value={planEdit.dplus} onChange={(e) => updatePlan({ dplus: e.target.value })} /></Field>
             <Field label="Objectif"><input className="input" value={planEdit.objectif} onChange={(e) => updatePlan({ objectif: e.target.value })} /></Field>
-            {!isTri && <Field label="CHO (g/h)"><input className="input" value={planEdit.choPerH} onChange={(e) => updatePlan({ choPerH: e.target.value })} /></Field>}
-            {!isTri && <Field label="Hydratation (ml/h)"><input className="input" value={planEdit.hydratationPerH} onChange={(e) => updatePlan({ hydratationPerH: e.target.value })} /></Field>}
           </div>
+          {!isTri && (
+            <>
+              <div
+                className="text-[10px] uppercase font-bold mt-3 mb-1.5"
+                style={{ letterSpacing: ".08em", color: "var(--color-text-muted)" }}
+              >
+                🎯 Cibles nutritionnelles (par heure)
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+                <Field label="Glucides (g/h)">
+                  <input className="input" value={planEdit.choPerH} onChange={(e) => updatePlan({ choPerH: e.target.value })} />
+                </Field>
+                <Field label="Hydratation (ml/h)">
+                  <input className="input" value={planEdit.hydratationPerH} onChange={(e) => updatePlan({ hydratationPerH: e.target.value })} />
+                </Field>
+                <Field label="🧂 Sodium (mg/h)">
+                  <input
+                    className="input"
+                    value={planEdit.sodiumPerH ?? ""}
+                    onChange={(e) => updatePlan({ sodiumPerH: e.target.value })}
+                    placeholder="500-1000"
+                  />
+                </Field>
+                <Field label="☕ Caféine (mg/h)">
+                  <input
+                    className="input"
+                    value={planEdit.cafeinePerH ?? ""}
+                    onChange={(e) => updatePlan({ cafeinePerH: e.target.value })}
+                    placeholder="0-200"
+                  />
+                </Field>
+              </div>
+            </>
+          )}
           {isTri && (
             <div className="text-xs text-[var(--color-text-muted)] mt-2">
               💡 En triathlon, les cibles d&apos;apport sont définies <b>par phase</b> ci-dessous (la natation et les transitions ont des cibles très différentes du vélo et de la course).
@@ -1232,7 +1298,15 @@ export default function RaceStrategyPage() {
                   <>
                     <Field label="CHO (g/h)"><input className="input" value={ph.choPerH} onChange={(e) => updatePhase(i, { choPerH: e.target.value })} /></Field>
                     <Field label="Hydratation (ml/h)"><input className="input" value={ph.hydratationPerH} onChange={(e) => updatePhase(i, { hydratationPerH: e.target.value })} /></Field>
-                    <Field label="Sodium (mg/h)"><input className="input" value={ph.sodiumPerH} onChange={(e) => updatePhase(i, { sodiumPerH: e.target.value })} /></Field>
+                    <Field label="🧂 Sodium (mg/h)"><input className="input" value={ph.sodiumPerH} onChange={(e) => updatePhase(i, { sodiumPerH: e.target.value })} /></Field>
+                    <Field label="☕ Caféine (mg/h)">
+                      <input
+                        className="input"
+                        value={ph.cafeinePerH ?? ""}
+                        placeholder="0-200"
+                        onChange={(e) => updatePhase(i, { cafeinePerH: e.target.value })}
+                      />
+                    </Field>
                   </>
                 )}
               </div>

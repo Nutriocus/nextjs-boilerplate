@@ -116,6 +116,87 @@ function predictSweat(
   return { predicted, confidence, topMatches };
 }
 
+// ===================== NON-LINEAR ULTRA MODEL =====================
+// Implements the physiological feedback described in the PDF:
+//   - When dehydration exceeds a threshold δ₀ (~2.5 %), the athlete's
+//     sustainable intensity drops: u(δ) = exp(-k · max(0, δ-δ₀))
+//   - Sweat rate scales with intensity: S_actual = S_predicted · u^β
+//   - Result: the linear projection is too pessimistic; the real curve
+//     bends as performance degrades.
+// Defaults from the PDF: k = 0.8 (moderate sensitivity), β = 0.85
+// (strong coupling between intensity and sweat).
+type NlParams = { thresholdPct: number; k: number; beta: number };
+
+function intensityFactor(deficitPct: number, p: NlParams): number {
+  return Math.exp(-p.k * Math.max(0, deficitPct - p.thresholdPct));
+}
+function regulatedSweat(predictedMlH: number, deficitPct: number, p: NlParams): number {
+  return predictedMlH * Math.pow(intensityFactor(deficitPct, p), p.beta);
+}
+
+// Respiratory losses grow with altitude (dry air at altitude).
+// Rough rule: +20 % per 1000 m above sea level.
+function respLossesAtAltitude(baseMlH: number, altitudeM: number): number {
+  return baseMlH * (1 + Math.max(0, altitudeM) / 1000 * 0.2);
+}
+
+// Scenario presets straight from the PDF table (page 3).
+type ScenarioPreset = {
+  key: string;
+  label: string;
+  description: string;
+  sweatRangeLh: [number, number];
+  defaults: { temp: string; humidite: string; fc: string };
+};
+const SCENARIO_PRESETS: ScenarioPreset[] = [
+  { key: "cool", label: "🏔 Montagne fraîche", description: "12-18°C · 0,7-1,1 L/h", sweatRangeLh: [0.7, 1.1], defaults: { temp: "15", humidite: "55", fc: "145" } },
+  { key: "temperate", label: "🌤 Trail tempéré", description: "18-24°C · 1,0-1,5 L/h", sweatRangeLh: [1.0, 1.5], defaults: { temp: "21", humidite: "60", fc: "150" } },
+  { key: "hot", label: "☀️ Trail chaud", description: "25-30°C · 1,4-2,0 L/h", sweatRangeLh: [1.4, 2.0], defaults: { temp: "27", humidite: "55", fc: "150" } },
+  { key: "veryhot", label: "🔥 Trail très chaud", description: ">30°C · 1,8-2,5 L/h+", sweatRangeLh: [1.8, 2.5], defaults: { temp: "32", humidite: "50", fc: "150" } },
+];
+
+// =====================================================================
+// FEASIBILITY ANALYSIS
+// Computes whether the planned hydration is achievable given tolerance.
+// =====================================================================
+type FeasibilityStatus = "feasible" | "tight" | "infeasible";
+function feasibilityAnalysis(opts: {
+  totalSweatMl: number;
+  durationH: number;
+  weightKg: number;
+  toleranceMlH: number;
+  thresholdPct: number;
+  extraReserveL: number;
+  otherLossesMlH: number; // urinary + respiratory combined, in ml/h
+}): {
+  status: FeasibilityStatus;
+  budgetL: number;             // max acceptable deficit in L (incl. reserve)
+  totalLossesL: number;        // sweat + other losses
+  requiredIntakeMlH: number;   // intake needed per hour to stay under threshold
+  intakeGapMlH: number;        // shortfall vs tolerance (positive if tolerance < required)
+  maxSweatForFeasibilityLh: number; // sweat avg that would make the plan feasible at tolerance
+  averageSweatLh: number;
+} {
+  const { totalSweatMl, durationH, weightKg, toleranceMlH, thresholdPct, extraReserveL, otherLossesMlH } = opts;
+  const budgetL = weightKg * (thresholdPct / 100) + extraReserveL;
+  const otherLossesL = (otherLossesMlH * durationH) / 1000;
+  const totalLossesL = totalSweatMl / 1000 + otherLossesL;
+  const requiredIntakeL = Math.max(0, totalLossesL - budgetL);
+  const requiredIntakeMlH = durationH > 0 ? (requiredIntakeL * 1000) / durationH : 0;
+  const intakeGapMlH = requiredIntakeMlH - toleranceMlH;
+  // Inverse calc: what max sweat would make the plan exactly feasible?
+  // toleranceMlH = (sweatMaxLh * 1000 + otherLossesMlH - budgetL*1000/durationH)
+  // sweatMaxLh = (toleranceMlH + budgetL*1000/durationH - otherLossesMlH) / 1000
+  const maxSweatForFeasibilityLh = (toleranceMlH + (budgetL * 1000) / Math.max(0.01, durationH) - otherLossesMlH) / 1000;
+  const averageSweatLh = durationH > 0 ? totalSweatMl / 1000 / durationH : 0;
+
+  let status: FeasibilityStatus = "feasible";
+  if (intakeGapMlH > toleranceMlH * 0.20) status = "infeasible";
+  else if (intakeGapMlH > 0) status = "tight";
+
+  return { status, budgetL, totalLossesL, requiredIntakeMlH, intakeGapMlH, maxSweatForFeasibilityLh, averageSweatLh };
+}
+
 // ===================== HYDRATION RECOMMENDATIONS =====================
 // Compute hydration advice for a given sweat rate, duration, weight, and
 // personal tolerance. Caps recommended intake at the athlete's tolerance,
@@ -190,6 +271,25 @@ export default function SweatPage() {
     "sweat_pred_reserve",
     { hyperhydration: false, carbLoad: false },
   );
+  // Additional non-sweat losses (urinary + respiratory) + altitude modulation
+  const [losses, setLosses] = useAthleteData<{ urinaryMlH: string; respiratoryMlH: string; altitudeM: string }>(
+    "sweat_pred_losses",
+    { urinaryMlH: "30", respiratoryMlH: "60", altitudeM: "0" },
+  );
+  // Non-linear model parameters (Ultra mode auto-regulation)
+  const [nlParams, setNlParams] = useAthleteData<{ enabled: boolean; thresholdPct: string; k: string; beta: string }>(
+    "sweat_pred_nl",
+    { enabled: true, thresholdPct: "2.5", k: "0.8", beta: "0.85" },
+  );
+  // Apply a scenario preset to all segments
+  const applyScenarioPreset = (preset: ScenarioPreset) => {
+    setSegments((s) => s.map((seg) => ({
+      ...seg,
+      temp: preset.defaults.temp,
+      humidite: preset.defaults.humidite,
+      fc: preset.defaults.fc,
+    })));
+  };
   const addSegment = () => setSegments((s) => [
     ...s,
     { id: newId(), label: `Étape ${s.length + 1}`, duree: "120", temp: "20", fc: "145", humidite: "65" },
@@ -920,6 +1020,29 @@ export default function SweatPage() {
                 Décompose ta course en sections avec leurs propres conditions (température, FC, humidité, durée).
                 Utile pour les ultras et ironman où météo & intensité varient fortement.
               </div>
+
+              {/* Scenario presets — quick fill */}
+              <div className="mb-3 p-2.5 rounded-lg" style={{ background: "var(--color-surface-2)", border: "1px dashed var(--color-border)" }}>
+                <div className="text-[10px] uppercase font-bold mb-1.5" style={{ letterSpacing: ".08em", color: "var(--color-text-muted)" }}>
+                  🎯 Presets scénarios (PDF Sawka/Baker)
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {SCENARIO_PRESETS.map((p) => (
+                    <button
+                      key={p.key}
+                      onClick={() => applyScenarioPreset(p)}
+                      className="btn-ghost btn-xs"
+                      style={{ fontSize: 11, padding: "3px 8px" }}
+                      title={p.description}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="text-[10px] text-[var(--color-text-muted)] mt-1.5">
+                  Applique temp/humidité/FC moyens à tous les segments. Tu peux ensuite ajuster chaque segment.
+                </div>
+              </div>
               <div className="flex flex-col gap-3 mb-3">
                 {segments.map((seg, i) => (
                   <div key={seg.id} className="rounded-lg p-2.5" style={{ background: "var(--color-surface-2)", borderLeft: "3px solid var(--color-primary)" }}>
@@ -1012,6 +1135,59 @@ export default function SweatPage() {
                     </span>
                   </label>
                 </div>
+
+                {/* Additional non-sweat losses */}
+                <div className="mt-2 p-2.5 rounded-lg" style={{ background: "var(--color-surface-2)", border: "1px dashed var(--color-border)" }}>
+                  <div className="text-[10px] uppercase font-bold mb-1.5" style={{ letterSpacing: ".08em", color: "var(--color-text-muted)" }}>
+                    💨 Pertes non-sudorales
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Field label="Urinaires (ml/h)">
+                      <input className="input" value={losses.urinaryMlH} onChange={(e) => setLosses({ ...losses, urinaryMlH: e.target.value })} placeholder="30" />
+                    </Field>
+                    <Field label="Respiratoires (ml/h)">
+                      <input className="input" value={losses.respiratoryMlH} onChange={(e) => setLosses({ ...losses, respiratoryMlH: e.target.value })} placeholder="60" />
+                    </Field>
+                    <Field label="Altitude (m)">
+                      <input className="input" value={losses.altitudeM} onChange={(e) => setLosses({ ...losses, altitudeM: e.target.value })} placeholder="0" />
+                    </Field>
+                  </div>
+                  <div className="text-[10px] text-[var(--color-text-muted)] mt-1">
+                    Urinaires : ~20-60 ml/h (faibles en effort). Respiratoires : ~50-100 ml/h, +20% par 1000m d&apos;altitude.
+                  </div>
+                </div>
+
+                {/* Non-linear model parameters */}
+                <div className="mt-2 p-2.5 rounded-lg" style={{ background: "var(--color-surface-2)", border: "1px dashed var(--color-border)" }}>
+                  <div className="text-[10px] uppercase font-bold mb-1.5" style={{ letterSpacing: ".08em", color: "var(--color-text-muted)" }}>
+                    🔬 Modèle non-linéaire (auto-régulation)
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer text-xs mb-2">
+                    <input
+                      type="checkbox"
+                      checked={nlParams.enabled}
+                      onChange={(e) => setNlParams({ ...nlParams, enabled: e.target.checked })}
+                      style={{ width: 14, height: 14 }}
+                    />
+                    <span><b>Activer</b> la projection avec auto-régulation (intensité↓ quand déficit↑)</span>
+                  </label>
+                  {nlParams.enabled && (
+                    <div className="grid grid-cols-3 gap-2">
+                      <Field label="Seuil δ₀ (%)">
+                        <input className="input" value={nlParams.thresholdPct} onChange={(e) => setNlParams({ ...nlParams, thresholdPct: e.target.value })} />
+                      </Field>
+                      <Field label="Sensibilité k">
+                        <input className="input" value={nlParams.k} onChange={(e) => setNlParams({ ...nlParams, k: e.target.value })} />
+                      </Field>
+                      <Field label="Couplage β">
+                        <input className="input" value={nlParams.beta} onChange={(e) => setNlParams({ ...nlParams, beta: e.target.value })} />
+                      </Field>
+                    </div>
+                  )}
+                  <div className="text-[10px] text-[var(--color-text-muted)] mt-1">
+                    Modèle : S = S₀ · u^β avec u = exp(-k · max(0, δ-δ₀)). Source : analyse Sawka/Baker (PDF).
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1050,8 +1226,182 @@ export default function SweatPage() {
                 const naMinTotal = Math.round((actualIngestTotalMl / 1000) * 500);
                 const naMaxTotal = Math.round((actualIngestTotalMl / 1000) * 1300);
 
+                // Non-sweat losses (urinary + altitude-corrected respiratory)
+                const otherLossesMlH = toNum(losses.urinaryMlH) +
+                  respLossesAtAltitude(toNum(losses.respiratoryMlH), toNum(losses.altitudeM));
+
+                // Feasibility analysis (the equation from the PDF)
+                const feas = feasibilityAnalysis({
+                  totalSweatMl,
+                  durationH: totalDurationH,
+                  weightKg: poidsKg,
+                  toleranceMlH,
+                  thresholdPct: toNum(nlParams.thresholdPct) || 2.5,
+                  extraReserveL,
+                  otherLossesMlH,
+                });
+
+                // Build feasibility scenario table rows (PDF page 6)
+                const budgetL = feas.budgetL;
+                const scenarioRows = [1.0, 1.3, 1.5, 1.7, 2.0, 2.3].map((sweatLh) => {
+                  const totalSweatLs = sweatLh * totalDurationH;
+                  const otherL = (otherLossesMlH * totalDurationH) / 1000;
+                  const needL = Math.max(0, totalSweatLs + otherL - budgetL);
+                  const needPerH = totalDurationH > 0 ? (needL * 1000) / totalDurationH : 0;
+                  return { sweatLh, needPerH, ok: needPerH <= toleranceMlH };
+                });
+
                 return (
                   <>
+                    {/* Feasibility card — the headline of the long-race mode */}
+                    {(() => {
+                      const statusColor =
+                        feas.status === "feasible" ? "var(--color-success)" :
+                        feas.status === "tight" ? "#e6a833" :
+                        "var(--color-danger)";
+                      const statusBg =
+                        feas.status === "feasible" ? "rgba(95,140,10,0.10)" :
+                        feas.status === "tight" ? "rgba(230,168,51,0.12)" :
+                        "rgba(207,46,46,0.10)";
+                      const statusLabel =
+                        feas.status === "feasible" ? "✅ Plan faisable" :
+                        feas.status === "tight" ? "⚠ Plan limite" :
+                        "❌ Plan non faisable";
+                      const statusMsg =
+                        feas.status === "feasible"
+                          ? `Ta tolérance (${toleranceMlH} ml/h) couvre les ${Math.round(feas.requiredIntakeMlH)} ml/h théoriques nécessaires pour rester sous ${nlParams.thresholdPct} % de déshydratation.`
+                          : feas.status === "tight"
+                          ? `Plan jouable mais marge faible (${Math.round(feas.intakeGapMlH)} ml/h au-dessus de ta tolérance). À surveiller : refroidissement + pacing dès le début.`
+                          : `Il manque ${Math.round(feas.intakeGapMlH)} ml/h vs ta tolérance. Hydratation seule = insuffisante. La solution n'est pas "boire plus" mais réduire la charge thermique et l'intensité.`;
+                      return (
+                        <div className="card p-4 mb-4" style={{ borderLeft: `5px solid ${statusColor}`, background: statusBg }}>
+                          <div className="flex items-center gap-2 flex-wrap mb-2">
+                            <span className="font-extrabold text-base" style={{ color: statusColor, fontFamily: "var(--font-display)" }}>
+                              {statusLabel}
+                            </span>
+                            <span className="text-[10px] uppercase font-bold" style={{ color: "var(--color-text-muted)", letterSpacing: ".08em" }}>
+                              · Analyse de faisabilité (Sawka/Baker)
+                            </span>
+                          </div>
+                          <div className="text-sm leading-relaxed">{statusMsg}</div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3 text-xs">
+                            <div className="rounded p-2" style={{ background: "#fff" }}>
+                              <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]">Pertes totales</div>
+                              <div className="font-extrabold">{feas.totalLossesL.toFixed(2)} L</div>
+                              <div className="text-[10px] text-[var(--color-text-muted)]">Sueur + non-sudo</div>
+                            </div>
+                            <div className="rounded p-2" style={{ background: "#fff" }}>
+                              <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]">Budget acceptable</div>
+                              <div className="font-extrabold">{budgetL.toFixed(2)} L</div>
+                              <div className="text-[10px] text-[var(--color-text-muted)]">{nlParams.thresholdPct} % × {poidsKg} kg{extraReserveL > 0 ? ` + ${extraReserveL.toFixed(2)} L` : ""}</div>
+                            </div>
+                            <div className="rounded p-2" style={{ background: "#fff" }}>
+                              <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]">Apport nécessaire</div>
+                              <div className="font-extrabold" style={{ color: statusColor }}>
+                                {Math.round(feas.requiredIntakeMlH)} ml/h
+                              </div>
+                              <div className="text-[10px] text-[var(--color-text-muted)]">vs tolérance {toleranceMlH}</div>
+                            </div>
+                            <div className="rounded p-2" style={{ background: "#fff" }}>
+                              <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]">Sueur max faisable</div>
+                              <div className="font-extrabold">{feas.maxSweatForFeasibilityLh.toFixed(2)} L/h</div>
+                              <div className="text-[10px] text-[var(--color-text-muted)]">à ta tolérance actuelle</div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Actionable checklist when infeasible/tight */}
+                    {feas.status !== "feasible" && (
+                      <div
+                        className="card p-4 mb-4"
+                        style={{ borderLeft: "5px solid #2196f3", background: "rgba(33,150,243,0.06)" }}
+                      >
+                        <div className="font-extrabold mb-2" style={{ color: "#2196f3" }}>
+                          🛠 Leviers d&apos;action (PDF Sawka/INSEP)
+                        </div>
+                        <div className="text-xs leading-relaxed mb-2">
+                          La conclusion du PDF est claire : si l&apos;apport requis &gt; tolérance, la solution n&apos;est
+                          <b> pas de forcer l&apos;ingestion</b> (troubles digestifs), mais de <b>réduire la charge thermique
+                          et l&apos;intensité</b>. Combinaison gagnante :
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                          <div className="rounded p-2" style={{ background: "#fff", borderLeft: "3px solid #2196f3" }}>
+                            <b>🌡 Acclimatation chaleur (10-14j avant)</b><br />
+                            Abaisse la FC et la T° interne à charge donnée. Avance le seuil de sudation.
+                          </div>
+                          <div className="rounded p-2" style={{ background: "#fff", borderLeft: "3px solid #2196f3" }}>
+                            <b>❄️ Refroidissement externe aux ravitos</b><br />
+                            Eau froide sur tête/nuque/avant-bras, gilet glace, glaçons dans bandana.
+                          </div>
+                          <div className="rounded p-2" style={{ background: "#fff", borderLeft: "3px solid #2196f3" }}>
+                            <b>🐢 Pacing conservateur dès le départ</b><br />
+                            Cible {Math.round(feas.maxSweatForFeasibilityLh * 1000)} ml/h sueur max → intensité ~{Math.round(feas.maxSweatForFeasibilityLh / Math.max(0.01, feas.averageSweatLh) * 100)}% de ce qui est projeté.
+                          </div>
+                          <div className="rounded p-2" style={{ background: "#fff", borderLeft: "3px solid #2196f3" }}>
+                            <b>🌳 Recherche ombre / minimisation soleil direct</b><br />
+                            Casquette légère claire, lunettes, sections ombragées privilégiées en montée.
+                          </div>
+                          <div className="rounded p-2" style={{ background: "#fff", borderLeft: "3px solid #2196f3" }}>
+                            <b>👕 Vêtements évaporants</b><br />
+                            Tissus techniques aérés, éviter coton. Mouillage régulier du t-shirt.
+                          </div>
+                          <div className="rounded p-2" style={{ background: "#fff", borderLeft: "3px solid #2196f3" }}>
+                            <b>💧 Boisson fractionnée dès km 0</b><br />
+                            Ne pas attendre le rattrapage. Petites gorgées toutes les 5-10 min.
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Feasibility scenario table */}
+                    <div className="card p-4 mb-4">
+                      <div className="font-extrabold mb-2" style={{ fontFamily: "var(--font-display)" }}>
+                        📐 Tableau de faisabilité
+                      </div>
+                      <div className="text-xs text-[var(--color-text-muted)] mb-3">
+                        Pour ta tolérance de <b>{toleranceMlH} ml/h</b> et un budget de
+                        <b> {budgetL.toFixed(2)} L</b> (déficit ≤ {nlParams.thresholdPct} % + réserves), voici l&apos;apport
+                        nécessaire selon la sudation moyenne réelle de course.
+                      </div>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs" style={{ borderCollapse: "collapse" }}>
+                          <thead>
+                            <tr style={{ background: "var(--color-surface-2)" }}>
+                              <th style={{ padding: 8, textAlign: "left", borderBottom: "1px solid var(--color-border)" }}>Sudation moyenne</th>
+                              <th style={{ padding: 8, textAlign: "right", borderBottom: "1px solid var(--color-border)" }}>Apport nécessaire</th>
+                              <th style={{ padding: 8, textAlign: "right", borderBottom: "1px solid var(--color-border)" }}>Faisable ?</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {scenarioRows.map((r, i) => {
+                              const isProjected = Math.abs(r.sweatLh - feas.averageSweatLh) < 0.05;
+                              return (
+                                <tr key={i} style={{
+                                  borderBottom: "1px solid var(--color-border)",
+                                  background: isProjected ? "rgba(255,69,1,0.08)" : undefined,
+                                  fontWeight: isProjected ? 700 : undefined,
+                                }}>
+                                  <td style={{ padding: 8 }}>
+                                    {r.sweatLh.toFixed(1)} L/h
+                                    {isProjected && <span className="text-[10px] text-[var(--color-primary)] ml-1">← ton scénario</span>}
+                                  </td>
+                                  <td style={{ padding: 8, textAlign: "right" }}>{Math.round(r.needPerH)} ml/h</td>
+                                  <td style={{ padding: 8, textAlign: "right", color: r.ok ? "var(--color-success)" : "var(--color-danger)", fontWeight: 700 }}>
+                                    {r.ok ? "✓ Oui" : "✗ Non"}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <div className="text-[10px] text-[var(--color-text-muted)] mt-2">
+                        Source : équation du PDF · Apport = max(0, sueur + pertes_non_sudo − budget) / durée
+                      </div>
+                    </div>
+
                     {/* Global summary */}
                     <div className="card p-5 mb-4" style={{ borderLeft: "5px solid var(--color-primary)", background: "rgba(255,69,1,0.04)" }}>
                       <div className="text-[10px] uppercase font-bold text-[var(--color-primary)] mb-2" style={{ letterSpacing: ".08em" }}>
@@ -1162,6 +1512,22 @@ export default function SweatPage() {
                       let cumTime = 0;
                       let cumNetLossL = -extraReserveL; // negative = water in reserve
 
+                      // Non-linear simulation: when deficit > threshold, intensity drops
+                      // and sweat shrinks. We simulate hour-by-hour using current deficit %.
+                      const nl: NlParams = {
+                        thresholdPct: toNum(nlParams.thresholdPct) || 2.5,
+                        k: toNum(nlParams.k) || 0.8,
+                        beta: toNum(nlParams.beta) || 0.85,
+                      };
+                      let cumNetLossL_NL = -extraReserveL;
+                      const respMlH = respLossesAtAltitude(toNum(losses.respiratoryMlH), toNum(losses.altitudeM));
+                      const uriMlH = toNum(losses.urinaryMlH);
+                      const otherLossLPerH = (respMlH + uriMlH) / 1000;
+
+                      // Track linear AND non-linear, plus intensity %
+                      type Pt2 = Pt & { weightNL?: number; intensityPct?: number };
+                      const data2: Pt2[] = chartData as Pt2[];
+
                       segResults.forEach((r, segIdx) => {
                         const segDurH = r.dureeMin / 60;
                         const segStart = cumTime;
@@ -1170,7 +1536,7 @@ export default function SweatPage() {
                         const ingestSegL = (actualIngestTotalMl * shareOfSweat) / 1000;
                         const ingestSegLPerH = segDurH > 0 ? ingestSegL / segDurH : 0;
                         const sweatLPerH = r.sweatMlH / 1000;
-                        const netLossLPerH = sweatLPerH - ingestSegLPerH;
+                        const netLossLPerH = sweatLPerH - ingestSegLPerH + otherLossLPerH;
 
                         segBands.push({
                           x1: segStart,
@@ -1179,35 +1545,57 @@ export default function SweatPage() {
                           color: segIdx % 2 === 0 ? TINT_A : TINT_B,
                         });
 
-                        // Generate intermediate hourly points within the segment.
-                        // We allow lossAtHour to be negative (= still in reserve from
-                        // pre-race water loading) so the curve can start above poidsKg.
-                        let nextHour = Math.floor(segStart) + 1;
-                        while (nextHour < segEnd) {
-                          const dt = nextHour - segStart;
-                          const lossAtHour = cumNetLossL + dt * netLossLPerH;
-                          chartData.push({
-                            t: nextHour,
-                            weight: Math.round((poidsKg - lossAtHour) * 100) / 100,
-                            lossPct: Math.round((lossAtHour / poidsKg) * 100 * 10) / 10,
-                            lossL: Math.round(lossAtHour * 100) / 100,
-                            segLabel: r.seg.label,
-                          });
-                          nextHour += 1;
+                        // Stepping with sub-segment integration for non-linear curve
+                        const stepH = 0.25; // 15-min resolution
+                        let tCursor = segStart;
+                        while (tCursor + 1e-6 < segEnd) {
+                          const dt = Math.min(stepH, segEnd - tCursor);
+                          // Non-linear: regulated sweat depends on current deficit %
+                          const curDeficitPct = poidsKg > 0 ? (cumNetLossL_NL / poidsKg) * 100 : 0;
+                          const regSweatLPerH = regulatedSweat(sweatLPerH * 1000, curDeficitPct, nl) / 1000;
+                          const netLossLPerH_NL = regSweatLPerH - ingestSegLPerH + otherLossLPerH;
+                          cumNetLossL_NL = cumNetLossL_NL + dt * netLossLPerH_NL;
+                          tCursor += dt;
+
+                          // Push a chart point only at integer hours to keep markers aligned
+                          if (Math.abs(tCursor - Math.round(tCursor)) < 0.01 && Math.round(tCursor) > 0 && Math.round(tCursor) < segEnd - 0.05) {
+                            const dtLin = Math.round(tCursor) - segStart;
+                            const lossLin = cumNetLossL + dtLin * netLossLPerH;
+                            const intPct = Math.round(intensityFactor(curDeficitPct, nl) * 100);
+                            data2.push({
+                              t: Math.round(tCursor),
+                              weight: Math.round((poidsKg - lossLin) * 100) / 100,
+                              weightNL: Math.round((poidsKg - cumNetLossL_NL) * 100) / 100,
+                              lossPct: Math.round((lossLin / poidsKg) * 100 * 10) / 10,
+                              lossL: Math.round(lossLin * 100) / 100,
+                              intensityPct: Math.min(100, intPct),
+                              segLabel: r.seg.label,
+                            });
+                          }
                         }
 
-                        // End-of-segment point (marker)
+                        // End-of-segment markers (both linear + NL)
                         cumTime = segEnd;
                         cumNetLossL = cumNetLossL + segDurH * netLossLPerH;
-                        chartData.push({
+                        const intPctEnd = Math.round(intensityFactor(poidsKg > 0 ? (cumNetLossL_NL / poidsKg) * 100 : 0, nl) * 100);
+                        data2.push({
                           t: Math.round(cumTime * 100) / 100,
                           weight: Math.round((poidsKg - cumNetLossL) * 100) / 100,
+                          weightNL: Math.round((poidsKg - cumNetLossL_NL) * 100) / 100,
                           lossPct: Math.round((cumNetLossL / poidsKg) * 100 * 10) / 10,
                           lossL: Math.round(cumNetLossL * 100) / 100,
+                          intensityPct: Math.min(100, intPctEnd),
                           segLabel: `Fin ${r.seg.label}`,
                           isMarker: true,
                         });
                       });
+
+                      // Final deficits — linear vs NL
+                      const finalLossPctLinear = poidsKg > 0 ? (cumNetLossL / poidsKg) * 100 : 0;
+                      const finalLossPctNL = poidsKg > 0 ? (cumNetLossL_NL / poidsKg) * 100 : 0;
+                      const finalIntensityPct = Math.round(
+                        intensityFactor(finalLossPctNL, nl) * 100,
+                      );
 
                       const lossThreshold25Pct = poidsKg * 0.025;
                       const weightAt25 = poidsKg - lossThreshold25Pct;
@@ -1223,10 +1611,37 @@ export default function SweatPage() {
                             📉 Courbe poids / déshydratation
                           </div>
                           <div className="text-xs text-[var(--color-text-muted)] mb-3">
-                            Évolution du poids corporel heure par heure, calculée selon la sudation de chaque segment
-                            et l&apos;apport hydrique projeté. Bandes alternées orange/bleu = segments. Ligne rouge =
-                            seuil critique 2,5 % (<b>{weightAt25.toFixed(1)} kg</b> / {lossThreshold25Pct.toFixed(2)} L de perte).
+                            <b>Courbe bleue pleine</b> = projection linéaire (sudation constante).
+                            {nlParams.enabled && (
+                              <>
+                                {" "}<b style={{ color: "var(--color-success)" }}>Courbe verte pointillée</b> = projection
+                                non-linéaire (sudation réduite quand déficit &gt; {nlParams.thresholdPct} % car l&apos;allure
+                                baisse). Bandes alternées orange/bleu = segments. Ligne rouge = seuil critique 2,5 %
+                                (<b>{weightAt25.toFixed(1)} kg</b> / {lossThreshold25Pct.toFixed(2)} L de perte).
+                              </>
+                            )}
                           </div>
+                          {nlParams.enabled && (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-3 text-xs">
+                              <div className="rounded p-2" style={{ background: "var(--color-surface-2)", borderLeft: "3px solid #2196f3" }}>
+                                <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]">Déficit final · linéaire</div>
+                                <div className="font-extrabold" style={{ color: "#2196f3" }}>{finalLossPctLinear.toFixed(1)} %</div>
+                                <div className="text-[10px] text-[var(--color-text-muted)]">{cumNetLossL.toFixed(2)} L</div>
+                              </div>
+                              <div className="rounded p-2" style={{ background: "var(--color-surface-2)", borderLeft: "3px solid var(--color-success)" }}>
+                                <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]">Déficit final · non-linéaire</div>
+                                <div className="font-extrabold" style={{ color: "var(--color-success)" }}>{finalLossPctNL.toFixed(1)} %</div>
+                                <div className="text-[10px] text-[var(--color-text-muted)]">{cumNetLossL_NL.toFixed(2)} L (avec auto-régulation)</div>
+                              </div>
+                              <div className="rounded p-2" style={{ background: "var(--color-surface-2)", borderLeft: "3px solid #e6a833" }}>
+                                <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]">Intensité finale soutenue</div>
+                                <div className="font-extrabold" style={{ color: finalIntensityPct < 80 ? "var(--color-danger)" : "#e6a833" }}>
+                                  {finalIntensityPct} %
+                                </div>
+                                <div className="text-[10px] text-[var(--color-text-muted)]">vs allure initiale</div>
+                              </div>
+                            </div>
+                          )}
                           <div style={{ width: "100%", height: 300 }}>
                             <ResponsiveContainer>
                               <LineChart data={chartData} margin={{ top: 12, right: 20, left: 0, bottom: 8 }}>
@@ -1282,12 +1697,26 @@ export default function SweatPage() {
                                 <Line
                                   type="monotone"
                                   dataKey="weight"
-                                  name="Poids (kg)"
+                                  name="Linéaire"
                                   stroke="#2196f3"
                                   strokeWidth={2.5}
                                   dot={{ r: 3, fill: "#2196f3" }}
                                   activeDot={{ r: 5 }}
+                                  isAnimationActive={false}
                                 />
+                                {nlParams.enabled && (
+                                  <Line
+                                    type="monotone"
+                                    dataKey="weightNL"
+                                    name="Non-linéaire (auto-régulé)"
+                                    stroke="var(--color-success)"
+                                    strokeWidth={2.5}
+                                    strokeDasharray="5 3"
+                                    dot={{ r: 3, fill: "var(--color-success)" }}
+                                    activeDot={{ r: 5 }}
+                                    isAnimationActive={false}
+                                  />
+                                )}
                               </LineChart>
                             </ResponsiveContainer>
                           </div>
@@ -1323,34 +1752,74 @@ export default function SweatPage() {
                               <th style={{ padding: 8, textAlign: "right", borderBottom: "1px solid var(--color-border)" }}>Sueur</th>
                               <th style={{ padding: 8, textAlign: "right", borderBottom: "1px solid var(--color-border)" }}>Pertes</th>
                               <th style={{ padding: 8, textAlign: "right", borderBottom: "1px solid var(--color-border)" }}>À ingérer*</th>
+                              {nlParams.enabled && (
+                                <th style={{ padding: 8, textAlign: "right", borderBottom: "1px solid var(--color-border)" }}>Intensité†</th>
+                              )}
                             </tr>
                           </thead>
                           <tbody>
-                            {segResults.map((r, i) => {
-                              // Proportional ingestion per segment based on its share of total sweat
-                              const shareOfSweat = totalSweatMl > 0 ? r.sweatTotalMl / totalSweatMl : 0;
-                              const ingestSeg = actualIngestTotalMl * shareOfSweat;
-                              const ingestSegPerH = r.dureeMin > 0 ? (ingestSeg / r.dureeMin) * 60 : 0;
-                              return (
-                                <tr key={r.seg.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
-                                  <td style={{ padding: 8, fontWeight: 700 }}>{r.seg.label}</td>
-                                  <td style={{ padding: 8, textAlign: "right" }}>
-                                    {Math.floor(r.dureeMin / 60)}h{String(r.dureeMin % 60).padStart(2, "0")}
-                                  </td>
-                                  <td style={{ padding: 8, textAlign: "right", color: "var(--color-text-muted)" }}>
-                                    {r.seg.temp}°C · {r.seg.humidite}%
-                                  </td>
-                                  <td style={{ padding: 8, textAlign: "right", color: "var(--color-primary)", fontWeight: 700 }}>
-                                    {Math.round(r.sweatMlH)} ml/h
-                                  </td>
-                                  <td style={{ padding: 8, textAlign: "right" }}>{Math.round(r.sweatTotalMl)} ml</td>
-                                  <td style={{ padding: 8, textAlign: "right" }}>
-                                    {Math.round(ingestSeg)} ml
-                                    <div className="text-[10px] text-[var(--color-text-muted)]">{Math.round(ingestSegPerH)} ml/h</div>
-                                  </td>
-                                </tr>
-                              );
-                            })}
+                            {(() => {
+                              // Re-run NL simulation per segment to compute intensity at segment end
+                              const nl: NlParams = {
+                                thresholdPct: toNum(nlParams.thresholdPct) || 2.5,
+                                k: toNum(nlParams.k) || 0.8,
+                                beta: toNum(nlParams.beta) || 0.85,
+                              };
+                              let nlLossL = -extraReserveL;
+                              const respMlH2 = respLossesAtAltitude(toNum(losses.respiratoryMlH), toNum(losses.altitudeM));
+                              const otherL = (toNum(losses.urinaryMlH) + respMlH2) / 1000;
+                              return segResults.map((r) => {
+                                const segDurH = r.dureeMin / 60;
+                                const shareOfSweat = totalSweatMl > 0 ? r.sweatTotalMl / totalSweatMl : 0;
+                                const ingestSegL = (actualIngestTotalMl * shareOfSweat) / 1000;
+                                const ingestSegLPerH = segDurH > 0 ? ingestSegL / segDurH : 0;
+                                const ingestSegPerH = ingestSegLPerH * 1000;
+                                const ingestSeg = ingestSegL * 1000;
+
+                                // Simulate this segment with 15-min steps
+                                const stepH = 0.25;
+                                let tCur = 0;
+                                while (tCur + 1e-6 < segDurH) {
+                                  const dt = Math.min(stepH, segDurH - tCur);
+                                  const curDeficitPct = poidsKg > 0 ? (nlLossL / poidsKg) * 100 : 0;
+                                  const regSweatLPerH = regulatedSweat(r.sweatMlH, curDeficitPct, nl) / 1000;
+                                  nlLossL += dt * (regSweatLPerH - ingestSegLPerH + otherL);
+                                  tCur += dt;
+                                }
+                                const endDeficitPct = poidsKg > 0 ? (nlLossL / poidsKg) * 100 : 0;
+                                const intensityPctEnd = Math.min(100, Math.round(intensityFactor(endDeficitPct, nl) * 100));
+
+                                return (
+                                  <tr key={r.seg.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
+                                    <td style={{ padding: 8, fontWeight: 700 }}>{r.seg.label}</td>
+                                    <td style={{ padding: 8, textAlign: "right" }}>
+                                      {Math.floor(r.dureeMin / 60)}h{String(r.dureeMin % 60).padStart(2, "0")}
+                                    </td>
+                                    <td style={{ padding: 8, textAlign: "right", color: "var(--color-text-muted)" }}>
+                                      {r.seg.temp}°C · {r.seg.humidite}%
+                                    </td>
+                                    <td style={{ padding: 8, textAlign: "right", color: "var(--color-primary)", fontWeight: 700 }}>
+                                      {Math.round(r.sweatMlH)} ml/h
+                                    </td>
+                                    <td style={{ padding: 8, textAlign: "right" }}>{Math.round(r.sweatTotalMl)} ml</td>
+                                    <td style={{ padding: 8, textAlign: "right" }}>
+                                      {Math.round(ingestSeg)} ml
+                                      <div className="text-[10px] text-[var(--color-text-muted)]">{Math.round(ingestSegPerH)} ml/h</div>
+                                    </td>
+                                    {nlParams.enabled && (
+                                      <td style={{
+                                        padding: 8,
+                                        textAlign: "right",
+                                        fontWeight: 700,
+                                        color: intensityPctEnd < 80 ? "var(--color-danger)" : intensityPctEnd < 95 ? "#e6a833" : "var(--color-success)",
+                                      }}>
+                                        {intensityPctEnd} %
+                                      </td>
+                                    )}
+                                  </tr>
+                                );
+                              });
+                            })()}
                             <tr style={{ background: "var(--color-surface-2)", fontWeight: 800 }}>
                               <td style={{ padding: 8 }}>Total</td>
                               <td style={{ padding: 8, textAlign: "right" }}>
@@ -1362,12 +1831,14 @@ export default function SweatPage() {
                               </td>
                               <td style={{ padding: 8, textAlign: "right" }}>{Math.round(totalSweatMl)} ml</td>
                               <td style={{ padding: 8, textAlign: "right" }}>{Math.round(actualIngestTotalMl)} ml</td>
+                              {nlParams.enabled && <td style={{ padding: 8 }} />}
                             </tr>
                           </tbody>
                         </table>
                       </div>
                       <div className="text-[10px] text-[var(--color-text-muted)] mt-2">
                         *Apport ingérable réparti proportionnellement à la sudation de chaque segment, capé à la tolérance personnelle.
+                        {nlParams.enabled && <> †Intensité soutenable estimée en fin de segment (modèle non-linéaire). &lt; 80 % = forte dégradation de performance.</>}
                       </div>
                     </div>
                   </>

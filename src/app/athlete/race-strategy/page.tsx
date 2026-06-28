@@ -85,7 +85,7 @@ type TriPhase = {
   choPerH: number | string;
   hydratationPerH: number | string;
   sodiumPerH: number | string;
-  cafeinePerH?: number | string;  // mg/h — optional for back-compat
+  cafeineTotal?: number | string;  // mg total over the phase (caffeine is dose-cumulative)
   contenu: string[];
 };
 
@@ -98,7 +98,7 @@ type RacePlan = {
   choPerH: number | string;
   hydratationPerH: number | string;
   sodiumPerH?: number | string;   // mg/h — optional for back-compat
-  cafeinePerH?: number | string;  // mg/h — optional for back-compat
+  cafeineTotal?: number | string;  // mg total over the whole race (caffeine is dose-cumulative, not per-hour)
   avantCourse: string[];
   segments: RacePlanSegment[];
   discipline?: Discipline;
@@ -233,7 +233,7 @@ function parseRacePlanText(text: string): RacePlan | null {
     choPerH: "",
     hydratationPerH: "",
     sodiumPerH: "",
-    cafeinePerH: "",
+    cafeineTotal: "",
     avantCourse: [],
     segments: [],
   };
@@ -251,7 +251,7 @@ function parseRacePlanText(text: string): RacePlan | null {
     if (ll.startsWith("hydratation:")) { plan.hydratationPerH = l.slice(12).trim(); continue; }
     if (ll.startsWith("sodium:")) { plan.sodiumPerH = l.slice(7).trim(); continue; }
     if (ll.startsWith("cafeine:") || ll.startsWith("caféine:")) {
-      plan.cafeinePerH = l.slice(l.indexOf(":") + 1).trim();
+      plan.cafeineTotal = l.slice(l.indexOf(":") + 1).trim();
       continue;
     }
     if (ll.startsWith("avant")) { mode = "avant"; continue; }
@@ -269,7 +269,7 @@ function parseRacePlanText(text: string): RacePlan | null {
 }
 
 function exportRacePlanText(plan: RacePlan): string {
-  let out = `Nom: ${plan.name}\nObjectif: ${plan.objectif}\nKM: ${plan.km}\nD+: ${plan.dplus}\nCHO: ${plan.choPerH}\nHydratation: ${plan.hydratationPerH}\nSodium: ${plan.sodiumPerH ?? ""}\nCaféine: ${plan.cafeinePerH ?? ""}\n`;
+  let out = `Nom: ${plan.name}\nObjectif: ${plan.objectif}\nKM: ${plan.km}\nD+: ${plan.dplus}\nCHO: ${plan.choPerH}\nHydratation: ${plan.hydratationPerH}\nSodium: ${plan.sodiumPerH ?? ""}\nCaféine: ${plan.cafeineTotal ?? ""}\n`;
   if (plan.avantCourse.length) {
     out += "AVANT\n";
     plan.avantCourse.forEach((l) => (out += l + "\n"));
@@ -312,7 +312,7 @@ function PlanPrintReport({ plan }: { plan: RacePlan }) {
             <PrintKpi label="Glucides" value={plan.choPerH || "—"} unit="g/h" />
             <PrintKpi label="Hydratation" value={plan.hydratationPerH || "—"} unit="ml/h" accent="#0a0a0a" />
             <PrintKpi label="🧂 Sodium" value={plan.sodiumPerH || "—"} unit="mg/h" accent="#2196f3" />
-            <PrintKpi label="☕ Caféine" value={plan.cafeinePerH || "—"} unit="mg/h" accent="#cf2e2e" />
+            <PrintKpi label="☕ Caféine" value={plan.cafeineTotal || "—"} unit="mg total" accent="#cf2e2e" />
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 9, marginTop: 6 }}>
             <PrintKpi label="Distance" value={totalKm || "—"} unit="km" accent="#5f8c0a" />
@@ -394,7 +394,7 @@ function PlanPrintReport({ plan }: { plan: RacePlan }) {
               {!isTransition && (
                 <div style={{ fontSize: 11, color: "#FF4501", fontWeight: 700, marginTop: 3 }}>
                   {ph.choPerH} g/h · {ph.hydratationPerH} ml/h · {ph.sodiumPerH} mg/h Na
-                  {(ph.cafeinePerH || "") !== "" && <> · {ph.cafeinePerH} mg/h caf</>}
+                  {(ph.cafeineTotal || "") !== "" && <> · {ph.cafeineTotal} mg caf total</>}
                 </div>
               )}
               {ph.contenu && ph.contenu.some((c) => c.trim()) && (
@@ -507,10 +507,10 @@ function RacePlanCard({
                   <div className="font-extrabold text-lg" style={{ color: "#7ec5ff" }}>{rp.sodiumPerH} mg/h</div>
                 </div>
               )}
-              {(rp.cafeinePerH || "") !== "" && (
+              {(rp.cafeineTotal || "") !== "" && (
                 <div className="text-right">
                   <div className="text-[10px] text-[#bbb]">☕ CAFÉINE</div>
-                  <div className="font-extrabold text-lg" style={{ color: "#ffb380" }}>{rp.cafeinePerH} mg/h</div>
+                  <div className="font-extrabold text-lg" style={{ color: "#ffb380" }}>{rp.cafeineTotal} mg total</div>
                 </div>
               )}
             </>
@@ -615,8 +615,8 @@ function RacePlanCard({
                       <span><b>{ph.choPerH}</b> g/h</span>
                       <span><b>{ph.hydratationPerH}</b> ml/h</span>
                       <span><b>{ph.sodiumPerH}</b> mg/h Na</span>
-                      {(ph.cafeinePerH || "") !== "" && (
-                        <span><b>{ph.cafeinePerH}</b> mg/h caf</span>
+                      {(ph.cafeineTotal || "") !== "" && (
+                        <span><b>{ph.cafeineTotal}</b> mg caf total</span>
                       )}
                     </div>
                   )}
@@ -849,7 +849,7 @@ export default function RaceStrategyPage() {
     choPerH: "",
     hydratationPerH: "",
     sodiumPerH: "",
-    cafeinePerH: "",
+    cafeineTotal: "",
     avantCourse: [""],
     segments: discipline === "triathlon"
       ? []
@@ -1188,12 +1188,12 @@ export default function RaceStrategyPage() {
                     placeholder="500-1000"
                   />
                 </Field>
-                <Field label="☕ Caféine (mg/h)">
+                <Field label="☕ Caféine (mg total)">
                   <input
                     className="input"
-                    value={planEdit.cafeinePerH ?? ""}
-                    onChange={(e) => updatePlan({ cafeinePerH: e.target.value })}
-                    placeholder="0-200"
+                    value={planEdit.cafeineTotal ?? ""}
+                    onChange={(e) => updatePlan({ cafeineTotal: e.target.value })}
+                    placeholder="ex. 200"
                   />
                 </Field>
               </div>
@@ -1349,12 +1349,12 @@ export default function RaceStrategyPage() {
                     <Field label="CHO (g/h)"><input className="input" value={ph.choPerH} onChange={(e) => updatePhase(i, { choPerH: e.target.value })} /></Field>
                     <Field label="Hydratation (ml/h)"><input className="input" value={ph.hydratationPerH} onChange={(e) => updatePhase(i, { hydratationPerH: e.target.value })} /></Field>
                     <Field label="🧂 Sodium (mg/h)"><input className="input" value={ph.sodiumPerH} onChange={(e) => updatePhase(i, { sodiumPerH: e.target.value })} /></Field>
-                    <Field label="☕ Caféine (mg/h)">
+                    <Field label="☕ Caféine (mg total/phase)">
                       <input
                         className="input"
-                        value={ph.cafeinePerH ?? ""}
-                        placeholder="0-200"
-                        onChange={(e) => updatePhase(i, { cafeinePerH: e.target.value })}
+                        value={ph.cafeineTotal ?? ""}
+                        placeholder="ex. 100"
+                        onChange={(e) => updatePhase(i, { cafeineTotal: e.target.value })}
                       />
                     </Field>
                   </>
@@ -1518,22 +1518,6 @@ export default function RaceStrategyPage() {
             </div>
           )}
 
-          {racePlans.length > 1 && (
-            <div className="flex justify-end gap-2 mb-2.5">
-              <button
-                onClick={() => setExpandedPlanIds(new Set(racePlans.map((p) => p.id)))}
-                className="btn-ghost btn-sm"
-              >
-                Tout déployer
-              </button>
-              <button
-                onClick={() => setExpandedPlanIds(new Set())}
-                className="btn-ghost btn-sm"
-              >
-                Tout réduire
-              </button>
-            </div>
-          )}
           {racePlans.map((rp) => (
             <RacePlanCard
               key={rp.id}

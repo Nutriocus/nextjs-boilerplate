@@ -1637,121 +1637,6 @@ export default function SweatPage() {
                       </div>
                     </div>
 
-                    {/* Dedicated sodium card — global + per-segment + hyponatremia warning */}
-                    {actualIngestTotalMl > 0 && (() => {
-                      const totalL = actualIngestTotalMl / 1000;
-                      const perHL = actualIngestPerH / 1000;
-                      const naMinPerH = Math.round(perHL * 500);
-                      const naMaxPerH = Math.round(perHL * 1300);
-                      // Per-segment sodium = each segment's ingestion × concentration bracket
-                      const naPerSeg = segResults.map((r) => {
-                        const shareOfSweat = totalSweatMl > 0 ? r.sweatTotalMl / totalSweatMl : 0;
-                        const ingestSegL = (actualIngestTotalMl * shareOfSweat) / 1000;
-                        return {
-                          seg: r.seg,
-                          dureeMin: r.dureeMin,
-                          ingestL: ingestSegL,
-                          naMin: Math.round(ingestSegL * 500),
-                          naMax: Math.round(ingestSegL * 1300),
-                        };
-                      });
-                      return (
-                        <div className="card p-4 mb-4" style={{ borderLeft: "5px solid #2196f3" }}>
-                          <div className="font-extrabold mb-2" style={{ fontFamily: "var(--font-display)" }}>
-                            🧂 Plan sodium — anti-hyponatrémie
-                          </div>
-                          <div className="text-xs text-[var(--color-text-muted)] mb-3">
-                            Pour <b>{totalL.toFixed(2)} L</b> ingérés sur la course, voici les cibles sodium
-                            (règle d&apos;or : 500-1300 mg / L d&apos;eau).
-                          </div>
-
-                          {/* Global sodium */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-                            <div className="rounded-lg p-3" style={{ background: "var(--color-surface-2)", borderLeft: "3px solid #2196f3" }}>
-                              <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]" style={{ letterSpacing: ".06em" }}>
-                                Sodium / heure
-                              </div>
-                              <div className="font-extrabold text-2xl" style={{ color: "#2196f3", fontFamily: "var(--font-display)" }}>
-                                {naMinPerH}–{naMaxPerH} mg/h
-                              </div>
-                              <div className="text-xs text-[var(--color-text-muted)] mt-1">
-                                Pour {Math.round(actualIngestPerH)} ml/h ingérés
-                              </div>
-                            </div>
-                            <div className="rounded-lg p-3" style={{ background: "var(--color-surface-2)", borderLeft: "3px solid #2196f3" }}>
-                              <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]" style={{ letterSpacing: ".06em" }}>
-                                Sodium total sur la course
-                              </div>
-                              <div className="font-extrabold text-2xl" style={{ color: "#2196f3", fontFamily: "var(--font-display)" }}>
-                                {naMinTotal}–{naMaxTotal} mg
-                              </div>
-                              <div className="text-xs text-[var(--color-text-muted)] mt-1">
-                                Sur {Math.floor(totalDurationMin / 60)}h{String(totalDurationMin % 60).padStart(2, "0")}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Per-segment sodium */}
-                          <div className="overflow-x-auto">
-                            <table className="w-full text-xs" style={{ borderCollapse: "collapse" }}>
-                              <thead>
-                                <tr style={{ background: "var(--color-surface-2)" }}>
-                                  <th style={{ padding: 8, textAlign: "left", borderBottom: "1px solid var(--color-border)" }}>Segment</th>
-                                  <th style={{ padding: 8, textAlign: "right", borderBottom: "1px solid var(--color-border)" }}>Durée</th>
-                                  <th style={{ padding: 8, textAlign: "right", borderBottom: "1px solid var(--color-border)" }}>Apport hydrique</th>
-                                  <th style={{ padding: 8, textAlign: "right", borderBottom: "1px solid var(--color-border)" }}>🧂 Sodium</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {naPerSeg.map((r) => (
-                                  <tr key={r.seg.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
-                                    <td style={{ padding: 8, fontWeight: 700 }}>{r.seg.label}</td>
-                                    <td style={{ padding: 8, textAlign: "right" }}>
-                                      {Math.floor(r.dureeMin / 60)}h{String(r.dureeMin % 60).padStart(2, "0")}
-                                    </td>
-                                    <td style={{ padding: 8, textAlign: "right" }}>{r.ingestL.toFixed(2)} L</td>
-                                    <td style={{ padding: 8, textAlign: "right", color: "#2196f3", fontWeight: 700 }}>
-                                      {r.naMin}–{r.naMax} mg
-                                    </td>
-                                  </tr>
-                                ))}
-                                <tr style={{ background: "var(--color-surface-2)", fontWeight: 800 }}>
-                                  <td style={{ padding: 8 }}>Total</td>
-                                  <td style={{ padding: 8, textAlign: "right" }}>
-                                    {Math.floor(totalDurationMin / 60)}h{String(totalDurationMin % 60).padStart(2, "0")}
-                                  </td>
-                                  <td style={{ padding: 8, textAlign: "right" }}>{totalL.toFixed(2)} L</td>
-                                  <td style={{ padding: 8, textAlign: "right", color: "#2196f3" }}>{naMinTotal}–{naMaxTotal} mg</td>
-                                </tr>
-                              </tbody>
-                            </table>
-                          </div>
-
-                          {/* Hyponatremia warning */}
-                          <div
-                            className="mt-3 p-2.5 rounded-lg text-xs"
-                            style={{ background: "rgba(33,150,243,0.08)", borderLeft: "3px solid #2196f3" }}
-                          >
-                            <b style={{ color: "#2196f3" }}>⚠ Risque d&apos;hyponatrémie</b> — boire beaucoup sans sodium dilue
-                            le plasma sanguin. Symptômes : nausées, maux de tête, confusion, perte d&apos;équilibre, voire coma
-                            dans les cas sévères.
-                            <br />
-                            <b>Règle d&apos;or :</b> <b>500-1300 mg de sodium / L d&apos;eau</b>. Bas de fourchette pour les
-                            efforts courts ou tempérés. <b>Haut de fourchette</b> (≥ 1000 mg/L) si :
-                            chaleur, forte sudation, course &gt; 4 h, ou si tu es <i>heavy sweater</i> (comme ici avec
-                            {" "}{Math.round(avgSweatMlH)} ml/h moyens).
-                          </div>
-
-                          {/* Practical tips */}
-                          <div className="mt-2 text-[11px] text-[var(--color-text-muted)] leading-relaxed">
-                            💡 <b>Sources concrètes :</b> boissons de l&apos;effort (souvent 400-800 mg/L → vérifier l&apos;étiquette),
-                            pastilles de sel/électrolytes (200-400 mg/cap), capsules SaltStick, eau salée (1 g sel ≈ 400 mg sodium),
-                            betterave/cornichons (très riches), bouillon chaud aux ravitos.
-                          </div>
-                        </div>
-                      );
-                    })()}
-
                     {/* Tolerance warning if global ideal > tolerance */}
                     {exceedsTolerance && (
                       <div
@@ -2156,6 +2041,120 @@ export default function SweatPage() {
                         );
                       })()}
                     </div>
+
+                    {/* Dedicated sodium card — placed after field-pilot guide */}
+                    {actualIngestTotalMl > 0 && (() => {
+                      const totalL = actualIngestTotalMl / 1000;
+                      const perHL = actualIngestPerH / 1000;
+                      const naMinPerH = Math.round(perHL * 500);
+                      const naMaxPerH = Math.round(perHL * 1300);
+                      const naPerSeg = segResults.map((r) => {
+                        const shareOfSweat = totalSweatMl > 0 ? r.sweatTotalMl / totalSweatMl : 0;
+                        const ingestSegL = (actualIngestTotalMl * shareOfSweat) / 1000;
+                        return {
+                          seg: r.seg,
+                          dureeMin: r.dureeMin,
+                          ingestL: ingestSegL,
+                          naMin: Math.round(ingestSegL * 500),
+                          naMax: Math.round(ingestSegL * 1300),
+                        };
+                      });
+                      return (
+                        <div className="card p-4 mb-4" style={{ borderLeft: "5px solid #2196f3" }}>
+                          <div className="font-extrabold mb-2" style={{ fontFamily: "var(--font-display)" }}>
+                            🧂 Plan sodium — anti-hyponatrémie
+                          </div>
+                          <div className="text-xs text-[var(--color-text-muted)] mb-3">
+                            Pour <b>{totalL.toFixed(2)} L</b> ingérés sur la course, voici les cibles sodium
+                            (règle d&apos;or : 500-1300 mg / L d&apos;eau).
+                          </div>
+
+                          {/* Global sodium */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                            <div className="rounded-lg p-3" style={{ background: "var(--color-surface-2)", borderLeft: "3px solid #2196f3" }}>
+                              <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]" style={{ letterSpacing: ".06em" }}>
+                                Sodium / heure
+                              </div>
+                              <div className="font-extrabold text-2xl" style={{ color: "#2196f3", fontFamily: "var(--font-display)" }}>
+                                {naMinPerH}–{naMaxPerH} mg/h
+                              </div>
+                              <div className="text-xs text-[var(--color-text-muted)] mt-1">
+                                Pour {Math.round(actualIngestPerH)} ml/h ingérés
+                              </div>
+                            </div>
+                            <div className="rounded-lg p-3" style={{ background: "var(--color-surface-2)", borderLeft: "3px solid #2196f3" }}>
+                              <div className="text-[10px] uppercase font-bold text-[var(--color-text-muted)]" style={{ letterSpacing: ".06em" }}>
+                                Sodium total sur la course
+                              </div>
+                              <div className="font-extrabold text-2xl" style={{ color: "#2196f3", fontFamily: "var(--font-display)" }}>
+                                {naMinTotal}–{naMaxTotal} mg
+                              </div>
+                              <div className="text-xs text-[var(--color-text-muted)] mt-1">
+                                Sur {Math.floor(totalDurationMin / 60)}h{String(totalDurationMin % 60).padStart(2, "0")}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Per-segment sodium */}
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-xs" style={{ borderCollapse: "collapse" }}>
+                              <thead>
+                                <tr style={{ background: "var(--color-surface-2)" }}>
+                                  <th style={{ padding: 8, textAlign: "left", borderBottom: "1px solid var(--color-border)" }}>Segment</th>
+                                  <th style={{ padding: 8, textAlign: "right", borderBottom: "1px solid var(--color-border)" }}>Durée</th>
+                                  <th style={{ padding: 8, textAlign: "right", borderBottom: "1px solid var(--color-border)" }}>Apport hydrique</th>
+                                  <th style={{ padding: 8, textAlign: "right", borderBottom: "1px solid var(--color-border)" }}>🧂 Sodium</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {naPerSeg.map((r) => (
+                                  <tr key={r.seg.id} style={{ borderBottom: "1px solid var(--color-border)" }}>
+                                    <td style={{ padding: 8, fontWeight: 700 }}>{r.seg.label}</td>
+                                    <td style={{ padding: 8, textAlign: "right" }}>
+                                      {Math.floor(r.dureeMin / 60)}h{String(r.dureeMin % 60).padStart(2, "0")}
+                                    </td>
+                                    <td style={{ padding: 8, textAlign: "right" }}>{r.ingestL.toFixed(2)} L</td>
+                                    <td style={{ padding: 8, textAlign: "right", color: "#2196f3", fontWeight: 700 }}>
+                                      {r.naMin}–{r.naMax} mg
+                                    </td>
+                                  </tr>
+                                ))}
+                                <tr style={{ background: "var(--color-surface-2)", fontWeight: 800 }}>
+                                  <td style={{ padding: 8 }}>Total</td>
+                                  <td style={{ padding: 8, textAlign: "right" }}>
+                                    {Math.floor(totalDurationMin / 60)}h{String(totalDurationMin % 60).padStart(2, "0")}
+                                  </td>
+                                  <td style={{ padding: 8, textAlign: "right" }}>{totalL.toFixed(2)} L</td>
+                                  <td style={{ padding: 8, textAlign: "right", color: "#2196f3" }}>{naMinTotal}–{naMaxTotal} mg</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                          </div>
+
+                          {/* Hyponatremia warning */}
+                          <div
+                            className="mt-3 p-2.5 rounded-lg text-xs"
+                            style={{ background: "rgba(33,150,243,0.08)", borderLeft: "3px solid #2196f3" }}
+                          >
+                            <b style={{ color: "#2196f3" }}>⚠ Risque d&apos;hyponatrémie</b> — boire beaucoup sans sodium dilue
+                            le plasma sanguin. Symptômes : nausées, maux de tête, confusion, perte d&apos;équilibre, voire coma
+                            dans les cas sévères.
+                            <br />
+                            <b>Règle d&apos;or :</b> <b>500-1300 mg de sodium / L d&apos;eau</b>. Bas de fourchette pour les
+                            efforts courts ou tempérés. <b>Haut de fourchette</b> (≥ 1000 mg/L) si :
+                            chaleur, forte sudation, course &gt; 4 h, ou si tu es <i>heavy sweater</i> (comme ici avec
+                            {" "}{Math.round(avgSweatMlH)} ml/h moyens).
+                          </div>
+
+                          {/* Practical tips */}
+                          <div className="mt-2 text-[11px] text-[var(--color-text-muted)] leading-relaxed">
+                            💡 <b>Sources concrètes :</b> boissons de l&apos;effort (souvent 400-800 mg/L → vérifier l&apos;étiquette),
+                            pastilles de sel/électrolytes (200-400 mg/cap), capsules SaltStick, eau salée (1 g sel ≈ 400 mg sodium),
+                            betterave/cornichons (très riches), bouillon chaud aux ravitos.
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Per-segment breakdown */}
                     <div className="card p-4">

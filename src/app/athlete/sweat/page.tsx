@@ -1089,7 +1089,7 @@ export default function SweatPage() {
               {/* Scenario presets — quick fill */}
               <div className="mb-3 p-2.5 rounded-lg" style={{ background: "var(--color-surface-2)", border: "1px dashed var(--color-border)" }}>
                 <div className="text-[10px] uppercase font-bold mb-1.5" style={{ letterSpacing: ".08em", color: "var(--color-text-muted)" }}>
-                  🎯 Presets scénarios (PDF Sawka/Baker)
+                  🎯 Presets scénarios
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {SCENARIO_PRESETS.map((p) => (
@@ -1222,7 +1222,7 @@ export default function SweatPage() {
                   </div>
                 </div>
 
-                {/* Non-linear model parameters — 3-layer hybrid (PDF Restonica) */}
+                {/* Non-linear model parameters — 3-layer hybrid model */}
                 <div className="mt-2 p-2.5 rounded-lg" style={{ background: "var(--color-surface-2)", border: "1px dashed var(--color-border)" }}>
                   <div className="text-[10px] uppercase font-bold mb-1.5" style={{ letterSpacing: ".08em", color: "var(--color-text-muted)" }}>
                     🔬 Modèle hybride à 3 couches
@@ -1298,7 +1298,7 @@ export default function SweatPage() {
                     </>
                   )}
                   <div className="text-[10px] text-[var(--color-text-muted)] mt-1">
-                    Modèle : S = S₀·g_météo·u^β avec u = max(u_min, q·exp(-k·max(0, δ-δ₀))). Source : PDF Restonica.
+                    Modèle : S = S₀·g_météo·u^β avec u = max(u_min, q·exp(-k·max(0, δ-δ₀))).
                   </div>
                 </div>
               </div>
@@ -1393,7 +1393,7 @@ export default function SweatPage() {
                               {statusLabel}
                             </span>
                             <span className="text-[10px] uppercase font-bold" style={{ color: "var(--color-text-muted)", letterSpacing: ".08em" }}>
-                              · Analyse de faisabilité (Sawka/Baker)
+                              · Analyse de faisabilité
                             </span>
                           </div>
                           <div className="text-sm leading-relaxed">{statusMsg}</div>
@@ -1432,7 +1432,7 @@ export default function SweatPage() {
                         style={{ borderLeft: "5px solid #2196f3", background: "rgba(33,150,243,0.06)" }}
                       >
                         <div className="font-extrabold mb-2" style={{ color: "#2196f3" }}>
-                          🛠 Leviers d&apos;action (PDF Sawka/INSEP)
+                          🛠 Leviers d&apos;action
                         </div>
                         <div className="text-xs leading-relaxed mb-2">
                           La conclusion du PDF est claire : si l&apos;apport requis &gt; tolérance, la solution n&apos;est
@@ -1951,7 +1951,7 @@ export default function SweatPage() {
                         🧭 Pilotage terrain en course
                       </div>
                       <div className="text-xs text-[var(--color-text-muted)] mb-3">
-                        Source : PDF Restonica. Le bon modèle n&apos;est pas &laquo; rester sous 2,5 % à tout prix &raquo;.
+                        Le bon modèle n&apos;est pas &laquo; rester sous 2,5 % à tout prix &raquo;.
                         2,5 % devient un <b>seuil d&apos;alerte tactique</b>, pas un plafond dogmatique.
                         Performance modérée jusqu&apos;à 3,5–4 % reste compatible avec la perf si la chaleur est gérable.
                       </div>

@@ -441,19 +441,30 @@ function RacePlanCard({
   onDelete,
   onEdit,
   onPrint,
+  expanded = true,
+  onToggle,
 }: {
   rp: RacePlan;
   onDelete?: (id: string) => void;
   onEdit?: (rp: RacePlan) => void;
   onPrint?: (rp: RacePlan) => void;
+  /** When false, the body section is hidden and only the header bar shows. */
+  expanded?: boolean;
+  /** Click-handler on the header bar to toggle expand/collapse. */
+  onToggle?: () => void;
 }) {
   const discipline: Discipline = rp.discipline ?? "trail";
   const isTri = discipline === "triathlon";
   const subtitle = planSubtitle(rp);
 
   return (
-    <div className="card overflow-hidden mb-3.5">
-      <div className="bg-[var(--color-dark)] px-4 py-3.5 text-white flex justify-between items-center flex-wrap gap-2">
+    <div className="card overflow-hidden mb-2.5">
+      <div
+        className="bg-[var(--color-dark)] px-4 py-3.5 text-white flex justify-between items-center flex-wrap gap-2"
+        style={onToggle ? { cursor: "pointer" } : undefined}
+        onClick={onToggle}
+        title={onToggle ? (expanded ? "Réduire" : "Voir la stratégie complète") : undefined}
+      >
         <div>
           <div className="flex items-center gap-2 flex-wrap">
             <span style={{ fontSize: 18 }}>{DISCIPLINE_ICON[discipline]}</span>
@@ -511,23 +522,53 @@ function RacePlanCard({
             </div>
           )}
           {onPrint && (
-            <button onClick={() => onPrint(rp)} className="btn-ghost btn-xs" style={{ color: "#fff", border: "1px solid #fff4" }} title="Exporter en PDF">
+            <button
+              onClick={(e) => { e.stopPropagation(); onPrint(rp); }}
+              className="btn-ghost btn-xs"
+              style={{ color: "#fff", border: "1px solid #fff4" }}
+              title="Exporter en PDF"
+            >
               📄 PDF
             </button>
           )}
           {onEdit && (
-            <button onClick={() => onEdit(rp)} className="btn-ghost btn-xs" style={{ color: "#fff", border: "1px solid #fff4" }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); onEdit(rp); }}
+              className="btn-ghost btn-xs"
+              style={{ color: "#fff", border: "1px solid #fff4" }}
+            >
               Éditer
             </button>
           )}
           {onDelete && (
-            <button onClick={() => onDelete(rp.id)} className="btn-ghost btn-xs" style={{ color: "#fff", border: "1px solid #fff4" }}>
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(rp.id); }}
+              className="btn-ghost btn-xs"
+              style={{ color: "#fff", border: "1px solid #fff4" }}
+            >
               ✕
             </button>
+          )}
+          {onToggle && (
+            <span
+              style={{
+                fontSize: 18,
+                color: "var(--color-accent)",
+                transition: "transform .15s",
+                transform: expanded ? "rotate(0deg)" : "rotate(-90deg)",
+                display: "inline-block",
+                width: 18,
+                textAlign: "center",
+              }}
+              aria-label={expanded ? "Réduire" : "Déployer"}
+            >
+              ▾
+            </span>
           )}
         </div>
       </div>
 
+      {expanded && (
       <div className="p-4">
         {rp.avantCourse && rp.avantCourse.length > 0 && (
           <div className="mb-3.5">
@@ -626,6 +667,7 @@ function RacePlanCard({
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
@@ -680,6 +722,14 @@ export default function RaceStrategyPage() {
 
   const [strategies, setStrategies, loadedS] = useAthleteData<Strategy[]>("strat", []);
   const [racePlans, setRacePlans, loadedR] = useAthleteData<RacePlan[]>("raceplans", []);
+  // Which plan(s) are expanded. Default: all collapsed; user clicks to expand.
+  const [expandedPlanIds, setExpandedPlanIds] = useState<Set<string>>(new Set());
+  const togglePlan = (id: string) =>
+    setExpandedPlanIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   const [custom] = useAthleteData<Product[]>("custom", []);
   const [notifyMsg, setNotifyMsg] = useState<string | null>(null);
   const [notifyLoading, setNotifyLoading] = useState(false);
@@ -1468,6 +1518,22 @@ export default function RaceStrategyPage() {
             </div>
           )}
 
+          {racePlans.length > 1 && (
+            <div className="flex justify-end gap-2 mb-2.5">
+              <button
+                onClick={() => setExpandedPlanIds(new Set(racePlans.map((p) => p.id)))}
+                className="btn-ghost btn-sm"
+              >
+                Tout déployer
+              </button>
+              <button
+                onClick={() => setExpandedPlanIds(new Set())}
+                className="btn-ghost btn-sm"
+              >
+                Tout réduire
+              </button>
+            </div>
+          )}
           {racePlans.map((rp) => (
             <RacePlanCard
               key={rp.id}
@@ -1475,6 +1541,8 @@ export default function RaceStrategyPage() {
               onDelete={delPlan}
               onEdit={(p) => setPlanEdit(p)}
               onPrint={(p) => { setPrintPlan(p); setTimeout(() => window.print(), 200); }}
+              expanded={expandedPlanIds.has(rp.id)}
+              onToggle={() => togglePlan(rp.id)}
             />
           ))}
           {racePlans.length === 0 && <Empty>Aucun plan de course.</Empty>}

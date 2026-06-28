@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useAthleteData } from "@/lib/athlete-storage";
 import { PageHeader, Kpi, Empty, Field } from "@/components/ui/PageHeader";
 import { HelpSection, HelpBlock } from "@/components/ui/HelpSection";
+import { PrintReport, PrintH, PrintButton, PrintKpi, PrintBox, printColor } from "@/components/ui/PrintReport";
 import {
   ResponsiveContainer,
   ScatterChart,
@@ -569,6 +570,9 @@ export default function SweatPage() {
           >
             🏔 Multi-segments (ultra)
           </button>
+          <div className="ml-auto">
+            <PrintButton label="📄 Exporter en PDF" />
+          </div>
           {predMode === "segments" && (
             <span className="text-xs text-[var(--color-text-muted)]">
               · {segments.length} segment{segments.length > 1 ? "s" : ""}
@@ -1372,6 +1376,218 @@ export default function SweatPage() {
             </div>
           </div>
         )}
+
+        {/* ============ PRINT VIEW (anticipation) ============ */}
+        {tab === "anticipation" && (() => {
+          const poidsKg = toNum(pred.poids);
+          const toleranceMlH = toNum(pred.tolerance) || 750;
+          const extraReserveL = (reserve.hyperhydration ? 0.5 : 0) + (reserve.carbLoad ? 0.75 : 0);
+          const lossThreshold25Pct = poidsKg * 0.025;
+          const weightAt25 = poidsKg - lossThreshold25Pct;
+          const dateStr = new Date().toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
+
+          // Build per-segment results once for either mode (segments mode uses many, simple uses one virtual segment)
+          const isSegments = predMode === "segments";
+
+          // Simple-mode precomputations
+          let simpleRecs: ReturnType<typeof hydrationRecs> | null = null;
+          let simpleSweat: number | null = null;
+          if (!isSegments && validForPred.length > 0) {
+            const p = predictSweat(
+              { temp: toNum(pred.temp), fc: toNum(pred.fc), humidite: toNum(pred.humidite), duree: toNum(pred.duree) },
+              validForPred,
+            );
+            if (p) {
+              simpleSweat = p.predicted;
+              simpleRecs = hydrationRecs({
+                sweatMlH: p.predicted,
+                durationMin: toNum(pred.duree),
+                weightKg: poidsKg,
+                toleranceMlH,
+              });
+            }
+          }
+
+          // Multi-segment precomputations
+          const segRows = isSegments ? segments.map((seg) => {
+            const p = predictSweat(
+              { temp: toNum(seg.temp), fc: toNum(seg.fc), humidite: toNum(seg.humidite), duree: toNum(seg.duree) },
+              validForPred,
+            );
+            const dureeMin = toNum(seg.duree);
+            const sweatMlH = p?.predicted ?? 0;
+            const sweatTotalMl = (sweatMlH * dureeMin) / 60;
+            return { seg, dureeMin, sweatMlH, sweatTotalMl };
+          }) : [];
+          const totalDurationMin = segRows.reduce((s, r) => s + r.dureeMin, 0);
+          const totalSweatMl = segRows.reduce((s, r) => s + r.sweatTotalMl, 0);
+          const totalDurationH = totalDurationMin / 60;
+          const avgSweatMlH = totalDurationH > 0 ? totalSweatMl / totalDurationH : 0;
+          const maxLossMlGlobal = poidsKg * 25;
+          const idealIngestTotalMl = Math.max(0, totalSweatMl - maxLossMlGlobal);
+          const idealIngestPerH = totalDurationH > 0 ? idealIngestTotalMl / totalDurationH : 0;
+          const actualIngestPerH = Math.min(idealIngestPerH, toleranceMlH);
+          const actualIngestTotalMl = actualIngestPerH * totalDurationH;
+          const actualLossPct = poidsKg > 0 ? ((totalSweatMl - actualIngestTotalMl) / (poidsKg * 1000)) * 100 : 0;
+          const naMinTotal = Math.round((actualIngestTotalMl / 1000) * 500);
+          const naMaxTotal = Math.round((actualIngestTotalMl / 1000) * 1300);
+
+          const cellTh: React.CSSProperties = {
+            padding: "6px 8px", textAlign: "left", borderBottom: `1px solid ${printColor.line}`,
+            fontSize: 10, fontWeight: 700, color: printColor.mut, textTransform: "uppercase", letterSpacing: ".05em",
+          };
+          const cellTd: React.CSSProperties = {
+            padding: "6px 8px", borderBottom: `1px solid ${printColor.line}`, fontSize: 11,
+          };
+
+          return (
+            <PrintReport
+              kicker="Anticipation hydratation"
+              title={isSegments ? "Stratégie multi-segments" : "Stratégie hydrique de course"}
+              subtitle={`Édité le ${dateStr} · Profil ${poidsKg} kg · Tolérance ${toleranceMlH} ml/h${extraReserveL > 0 ? ` · Réserve pré-course +${extraReserveL.toFixed(2)} L` : ""}`}
+            >
+              {!isSegments && simpleRecs && (
+                <>
+                  <PrintH>Conditions estimées</PrintH>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+                    <PrintKpi label="Durée" value={`${pred.duree}`} unit="min" />
+                    <PrintKpi label="Température" value={pred.temp} unit="°C" />
+                    <PrintKpi label="Humidité" value={pred.humidite} unit="%" />
+                    <PrintKpi label="FC moyenne" value={pred.fc} unit="bpm" />
+                  </div>
+
+                  <PrintH>Sudation prévue</PrintH>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                    <PrintKpi label="Taux de sudation" value={Math.round(simpleSweat ?? 0)} unit="ml/h" accent={printColor.orange} />
+                    <PrintKpi label="Pertes totales" value={(simpleRecs.totalSweatMl / 1000).toFixed(2)} unit="L" />
+                    <PrintKpi label="Seuil 2,5 %" value={(lossThreshold25Pct).toFixed(2)} unit="L" sub={`${weightAt25.toFixed(1)} kg`} accent={printColor.red} />
+                  </div>
+
+                  <PrintH>Plan d&apos;hydratation</PrintH>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8 }}>
+                    <PrintKpi label="À ingérer / heure" value={Math.round(simpleRecs.actualIngestPerH)} unit="ml/h" />
+                    <PrintKpi label="Volume total" value={(simpleRecs.actualIngestTotalMl / 1000).toFixed(2)} unit="L" />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8, marginTop: 6 }}>
+                    <PrintKpi label="Sodium / heure" value={`${Math.round((simpleRecs.actualIngestPerH / 1000) * 500)}–${Math.round((simpleRecs.actualIngestPerH / 1000) * 1300)}`} unit="mg/h" accent="#2196f3" />
+                    <PrintKpi label="Sodium total" value={`${Math.round((simpleRecs.actualIngestTotalMl / 1000) * 500)}–${Math.round((simpleRecs.actualIngestTotalMl / 1000) * 1300)}`} unit="mg" accent="#2196f3" />
+                  </div>
+
+                  {simpleRecs.exceedsTolerance && (
+                    <PrintBox title="⚠ Apport théorique > tolérance digestive">
+                      <div style={{ fontSize: 11, lineHeight: 1.55 }}>
+                        Pour rester sous 2,5 %, il faudrait ingérer <b>{Math.round(simpleRecs.idealIngestPerH)} ml/h</b>,
+                        au-delà de la tolérance déclarée (<b>{toleranceMlH} ml/h</b>).
+                        Recommandation : rester à la tolérance ({Math.round(simpleRecs.actualIngestPerH)} ml/h).
+                        Estimation théorique de déshydratation : ~{simpleRecs.actualLossPct.toFixed(1)} %.
+                        En pratique, ce chiffre est auto-régulé (baisse d&apos;allure → baisse de sudation).
+                      </div>
+                    </PrintBox>
+                  )}
+                </>
+              )}
+
+              {isSegments && validForPred.length > 0 && (
+                <>
+                  <PrintH>Synthèse globale</PrintH>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+                    <PrintKpi label="Durée totale" value={`${Math.floor(totalDurationMin / 60)}h${String(totalDurationMin % 60).padStart(2, "0")}`} />
+                    <PrintKpi label="Pertes totales" value={(totalSweatMl / 1000).toFixed(2)} unit="L" accent={printColor.orange} />
+                    <PrintKpi label="Sudation moyenne" value={Math.round(avgSweatMlH)} unit="ml/h" accent={printColor.orange} />
+                    <PrintKpi label="À ingérer total" value={(actualIngestTotalMl / 1000).toFixed(2)} unit="L" sub={`${Math.round(actualIngestPerH)} ml/h moy.`} />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 8, marginTop: 6 }}>
+                    <PrintKpi label="Sodium total" value={`${naMinTotal}–${naMaxTotal}`} unit="mg" accent="#2196f3" />
+                    <PrintKpi label="Déshydratation finale (théo.)" value={`${actualLossPct.toFixed(1)}`} unit="%" accent={actualLossPct > 2.5 ? printColor.red : printColor.green} />
+                  </div>
+
+                  {actualLossPct > 2.5 && !reserve.hyperhydration && (
+                    <PrintBox title="💧 Surhydratation pré-course recommandée">
+                      <div style={{ fontSize: 11, lineHeight: 1.55 }}>
+                        <b>800 ml d&apos;eau + 7 g de sel</b> (≈ 1 cuillère à café rase) dans les
+                        <b> 2 h avant le départ</b>. Gain net : ~500 ml de réserve hydrique qui repousse le seuil
+                        des 2,5 %. À tester en entraînement pour valider la tolérance digestive.
+                      </div>
+                    </PrintBox>
+                  )}
+
+                  {extraReserveL > 0 && (
+                    <PrintBox title="✓ Réserves pré-course activées">
+                      <div style={{ fontSize: 11 }}>
+                        {reserve.hyperhydration && <span>· Surhydratation : <b>+500 ml</b><br /></span>}
+                        {reserve.carbLoad && <span>· Surcharge glucidique : <b>+750 ml</b><br /></span>}
+                        Total réserve : <b>+{extraReserveL.toFixed(2)} L</b>
+                      </div>
+                    </PrintBox>
+                  )}
+
+                  <PrintH>Détail par segment</PrintH>
+                  <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 4 }}>
+                    <thead>
+                      <tr>
+                        <th style={cellTh}>Segment</th>
+                        <th style={{ ...cellTh, textAlign: "right" }}>Durée</th>
+                        <th style={{ ...cellTh, textAlign: "right" }}>Conditions</th>
+                        <th style={{ ...cellTh, textAlign: "right" }}>Sueur</th>
+                        <th style={{ ...cellTh, textAlign: "right" }}>Pertes</th>
+                        <th style={{ ...cellTh, textAlign: "right" }}>À ingérer</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {segRows.map((r) => {
+                        const shareOfSweat = totalSweatMl > 0 ? r.sweatTotalMl / totalSweatMl : 0;
+                        const ingestSeg = actualIngestTotalMl * shareOfSweat;
+                        const ingestSegPerH = r.dureeMin > 0 ? (ingestSeg / r.dureeMin) * 60 : 0;
+                        return (
+                          <tr key={r.seg.id}>
+                            <td style={{ ...cellTd, fontWeight: 700 }}>{r.seg.label}</td>
+                            <td style={{ ...cellTd, textAlign: "right" }}>
+                              {Math.floor(r.dureeMin / 60)}h{String(r.dureeMin % 60).padStart(2, "0")}
+                            </td>
+                            <td style={{ ...cellTd, textAlign: "right", color: printColor.mut }}>
+                              {r.seg.temp}°C · {r.seg.humidite}% · {r.seg.fc} bpm
+                            </td>
+                            <td style={{ ...cellTd, textAlign: "right", color: printColor.orange, fontWeight: 700 }}>
+                              {Math.round(r.sweatMlH)} ml/h
+                            </td>
+                            <td style={{ ...cellTd, textAlign: "right" }}>{Math.round(r.sweatTotalMl)} ml</td>
+                            <td style={{ ...cellTd, textAlign: "right" }}>
+                              {Math.round(ingestSeg)} ml
+                              <span style={{ display: "block", fontSize: 9, color: printColor.mut }}>{Math.round(ingestSegPerH)} ml/h</span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      <tr style={{ background: printColor.soft, fontWeight: 800 }}>
+                        <td style={cellTd}>Total</td>
+                        <td style={{ ...cellTd, textAlign: "right" }}>
+                          {Math.floor(totalDurationMin / 60)}h{String(totalDurationMin % 60).padStart(2, "0")}
+                        </td>
+                        <td style={cellTd} />
+                        <td style={{ ...cellTd, textAlign: "right", color: printColor.orange }}>
+                          {Math.round(avgSweatMlH)} ml/h
+                        </td>
+                        <td style={{ ...cellTd, textAlign: "right" }}>{Math.round(totalSweatMl)} ml</td>
+                        <td style={{ ...cellTd, textAlign: "right" }}>{Math.round(actualIngestTotalMl)} ml</td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <PrintBox title="Rappel — règle des 2,5 %">
+                    <div style={{ fontSize: 11, lineHeight: 1.55 }}>
+                      Au-delà de 2,5 % de déshydratation (
+                      {lossThreshold25Pct.toFixed(2)} L / {weightAt25.toFixed(1)} kg pour cet athlète),
+                      les performances chutent. Une auto-régulation se met en place :
+                      allure réduite → moins de chaleur → sudation réduite. La déshydratation
+                      finale réelle sera donc moindre que la projection linéaire, mais avec un
+                      coût en performance.
+                    </div>
+                  </PrintBox>
+                </>
+              )}
+            </PrintReport>
+          );
+        })()}
         </>
       )}
 

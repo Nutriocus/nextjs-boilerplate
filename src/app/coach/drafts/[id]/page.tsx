@@ -55,9 +55,39 @@ export default function DraftDetailPage() {
   const [athleteId, setAthleteId] = useState<string>("");
   const [notifyAthlete, setNotifyAthlete] = useState(true);
   const [showTranscript, setShowTranscript] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
 
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+
+  async function regenerate() {
+    if (!draftId) return;
+    if (!confirm("Relancer la génération IA sur la même transcription ? Cela remplacera le contenu actuel du CR.")) return;
+    setRegenerating(true);
+    setMsg("⏳ Régénération en cours (peut prendre 1-2 min sur un long transcript)…");
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) { setMsg("⚠ Session expirée"); setRegenerating(false); return; }
+      const res = await fetch("/api/coach/drafts/regenerate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ draftId }),
+      });
+      const json = await res.json();
+      if (res.ok && json.ok) {
+        setMsg("✓ Régénéré ! Rechargement…");
+        setTimeout(() => window.location.reload(), 800);
+      } else {
+        setMsg("⚠ " + (json.error || `HTTP ${res.status}`));
+        setRegenerating(false);
+      }
+    } catch (e: unknown) {
+      const m = e instanceof Error ? e.message : "erreur inconnue";
+      setMsg("⚠ " + m);
+      setRegenerating(false);
+    }
+  }
 
   useEffect(() => {
     (async () => {
@@ -339,6 +369,21 @@ export default function DraftDetailPage() {
           >
             {showTranscript ? "Masquer" : "Voir"} la transcription brute
           </button>
+
+          {!isPublished && draft.transcript_raw && (
+            <button
+              onClick={regenerate}
+              disabled={regenerating}
+              className="btn-ghost btn-sm"
+              style={{
+                color: !html.trim() ? "var(--color-primary)" : "var(--color-text-muted)",
+                border: !html.trim() ? "1px dashed var(--color-primary)" : undefined,
+              }}
+              title="Relance Claude sur la même transcription"
+            >
+              {regenerating ? "🔄 Régénération…" : !html.trim() ? "🔄 Régénérer (CR vide)" : "🔄 Régénérer le CR"}
+            </button>
+          )}
         </div>
       </div>
 

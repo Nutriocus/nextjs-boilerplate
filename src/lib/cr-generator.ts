@@ -1,9 +1,12 @@
 // =====================================================================
-// CR generator — calls Claude Sonnet to turn a raw transcript / Gemini
-// notes blob into a structured HTML compte-rendu in Florian's style.
+// CR generator — uses the official Anthropic SDK with streaming so long
+// transcripts don't hit Vercel function timeouts (raw fetch + non-streaming
+// caused silent empty drafts: insert succeeded then function died mid-call,
+// the cr_html update never ran, draft stayed pending with no error).
 // =====================================================================
 
-const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
+import Anthropic from "@anthropic-ai/sdk";
+
 const MODEL = "claude-sonnet-4-6";
 
 const SYSTEM_PROMPT = `Tu es Florian Mouchel, diététicien du sport spécialisé dans les sports d'endurance (trail, ultra-trail, triathlon, cyclisme, course sur route), fondateur de Nutriocus. Tu accompagnes 250+ athlètes avec une approche nutritionnelle scientifique et bienveillante.
@@ -12,7 +15,7 @@ const SYSTEM_PROMPT = `Tu es Florian Mouchel, diététicien du sport spécialis�
 
 RÈGLES STRICTES :
 
-1. **Sortie : HTML uniquement** (compatible TipTap : <h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>, <table>, <thead>, <tbody>, <tr>, <th>, <td>). Pas de <html>, <head>, <body>, <style>. Pas de markdown.
+1. **Sortie : HTML uniquement** (compatible TipTap : <h1>, <h2>, <h3>, <p>, <ul>, <li>, <strong>, <em>, <table>, <thead>, <tbody>, <tr>, <th>, <td>). Pas de <html>, <head>, <body>, <style>. Pas de markdown.
 
 2. **Structure obligatoire** (adapte les sections selon la consultation, omets les sections non abordées) :
    - <h2>🎯 Synthèse</h2> — 2-3 phrases qui résument l'essentiel
@@ -34,7 +37,7 @@ RÈGLES STRICTES :
 8. **Signature** : termine TOUJOURS par un mot de motivation court (1 phrase) puis :
    <p>— <strong>Florian Mouchel</strong><br>Diététicien du sport, fondateur de Nutriocus</p>
 
-9. **Titre** : le tout premier élément doit être un <h1> court et descriptif de la consultation (ex: "Préparation course 30 km — La Réunion" ou "Bilan suivi M+2 + ajustement supplémentation"). Ce titre sera réutilisé comme titre de la consultation dans la plateforme.
+9. **Titre OBLIGATOIRE** : le tout premier élément doit être un <h1> court et descriptif de la consultation (ex: "Préparation course 30 km — La Réunion" ou "Bilan suivi M+2 + ajustement supplémentation"). Ce titre sera réutilisé comme titre de la consultation dans la plateforme. Ne JAMAIS commencer par un <h2> ou un paragraphe.
 
 EXEMPLE DE DÉBUT ATTENDU :
 <h1>Préparation course 30 km — La Réunion</h1>
@@ -43,27 +46,26 @@ EXEMPLE DE DÉBUT ATTENDU :
 
 const USER_PROMPT_TEMPLATE = `Voici la transcription brute de ma consultation avec {{ATHLETE_NAME}}{{REPLAY_HINT}}.
 
-Génère le compte rendu HTML en respectant scrupuleusement les règles du système.
+Génère le compte rendu HTML en respectant scrupuleusement les règles du système. RAPPEL : commence par un <h1> avec un titre court et descriptif.
 
 ---
 {{TRANSCRIPT}}
 ---`;
 
-export type CrGenerationResult = {
-  ok: true;
-  html: string;
-  title: string;
-  model: string;
-  tokensInput: number;
-  tokensOutput: number;
-} | {
-  ok: false;
-  error: string;
-};
+export type CrGenerationResult =
+  | {
+      ok: true;
+      html: string;
+      title: string;
+      model: string;
+      tokensInput: number;
+      tokensOutput: number;
+    }
+  | { ok: false; error: string };
 
 /**
  * Generate a structured CR from a raw consultation transcript.
- * Extracts the <h1> as the consultation title and returns the full HTML.
+ * Streams the response so long transcripts don't hit Vercel function timeouts.
  */
 export async function generateCr(input: {
   athleteName: string;
@@ -73,6 +75,8 @@ export async function generateCr(input: {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return { ok: false, error: "ANTHROPIC_API_KEY not configured" };
 
+  const client = new Anthropic({ apiKey });
+
   const replayHint = input.replayUrl
     ? ` (URL du replay disponible : ${input.replayUrl})`
     : "";
@@ -80,34 +84,42 @@ export async function generateCr(input: {
   const userPrompt = USER_PROMPT_TEMPLATE
     .replace("{{ATHLETE_NAME}}", input.athleteName)
     .replace("{{REPLAY_HINT}}", replayHint)
-    .replace("{{TRANSCRIPT}}", input.transcript.slice(0, 100_000)); // hard safety cap
+    .replace("{{TRANSCRIPT}}", input.transcript.slice(0, 200_000));
 
   try {
-    const res = await fetch(ANTHROPIC_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 8000,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: "user", content: userPrompt }],
-      }),
+    const stream = client.messages.stream({
+      model: MODEL,
+      max_tokens: 16000,
+      system: SYSTEM_PROMPT,
+      messages: [{ role: "user", content: userPrompt }],
     });
 
-    if (!res.ok) {
-      const errText = await res.text();
-      return { ok: false, error: `Claude API ${res.status}: ${errText.slice(0, 500)}` };
+    const final = await stream.finalMessage();
+
+    if (final.stop_reason === "refusal") {
+      return { ok: false, error: "Claude a refusé la requête (raison de sécurité)" };
     }
 
-    const json = await res.json();
-    const html = (json.content?.[0]?.text || "").trim();
-    if (!html) return { ok: false, error: "Empty response from Claude" };
+    const html = final.content
+      .flatMap((b) => (b.type === "text" ? [b.text] : []))
+      .join("")
+      .trim();
 
-    // Extract the <h1> title (first one found) for the consultation title.
+    if (!html) {
+      return {
+        ok: false,
+        error: `Empty response from Claude (stop_reason=${final.stop_reason})`,
+      };
+    }
+
+    if (final.stop_reason === "max_tokens") {
+      console.warn(
+        "[cr-generator] max_tokens reached — CR may be truncated. Output:",
+        html.length,
+        "chars",
+      );
+    }
+
     const titleMatch = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
     const title = titleMatch
       ? titleMatch[1].replace(/<[^>]+>/g, "").trim()
@@ -118,8 +130,8 @@ export async function generateCr(input: {
       html,
       title,
       model: MODEL,
-      tokensInput: json.usage?.input_tokens ?? 0,
-      tokensOutput: json.usage?.output_tokens ?? 0,
+      tokensInput: final.usage.input_tokens ?? 0,
+      tokensOutput: final.usage.output_tokens ?? 0,
     };
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "unknown";

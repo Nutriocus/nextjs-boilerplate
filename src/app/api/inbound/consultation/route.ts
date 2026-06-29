@@ -55,7 +55,10 @@ function verifySvixSignature(
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60; // Claude calls can take ~20-40s
+// Long transcripts (1h+ consultations) can take 60-120s through Claude. The
+// earlier 60s cap killed the function before the cr_html update ran, leaving
+// drafts stuck in `pending` with no error. 300s is Vercel Pro's max.
+export const maxDuration = 300;
 
 type ResendInboundEmail = {
   from?: { email?: string; name?: string } | string;
@@ -302,7 +305,7 @@ export async function POST(req: NextRequest) {
   });
 
   if (!cr.ok) {
-    await admin
+    const { error: updErr } = await admin
       .from("consultation_drafts")
       .update({
         status: "error",
@@ -310,10 +313,11 @@ export async function POST(req: NextRequest) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", draftId);
+    if (updErr) console.error("[inbound] failed to mark draft as error", updErr);
     return NextResponse.json({ ok: true, draftId, generated: false, error: cr.error });
   }
 
-  await admin
+  const { error: writeErr } = await admin
     .from("consultation_drafts")
     .update({
       cr_title: cr.title,
@@ -324,6 +328,22 @@ export async function POST(req: NextRequest) {
       updated_at: new Date().toISOString(),
     })
     .eq("id", draftId);
+  if (writeErr) {
+    // Surface the failure on the draft itself so the coach knows what happened
+    console.error("[inbound] failed to write CR to draft", writeErr);
+    await admin
+      .from("consultation_drafts")
+      .update({
+        status: "error",
+        ai_error: `DB write failed: ${writeErr.message}`,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", draftId);
+    return NextResponse.json(
+      { ok: false, draftId, generated: true, dbError: writeErr.message },
+      { status: 500 },
+    );
+  }
 
   // 5. Notify coach (fire-and-forget; failure here shouldn't fail the webhook)
   try {

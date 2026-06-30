@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { AlertTriangle, Users, Activity, Calendar, ChevronRight, FileText, Sparkles } from "lucide-react";
+import { Users, Activity, Calendar, ChevronRight, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { supabase } from "@/lib/supabase";
@@ -45,6 +45,7 @@ type AthleteSummary = {
   poids: number | null;
   vo2max: number | null;
   nextRace: { name: string; date: string; days: number } | null;
+  recentRace: { name: string; date: string; daysAgo: number } | null;
   nextConsult: { date: string; days: number } | null;
   activePlans: number;
   suiviProgress: number | null;
@@ -213,6 +214,13 @@ export default function CoachDashboard() {
             ? { name: futureRaces[0].name, date: futureRaces[0].date, days: daysBetween(today, futureRaces[0].date) }
             : null;
 
+          const pastRaces = events
+            .filter((e) => e.date && e.date < today && daysBetween(e.date, today) <= 7)
+            .sort((a, b) => b.date.localeCompare(a.date));
+          const recentRace = pastRaces[0]
+            ? { name: pastRaces[0].name, date: pastRaces[0].date, daysAgo: daysBetween(pastRaces[0].date, today) }
+            : null;
+
           const futureConsults = consultations
             .filter((c) => c.date && c.date >= today)
             .sort((a, b) => a.date.localeCompare(b.date));
@@ -251,6 +259,7 @@ export default function CoachDashboard() {
             poids: profile.poids != null ? toNum(profile.poids) : null,
             vo2max: profile.vo2max != null ? toNum(profile.vo2max) : null,
             nextRace,
+            recentRace,
             nextConsult,
             activePlans,
             suiviProgress,
@@ -297,6 +306,22 @@ export default function CoachDashboard() {
 
   const activeSuivis = summaries.filter((s) => s.suiviProgress != null && s.suiviDaysLeft != null && s.suiviDaysLeft > 0).length;
 
+  const recentRacesList = useMemo(
+    () =>
+      summaries
+        .filter((s) => s.recentRace)
+        .sort((a, b) => (a.recentRace!.daysAgo - b.recentRace!.daysAgo)),
+    [summaries],
+  );
+
+  const upcomingRacesList = useMemo(
+    () =>
+      summaries
+        .filter((s) => s.nextRace && s.nextRace.days <= 15)
+        .sort((a, b) => a.nextRace!.days - b.nextRace!.days),
+    [summaries],
+  );
+
   const alertSeverityStyle = (sev: Alert["severity"]) => {
     switch (sev) {
       case "high":
@@ -341,71 +366,138 @@ export default function CoachDashboard() {
         <Kpi label="Suivis actifs" value={activeSuivis} note="programmes en cours" color="var(--color-success)" />
         <Kpi label="Courses ce mois" value={racesThisMonth} color="var(--color-dark)" />
         <Kpi
-          label="Alertes"
-          value={allAlerts.length}
-          note={highAlerts.length > 0 ? `${highAlerts.length} critique${highAlerts.length > 1 ? "s" : ""}` : undefined}
-          color={highAlerts.length > 0 ? "var(--color-danger)" : allAlerts.length > 0 ? "var(--color-primary)" : "var(--color-success)"}
+          label="Courses 15j"
+          value={upcomingRacesList.length}
+          note={recentRacesList.length > 0 ? `${recentRacesList.length} récente${recentRacesList.length > 1 ? "s" : ""}` : undefined}
+          color={upcomingRacesList.length > 0 ? "var(--color-primary)" : "var(--color-dark)"}
         />
       </div>
 
-      {/* Alertes */}
-      {allAlerts.length > 0 ? (
-        <div className="card p-4 mb-6">
+      {/* Courses récentes & à venir */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        {/* Courses récentes (7 derniers jours) */}
+        <div className="card p-4">
           <div className="flex items-baseline justify-between mb-3">
             <div className="font-extrabold uppercase" style={{ fontFamily: "var(--font-display)", letterSpacing: "-0.01em" }}>
-              ⚠ Alertes & actions
+              🏁 Courses récentes
             </div>
-            <div className="text-xs text-[var(--color-text-muted)]">
-              {highAlerts.length} critique{highAlerts.length > 1 ? "s" : ""} · {mediumAlerts.length} à surveiller · {lowAlerts.length} info
-            </div>
+            <div className="text-xs text-[var(--color-text-muted)]">7 derniers jours</div>
           </div>
 
-          <div className="space-y-2">
-            {allAlerts.slice(0, 8).map((alert, i) => {
-              const style = alertSeverityStyle(alert.severity);
-              return (
-                <motion.div
-                  key={`${alert.athleteId}-${i}`}
-                  initial={{ opacity: 0, x: -6 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.03 }}
-                >
-                  <Link
-                    href={alert.href}
-                    className="flex items-center gap-3 p-3 rounded-lg hover:shadow-sm transition"
-                    style={{ borderLeft: `4px solid ${style.border}`, background: style.bg }}
+          {recentRacesList.length === 0 ? (
+            <div className="text-sm text-[var(--color-text-muted)] py-3 text-center">
+              Aucune course terminée cette semaine.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {recentRacesList.map((s, i) => {
+                const a = s.athlete;
+                const r = s.recentRace!;
+                return (
+                  <motion.div
+                    key={`recent-${a.id}`}
+                    initial={{ opacity: 0, x: -6 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.03 }}
                   >
-                    <div className="text-xl shrink-0">{alert.icon}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm">
-                        <strong className="uppercase text-[11px] tracking-wider" style={{ letterSpacing: ".06em" }}>
-                          {alert.athleteName}
-                        </strong>
-                        <span className="mx-1.5 text-[var(--color-text-muted)]">·</span>
-                        {alert.title}
+                    <Link
+                      href={`/athlete/race-analysis?athleteId=${a.id}`}
+                      className="flex items-center gap-3 p-3 rounded-lg hover:shadow-sm transition"
+                      style={{ borderLeft: `4px solid var(--color-success)`, background: "#f3faf5" }}
+                    >
+                      <div
+                        className="px-2 py-1 rounded font-extrabold text-xs shrink-0"
+                        style={{ background: "var(--color-success)", color: "#fff", fontFamily: "var(--font-display)", letterSpacing: ".04em" }}
+                      >
+                        J+{r.daysAgo}
                       </div>
-                      {alert.detail && (
-                        <div className="text-xs text-[var(--color-text-muted)] mt-0.5">{alert.detail}</div>
-                      )}
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-[var(--color-text-muted)] shrink-0" />
-                  </Link>
-                </motion.div>
-              );
-            })}
-            {allAlerts.length > 8 && (
-              <div className="text-xs text-[var(--color-text-muted)] text-center pt-2">
-                +{allAlerts.length - 8} alerte{allAlerts.length - 8 > 1 ? "s" : ""} supplémentaire{allAlerts.length - 8 > 1 ? "s" : ""}
-              </div>
-            )}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm">
+                          <strong className="uppercase text-[11px] tracking-wider" style={{ letterSpacing: ".06em" }}>
+                            {a.first_name} {a.last_name}
+                          </strong>
+                          <span className="mx-1.5 text-[var(--color-text-muted)]">·</span>
+                          {r.name}
+                        </div>
+                        <div className="text-xs text-[var(--color-text-muted)] mt-0.5">
+                          {format(parseISO(r.date), "EEEE d MMMM", { locale: fr })}
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-[var(--color-text-muted)] shrink-0" />
+                    </Link>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Courses à venir (15 prochains jours) */}
+        <div className="card p-4">
+          <div className="flex items-baseline justify-between mb-3">
+            <div className="font-extrabold uppercase" style={{ fontFamily: "var(--font-display)", letterSpacing: "-0.01em" }}>
+              📅 Courses à venir
+            </div>
+            <div className="text-xs text-[var(--color-text-muted)]">15 prochains jours</div>
           </div>
+
+          {upcomingRacesList.length === 0 ? (
+            <div className="text-sm text-[var(--color-text-muted)] py-3 text-center">
+              Aucune course planifiée dans les 15 jours.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {upcomingRacesList.map((s, i) => {
+                const a = s.athlete;
+                const r = s.nextRace!;
+                const urgent = r.days <= 5;
+                return (
+                  <motion.div
+                    key={`upcoming-${a.id}`}
+                    initial={{ opacity: 0, x: -6 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: i * 0.03 }}
+                  >
+                    <Link
+                      href={`/athlete/race-strategy?athleteId=${a.id}`}
+                      className="flex items-center gap-3 p-3 rounded-lg hover:shadow-sm transition"
+                      style={{
+                        borderLeft: `4px solid ${urgent ? "var(--color-danger)" : "var(--color-primary)"}`,
+                        background: urgent ? "#fff3f3" : "#fff7f3",
+                      }}
+                    >
+                      <div
+                        className="px-2 py-1 rounded font-extrabold text-xs shrink-0"
+                        style={{
+                          background: urgent ? "var(--color-danger)" : "var(--color-primary)",
+                          color: "#fff",
+                          fontFamily: "var(--font-display)",
+                          letterSpacing: ".04em",
+                        }}
+                      >
+                        J-{r.days}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm">
+                          <strong className="uppercase text-[11px] tracking-wider" style={{ letterSpacing: ".06em" }}>
+                            {a.first_name} {a.last_name}
+                          </strong>
+                          <span className="mx-1.5 text-[var(--color-text-muted)]">·</span>
+                          {r.name}
+                        </div>
+                        <div className="text-xs text-[var(--color-text-muted)] mt-0.5">
+                          {format(parseISO(r.date), "EEEE d MMMM", { locale: fr })}
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-[var(--color-text-muted)] shrink-0" />
+                    </Link>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
         </div>
-      ) : athletes.length > 0 ? (
-        <div className="card p-4 mb-6 text-center text-sm text-[var(--color-text-muted)]" style={{ borderLeft: `4px solid var(--color-success)` }}>
-          <Sparkles className="inline w-4 h-4 mr-1 text-[var(--color-success)]" />
-          Aucune alerte — tous tes athlètes sont à jour. Bon coaching !
-        </div>
-      ) : null}
+      </div>
 
       {/* Athletes table */}
       <div className="card p-5">

@@ -226,7 +226,13 @@ export async function GET(req: NextRequest) {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  const targetDate = yesterdayParis();
+  // Allow ?date=YYYY-MM-DD override to replay the cron for a past date.
+  // Useful to backfill weekend races when the cron didn't exist yet.
+  const overrideDate = searchParams.get("date");
+  const targetDate = overrideDate && /^\d{4}-\d{2}-\d{2}$/.test(overrideDate)
+    ? overrideDate
+    : yesterdayParis();
+
   const result = {
     targetDate,
     candidates: 0,

@@ -16,6 +16,43 @@ export const dynamic = "force-dynamic";
 
 const FLORIAN_COACH_UUID = "3023a4de-45fa-4cc8-a0d9-e09a1ceedd14";
 
+// Maps Stripe Price IDs back to internal tier slugs.
+// Used as fallback when checkout metadata.tier is missing
+// (e.g. Payment Links created from the Stripe Dashboard).
+function buildPriceToTierMap(): Record<string, SubscriptionTier> {
+  const map: Record<string, SubscriptionTier> = {};
+  const add = (id: string | undefined, tier: SubscriptionTier) => {
+    if (id) map[id] = tier;
+  };
+  // Plateforme
+  add(process.env.STRIPE_PRICE_PLATEFORME_MONTHLY || "price_1TkNDaBJVlo0KFNYt28yTMcN", "plateforme");
+  add(process.env.STRIPE_PRICE_PLATEFORME_YEARLY  || "price_1TkNDkBJVlo0KFNYvwhWc23U", "plateforme");
+  // Progression Guidée
+  add(process.env.STRIPE_PRICE_PROGRESSION_GUIDEE_MONTHLY || "price_1TkNN7BJVlo0KFNYujr5OcR8", "progression_guidee");
+  add(process.env.STRIPE_PRICE_PROGRESSION_GUIDEE_YEARLY  || "price_1TkNNKBJVlo0KFNY4DZbrmCP", "progression_guidee");
+  // Mission Performance
+  add(process.env.STRIPE_PRICE_MISSION_PERFORMANCE_MONTHLY || "price_1T55KjBJVlo0KFNYzzUlObH6", "mission_performance");
+  add(process.env.STRIPE_PRICE_MISSION_PERFORMANCE_YEARLY  || "price_1TkNPdBJVlo0KFNYZiQaiU5z", "mission_performance");
+  return map;
+}
+
+async function resolveTierFromSubscription(
+  stripe: Stripe,
+  subscriptionId: string | null | undefined,
+): Promise<SubscriptionTier | null> {
+  if (!subscriptionId) return null;
+  try {
+    const sub = await stripe.subscriptions.retrieve(subscriptionId);
+    const priceId = sub.items.data[0]?.price?.id;
+    if (!priceId) return null;
+    const map = buildPriceToTierMap();
+    return map[priceId] ?? null;
+  } catch (e) {
+    console.warn("[stripe webhook] resolveTierFromSubscription failed:", e);
+    return null;
+  }
+}
+
 export async function POST(req: NextRequest) {
   const secret = process.env.STRIPE_SECRET_KEY;
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -63,7 +100,25 @@ export async function POST(req: NextRequest) {
         const session = event.data.object as Stripe.Checkout.Session;
         const customerId = session.customer as string;
         const subscriptionId = session.subscription as string;
-        const tier = session.metadata?.tier || null;
+        // Prefer metadata.tier (set by our /api/checkout flow).
+        // Fallback: derive from the subscription's Price ID — covers Stripe
+        // Payment Links and any other checkout source that didn't set metadata.
+        // Last resort: default to "plateforme" (the cheapest autonomous offer)
+        // so the athlete never lands in DB without a tier.
+        let tier: SubscriptionTier | null =
+          (session.metadata?.tier as SubscriptionTier | undefined) || null;
+        if (!tier) {
+          tier = await resolveTierFromSubscription(stripe, subscriptionId);
+          if (!tier) {
+            console.warn(
+              "[stripe webhook] tier missing from metadata AND unresolved from subscription, defaulting to 'plateforme'",
+              { customerId, subscriptionId },
+            );
+            tier = "plateforme";
+          } else {
+            console.log("[stripe webhook] tier resolved from Price ID:", tier);
+          }
+        }
         const email = (session.customer_details?.email || "").toLowerCase();
         const fullName = session.customer_details?.name || "";
 

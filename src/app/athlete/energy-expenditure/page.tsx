@@ -244,6 +244,11 @@ export default function EnergyExpenditurePage() {
     rerSV1?: number | string;
     rerSV2?: number | string;
     vo2max?: number | string;
+    // Discipline-specific lab tests (triathletes typically fill both).
+    tests?: {
+      cap?: { fcmax?: number | string; sv1?: number | string; sv2?: number | string; rerSV1?: number | string; rerSV2?: number | string; vo2max?: number | string; vo2SV1?: number | string; vo2SV2?: number | string };
+      velo?: { fcmax?: number | string; sv1?: number | string; sv2?: number | string; rerSV1?: number | string; rerSV2?: number | string; vo2max?: number | string; vo2SV1?: number | string; vo2SV2?: number | string };
+    };
   }>("profile", {});
 
   const [plans, setPlans, loaded] = useAthleteData<PacingPlan[]>("pacing_plans", []);
@@ -312,21 +317,41 @@ export default function EnergyExpenditurePage() {
   const reserves = current ? glycogenReservesFor(profile.sexe, current.carbLoading) : 0;
   const planCibleCho = current ? toNum(current.cibleCho) || defaultTol : defaultTol;
 
-  // Profile physio data for per-segment RER
+  // Profile physio data for per-segment RER.
+  // For triathletes the lab tests differ between CAP and Vélo, so we resolve
+  // the active physio per-segment using the segment's discipline override
+  // (falls back to plan discipline, then to profile primary fields).
   const hasPhysio = !!(toNum(profile.sv1) && toNum(profile.sv2) && toNum(profile.rerSV1) && toNum(profile.rerSV2));
   const useProfilePhysio = current?.useProfile && hasPhysio;
   const fallbackRer = current ? toNum(current.rer) || 0.88 : 0.88;
-  const physio = {
-    fcmax: toNum(profile.fcmax),
-    sv1: toNum(profile.sv1),
-    sv2: toNum(profile.sv2),
-    rerSV1: toNum(profile.rerSV1),
-    rerSV2: toNum(profile.rerSV2),
-  };
 
-  function rerForSegment(fc: number): number {
+  function physioForDiscipline(disc?: Discipline) {
+    const d = (disc || "").toLowerCase();
+    const test =
+      d === "cyclisme" ? profile.tests?.velo
+      : d === "trail" || d === "cap_route" ? profile.tests?.cap
+      : undefined;
+    const pick = <K extends "fcmax" | "sv1" | "sv2" | "rerSV1" | "rerSV2">(k: K): number => {
+      const v = test?.[k];
+      if (v != null && v !== "") return toNum(v);
+      return toNum(profile[k]);
+    };
+    return {
+      fcmax: pick("fcmax"),
+      sv1: pick("sv1"),
+      sv2: pick("sv2"),
+      rerSV1: pick("rerSV1"),
+      rerSV2: pick("rerSV2"),
+    };
+  }
+
+  // For zone labels in the summary panel (uses plan discipline as default).
+  const physio = physioForDiscipline(current?.discipline);
+
+  function rerForSegment(fc: number, segDiscipline?: Discipline): number {
     if (useProfilePhysio) {
-      const r = rerFromPhysio(fc, physio);
+      const p = physioForDiscipline(segDiscipline ?? current?.discipline);
+      const r = rerFromPhysio(fc, p);
       if (r != null) return r;
     }
     return fallbackRer;
@@ -345,7 +370,8 @@ export default function EnergyExpenditurePage() {
         ? powerKcalPerMin(power)
         : keytelKcalPerMin(fc, poidsKg, ageY, isWoman);
       const kcalTotal = Math.max(0, kcalPerMin * dur);
-      const rer = rerForSegment(fc);
+      const segDisc = s.discipline ?? current.discipline;
+      const rer = rerForSegment(fc, segDisc);
       const choFrac = choFractionFromRER(rer);
       const kcalCho = kcalTotal * choFrac;
       const gChoOxidized = kcalCho / 4;
@@ -356,9 +382,10 @@ export default function EnergyExpenditurePage() {
         ? ((toNum(s.dplus) - toNum(s.dmoins)) / (toNum(s.km) * 1000)) * 100
         : 0;
       let zone = "—";
-      if (hasPhysio && fc > 0) {
-        if (fc < physio.sv1) zone = "< SV1";
-        else if (fc < physio.sv2) zone = "SV1-SV2";
+      const segPhysio = physioForDiscipline(segDisc);
+      if (segPhysio.sv1 && segPhysio.sv2 && fc > 0) {
+        if (fc < segPhysio.sv1) zone = "< SV1";
+        else if (fc < segPhysio.sv2) zone = "SV1-SV2";
         else zone = "> SV2";
       }
       return {

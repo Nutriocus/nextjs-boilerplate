@@ -19,7 +19,14 @@ type AthleteRow = {
   email: string;
   sport: string[] | null;
   status: string | null;
+  subscription_tier: string | null;
 };
+
+const TIER_GROUPS: { tier: string; label: string; color: string }[] = [
+  { tier: "mission_performance", label: "Mission Performance", color: "var(--color-primary)" },
+  { tier: "progression_guidee", label: "Progression Guidée", color: "var(--color-success)" },
+  { tier: "plateforme", label: "Plateforme Nutriocus", color: "var(--color-dark)" },
+];
 
 type Profile = { poids?: number | string; vo2max?: number | string; photo?: string };
 type EventItem = { id?: string; date: string; name: string };
@@ -27,18 +34,6 @@ type Consultation = { id: string; date: string; type?: string };
 type MealPlan = { id: string; name: string; status?: "actif" | "archive"; dateDebut?: string; dateFin?: string; kcal?: number | string; maintenanceKcal?: number | string };
 type CompoEntry = { date: string; poids?: number | string };
 type Suivi = { label?: string; dateDebut?: string; dateFin?: string };
-type Questionnaire = { nom?: string; prenom?: string } | Record<string, unknown>;
-
-type Alert = {
-  severity: "high" | "medium" | "low";
-  athleteId: string;
-  athleteName: string;
-  icon: string;
-  title: string;
-  detail?: string;
-  href: string;
-};
-
 type AthleteSummary = {
   athlete: AthleteRow;
   photo: string | null;
@@ -50,7 +45,6 @@ type AthleteSummary = {
   activePlans: number;
   suiviProgress: number | null;
   suiviDaysLeft: number | null;
-  intakeFilled: boolean;
   weightDrift30d: number | null;
 };
 
@@ -74,92 +68,6 @@ function daysBetween(a: string, b: string): number {
 function toNum(v: unknown): number {
   const n = parseFloat(String(v).replace(",", "."));
   return isNaN(n) ? 0 : n;
-}
-
-function buildAlerts(s: AthleteSummary): Alert[] {
-  const alerts: Alert[] = [];
-  const a = s.athlete;
-  const name = `${a.first_name} ${a.last_name}`;
-  const baseHref = `/coach/athletes/${a.id}`;
-
-  // 🟥 Race in < 14 days without active meal plan
-  if (s.nextRace && s.nextRace.days >= 0 && s.nextRace.days <= 14 && s.activePlans === 0) {
-    alerts.push({
-      severity: "high",
-      athleteId: a.id,
-      athleteName: name,
-      icon: "🏁",
-      title: `Course ${s.nextRace.name} dans ${s.nextRace.days} j sans plan alimentaire actif`,
-      detail: "Définis un plan alimentaire avant la course.",
-      href: `/athlete/meal-plans?athleteId=${a.id}`,
-    });
-  }
-
-  // 🟧 Race in < 5 days → trigger pre-race plan
-  if (s.nextRace && s.nextRace.days >= 0 && s.nextRace.days <= 5) {
-    alerts.push({
-      severity: s.nextRace.days <= 2 ? "high" : "medium",
-      athleteId: a.id,
-      athleteName: name,
-      icon: "🍽",
-      title: `Période pré-course ${s.nextRace.name} (J-${s.nextRace.days})`,
-      detail: "Vérifie le plan alimentaire J-4 → Jour J.",
-      href: `/athlete/pre-race?athleteId=${a.id}`,
-    });
-  }
-
-  // 🟧 Weight drift > 2 kg in 30 days
-  if (s.weightDrift30d != null && Math.abs(s.weightDrift30d) >= 2) {
-    alerts.push({
-      severity: "medium",
-      athleteId: a.id,
-      athleteName: name,
-      icon: "⚖️",
-      title: `Dérive de poids ${s.weightDrift30d > 0 ? "+" : ""}${s.weightDrift30d.toFixed(1)} kg sur 30 j`,
-      detail: "Variation significative, à valider.",
-      href: `/athlete/composition?athleteId=${a.id}`,
-    });
-  }
-
-  // 🟨 Intake questionnaire not filled
-  if (!s.intakeFilled) {
-    alerts.push({
-      severity: "low",
-      athleteId: a.id,
-      athleteName: name,
-      icon: "📝",
-      title: "Questionnaire d'introduction non rempli",
-      detail: "À faire remplir avant la 1ère consultation.",
-      href: `/athlete/profile?athleteId=${a.id}`,
-    });
-  }
-
-  // 🟦 Consultation today/tomorrow
-  if (s.nextConsult && s.nextConsult.days >= 0 && s.nextConsult.days <= 1) {
-    alerts.push({
-      severity: "medium",
-      athleteId: a.id,
-      athleteName: name,
-      icon: "📋",
-      title: s.nextConsult.days === 0 ? "Consultation aujourd'hui" : "Consultation demain",
-      href: `/athlete/consultations?athleteId=${a.id}`,
-    });
-  }
-
-  // 🟪 Suivi (program) ending in < 14 days
-  if (s.suiviDaysLeft != null && s.suiviDaysLeft >= 0 && s.suiviDaysLeft <= 14) {
-    alerts.push({
-      severity: "low",
-      athleteId: a.id,
-      athleteName: name,
-      icon: "⏳",
-      title: `Fin de suivi dans ${s.suiviDaysLeft} j`,
-      detail: "Planifie le bilan ou le renouvellement.",
-      href: baseHref,
-    });
-  }
-
-  return alerts;
 }
 
 // ============== PAGE ==============
@@ -187,7 +95,7 @@ export default function CoachDashboard() {
       }
       const { data: list } = await supabase
         .from("athletes")
-        .select("id, first_name, last_name, email, sport, status")
+        .select("id, first_name, last_name, email, sport, status, subscription_tier")
         .eq("coach_id", coach.id)
         .order("first_name");
 
@@ -197,14 +105,13 @@ export default function CoachDashboard() {
       // Fetch each athlete's summary in parallel
       const sums = await Promise.all(
         athleteList.map(async (a): Promise<AthleteSummary> => {
-          const [profile, events, consultations, meals, compo, suivi, questionnaire] = await Promise.all([
+          const [profile, events, consultations, meals, compo, suivi] = await Promise.all([
             loadData<Profile>("profile", {}, a.id),
             loadData<EventItem[]>("events", [], a.id),
             loadData<Consultation[]>("consultations", [], a.id),
             loadData<MealPlan[]>("meal", [], a.id),
             loadData<CompoEntry[]>("compo", [], a.id),
             loadData<Suivi>("suivi", {}, a.id),
-            loadData<Questionnaire>("questionnaire", {}, a.id),
           ]);
 
           const futureRaces = events
@@ -248,11 +155,6 @@ export default function CoachDashboard() {
               ? toNum(latest.poids) - toNum(reference.poids)
               : null;
 
-          const intakeFilled = Boolean(
-            (questionnaire as Questionnaire & { nom?: string; prenom?: string })?.nom ||
-              (questionnaire as Questionnaire & { nom?: string; prenom?: string })?.prenom,
-          );
-
           return {
             athlete: a,
             photo: profile?.photo || null,
@@ -264,7 +166,6 @@ export default function CoachDashboard() {
             activePlans,
             suiviProgress,
             suiviDaysLeft,
-            intakeFilled,
             weightDrift30d,
           };
         }),
@@ -274,17 +175,6 @@ export default function CoachDashboard() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const allAlerts = useMemo(() => {
-    const out: Alert[] = [];
-    for (const s of summaries) out.push(...buildAlerts(s));
-    const order = { high: 0, medium: 1, low: 2 };
-    return out.sort((a, b) => order[a.severity] - order[b.severity]);
-  }, [summaries]);
-
-  const highAlerts = allAlerts.filter((a) => a.severity === "high");
-  const mediumAlerts = allAlerts.filter((a) => a.severity === "medium");
-  const lowAlerts = allAlerts.filter((a) => a.severity === "low");
 
   // Global stats
   const monthStart = `${today.slice(0, 7)}-01`;
@@ -321,17 +211,6 @@ export default function CoachDashboard() {
         .sort((a, b) => a.nextRace!.days - b.nextRace!.days),
     [summaries],
   );
-
-  const alertSeverityStyle = (sev: Alert["severity"]) => {
-    switch (sev) {
-      case "high":
-        return { border: "var(--color-danger)", bg: "#fff3f3" };
-      case "medium":
-        return { border: "var(--color-primary)", bg: "#fff7f3" };
-      case "low":
-        return { border: "var(--color-dark)", bg: "#f8f8f6" };
-    }
-  };
 
   if (loading) {
     return (
@@ -511,101 +390,130 @@ export default function CoachDashboard() {
         {summaries.length === 0 ? (
           <Empty>Aucun athlète. Crée-en un dans Supabase pour démarrer.</Empty>
         ) : (
-          <div className="space-y-2">
-            {summaries.map((s, i) => {
-              const a = s.athlete;
-              const athleteAlerts = allAlerts.filter((al) => al.athleteId === a.id);
-              const hasHigh = athleteAlerts.some((al) => al.severity === "high");
-              return (
-                <motion.div
-                  key={a.id}
-                  initial={{ opacity: 0, x: -6 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.04 }}
-                >
-                  <Link href={`/coach/athletes/${a.id}`}>
-                    <div
-                      className="flex items-center gap-3 p-3 rounded-[10px] transition hover:bg-[var(--color-surface-2)]"
-                      style={{ border: "1px solid var(--color-border)", borderLeft: hasHigh ? "4px solid var(--color-danger)" : athleteAlerts.length > 0 ? "4px solid var(--color-primary)" : "1px solid var(--color-border)" }}
-                    >
-                      {s.photo ? (
-                        <div className="w-11 h-11 rounded-full overflow-hidden shrink-0" style={{ border: "2px solid var(--color-border)" }}>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={s.photo} alt="" className="w-full h-full object-cover" />
-                        </div>
-                      ) : (
-                        <div
-                          className="w-11 h-11 rounded-full flex items-center justify-center font-extrabold shrink-0"
-                          style={{ background: "var(--color-primary)", color: "#fff", fontFamily: "var(--font-display)" }}
-                        >
-                          {a.first_name[0]}
-                          {a.last_name[0]}
-                        </div>
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="text-sm uppercase" style={{ fontFamily: "var(--font-display)", fontWeight: 800, letterSpacing: "-0.01em" }}>
-                            {a.first_name} {a.last_name}
-                          </h3>
-                          {athleteAlerts.length > 0 && (
-                            <span
-                              className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded"
-                              style={{
-                                background: hasHigh ? "var(--color-danger)" : "var(--color-primary)",
-                                color: "#fff",
-                                letterSpacing: ".06em",
-                              }}
-                            >
-                              {athleteAlerts.length} alerte{athleteAlerts.length > 1 ? "s" : ""}
-                            </span>
-                          )}
-                          {!s.intakeFilled && (
-                            <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded" style={{ background: "#e6a833", color: "#fff", letterSpacing: ".06em" }}>
-                              Intro à remplir
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap gap-3 text-xs text-[var(--color-text-muted)] mt-0.5">
-                          {a.sport && a.sport.length > 0 && <span className="capitalize">{a.sport.join(" · ")}</span>}
-                          {s.poids != null && <span>{s.poids} kg</span>}
-                          {s.vo2max != null && <span>VO₂max {s.vo2max}</span>}
-                          {s.activePlans > 0 && (
-                            <span>{s.activePlans} plan{s.activePlans > 1 ? "s" : ""} actif{s.activePlans > 1 ? "s" : ""}</span>
-                          )}
-                          {s.nextRace && (
-                            <span className="text-[var(--color-primary)] font-semibold">
-                              <Calendar className="inline w-3 h-3 mr-0.5" />
-                              {s.nextRace.name} (J-{s.nextRace.days})
-                            </span>
-                          )}
-                          {s.nextConsult && !s.nextRace && (
-                            <span className="text-[var(--color-dark)] font-semibold">
-                              <FileText className="inline w-3 h-3 mr-0.5" />
-                              Conseil J-{s.nextConsult.days}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-right shrink-0">
-                        {s.suiviProgress != null ? (
-                          <>
-                            <div className="font-extrabold text-base" style={{ color: "var(--color-success)", fontFamily: "var(--font-display)" }}>
-                              {s.suiviProgress}%
-                            </div>
-                            <div className="text-[10px] text-[var(--color-text-muted)]">
-                              {s.suiviDaysLeft} j restants
-                            </div>
-                          </>
-                        ) : (
-                          <div className="text-[10px] text-[var(--color-text-muted)]">Pas de suivi</div>
-                        )}
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-[var(--color-text-muted)] shrink-0" />
+          <div className="space-y-6">
+            {(() => {
+              const knownTiers = new Set(TIER_GROUPS.map((g) => g.tier));
+              const groups: { tier: string; label: string; color: string; items: AthleteSummary[] }[] = [];
+              for (const g of TIER_GROUPS) {
+                groups.push({
+                  ...g,
+                  items: summaries.filter((s) => s.athlete.subscription_tier === g.tier),
+                });
+              }
+              const orphans = summaries.filter((s) => !knownTiers.has(s.athlete.subscription_tier ?? ""));
+              if (orphans.length > 0) {
+                groups.push({
+                  tier: "_other",
+                  label: "Sans offre renseignée",
+                  color: "var(--color-text-muted)",
+                  items: orphans,
+                });
+              }
+
+              return groups
+                .filter((g) => g.items.length > 0)
+                .map((group) => (
+                  <div key={group.tier}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span
+                        className="inline-block w-2 h-2 rounded-full"
+                        style={{ background: group.color }}
+                      />
+                      <h3
+                        className="text-xs font-extrabold uppercase"
+                        style={{
+                          fontFamily: "var(--font-display)",
+                          letterSpacing: ".08em",
+                          color: group.color,
+                        }}
+                      >
+                        {group.label}
+                      </h3>
+                      <span className="text-xs text-[var(--color-text-muted)]">
+                        · {group.items.length} athlète{group.items.length > 1 ? "s" : ""}
+                      </span>
                     </div>
-                  </Link>
-                </motion.div>
-              );
-            })}
+                    <div className="space-y-2">
+                      {group.items.map((s, i) => {
+                        const a = s.athlete;
+                        return (
+                          <motion.div
+                            key={a.id}
+                            initial={{ opacity: 0, x: -6 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: i * 0.04 }}
+                          >
+                            <Link href={`/coach/athletes/${a.id}`}>
+                              <div
+                                className="flex items-center gap-3 p-3 rounded-[10px] transition hover:bg-[var(--color-surface-2)]"
+                                style={{
+                                  border: "1px solid var(--color-border)",
+                                  borderLeft: `4px solid ${group.color}`,
+                                }}
+                              >
+                                {s.photo ? (
+                                  <div className="w-11 h-11 rounded-full overflow-hidden shrink-0" style={{ border: "2px solid var(--color-border)" }}>
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img src={s.photo} alt="" className="w-full h-full object-cover" />
+                                  </div>
+                                ) : (
+                                  <div
+                                    className="w-11 h-11 rounded-full flex items-center justify-center font-extrabold shrink-0"
+                                    style={{ background: "var(--color-primary)", color: "#fff", fontFamily: "var(--font-display)" }}
+                                  >
+                                    {a.first_name[0]}
+                                    {a.last_name[0]}
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="text-sm uppercase" style={{ fontFamily: "var(--font-display)", fontWeight: 800, letterSpacing: "-0.01em" }}>
+                                    {a.first_name} {a.last_name}
+                                  </h3>
+                                  <div className="flex flex-wrap gap-3 text-xs text-[var(--color-text-muted)] mt-0.5">
+                                    {a.sport && a.sport.length > 0 && <span className="capitalize">{a.sport.join(" · ")}</span>}
+                                    {s.poids != null && <span>{s.poids} kg</span>}
+                                    {s.vo2max != null && <span>VO₂max {s.vo2max}</span>}
+                                    {s.activePlans > 0 && (
+                                      <span>{s.activePlans} plan{s.activePlans > 1 ? "s" : ""} actif{s.activePlans > 1 ? "s" : ""}</span>
+                                    )}
+                                    {s.nextRace && (
+                                      <span className="text-[var(--color-primary)] font-semibold">
+                                        <Calendar className="inline w-3 h-3 mr-0.5" />
+                                        {s.nextRace.name} (J-{s.nextRace.days})
+                                      </span>
+                                    )}
+                                    {s.nextConsult && !s.nextRace && (
+                                      <span className="text-[var(--color-dark)] font-semibold">
+                                        <FileText className="inline w-3 h-3 mr-0.5" />
+                                        Conseil J-{s.nextConsult.days}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  {s.suiviProgress != null ? (
+                                    <>
+                                      <div className="font-extrabold text-base" style={{ color: "var(--color-success)", fontFamily: "var(--font-display)" }}>
+                                        {s.suiviProgress}%
+                                      </div>
+                                      <div className="text-[10px] text-[var(--color-text-muted)]">
+                                        {s.suiviDaysLeft} j restants
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <div className="text-[10px] text-[var(--color-text-muted)]">Pas de suivi</div>
+                                  )}
+                                </div>
+                                <ChevronRight className="w-4 h-4 text-[var(--color-text-muted)] shrink-0" />
+                              </div>
+                            </Link>
+                          </motion.div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ));
+            })()}
           </div>
         )}
       </div>

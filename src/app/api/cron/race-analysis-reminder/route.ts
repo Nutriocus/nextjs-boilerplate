@@ -184,6 +184,44 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "RESEND_API_KEY not configured" }, { status: 500 });
   }
 
+  // ---- Test mode: ?test=1&email=foo@bar.com[&name=Florian][&race=My%20race][&date=2026-06-29]
+  // Sends one sample email using the real template. Does NOT touch the DB.
+  const { searchParams } = new URL(req.url);
+  if (searchParams.get("test") === "1") {
+    const to = searchParams.get("email");
+    if (!to) {
+      return NextResponse.json({ error: "Missing ?email=" }, { status: 400 });
+    }
+    const firstName = searchParams.get("name") || "Florian";
+    const raceName = searchParams.get("race") || "Test Trail des Volcans 42K";
+    const raceDate = searchParams.get("date") || yesterdayParis();
+    const email = buildEmail({ firstName, raceName, raceDate });
+
+    const resendRes = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: `${FROM_NAME} <${FROM_EMAIL}>`,
+        to: [to],
+        subject: `[TEST] ${email.subject}`,
+        html: email.html,
+        text: email.text,
+      }),
+    });
+
+    if (!resendRes.ok) {
+      const errText = await resendRes.text();
+      return NextResponse.json(
+        { error: `Resend ${resendRes.status}: ${errText}` },
+        { status: 502 },
+      );
+    }
+    return NextResponse.json({ ok: true, mode: "test", to, raceName, raceDate });
+  }
+
   const admin = createClient(supabaseUrl, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });

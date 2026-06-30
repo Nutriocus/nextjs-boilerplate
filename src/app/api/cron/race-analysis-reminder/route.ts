@@ -123,8 +123,8 @@ ${COACH_NAME}`;
 
                 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 12px;">
                   <tr>
-                    <td style="background:#10a37f; border-radius:8px;">
-                      <a href="${GPT_URL}" style="display:inline-block; padding:12px 22px; color:#ffffff; text-decoration:none; font-weight:700; font-size:14px;">
+                    <td style="background:#d0ff2c; border-radius:8px;">
+                      <a href="${GPT_URL}" style="display:inline-block; padding:12px 22px; color:#0a0a0a; text-decoration:none; font-weight:700; font-size:14px;">
                         Ouvrir le GPT — Analyse de ta course ↗
                       </a>
                     </td>
